@@ -1,0 +1,225 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-size: 14px; /* Reduce base font size from default 16px to 14px */
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-jetbrains-mono), monospace;
+  }
+
+  /* Apply uppercase to headings and labels */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  label,
+  .card-title,
+  .tab-label,
+  .badge,
+  .button-label,
+  .dropdown-label,
+  .nav-item {
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-family: var(--font-jetbrains-mono), monospace;
+    font-feature-settings: "ss01" on, "ss02" on, "ss03" on, "ss06" on;
+  }
+
+  /* Adjust heading sizes */
+  h1 {
+    @apply text-2xl font-bold;
+  }
+
+  h2 {
+    @apply text-xl font-bold;
+  }
+
+  h3 {
+    @apply text-lg font-medium;
+  }
+
+  /* Add ligature support for code blocks */
+  pre,
+  code {
+    font-family: var(--font-jetbrains-mono), monospace;
+    font-feature-settings: "liga" on, "calt" on;
+    @apply text-sm;
+  }
+
+  /* Make form elements and UI components smaller */
+  button,
+  input,
+  select,
+  textarea {
+    @apply text-sm;
+  }
+
+  /* Reduce paragraph text size */
+  p {
+    @apply text-sm;
+  }
+}
+
+@layer components {
+  /* Custom styles for science domain badges */
+  .badge-neuroscience {
+    @apply bg-science-neuroscience text-white uppercase text-xs tracking-wide;
+  }
+  .badge-ai {
+    @apply bg-science-ai text-white uppercase text-xs tracking-wide;
+  }
+  .badge-biology {
+    @apply bg-science-biology text-white uppercase text-xs tracking-wide;
+  }
+  .badge-chemistry {
+    @apply bg-science-chemistry text-white uppercase text-xs tracking-wide;
+  }
+  .badge-physics {
+    @apply bg-science-physics text-black uppercase text-xs tracking-wide;
+  }
+  .badge-medicine {
+    @apply bg-science-medicine text-white uppercase text-xs tracking-wide;
+  }
+  .badge-psychology {
+    @apply bg-science-psychology text-white uppercase text-xs tracking-wide;
+  }
+  .badge-engineering {
+    @apply bg-science-engineering text-white uppercase text-xs tracking-wide;
+  }
+  .badge-mathematics {
+    @apply bg-science-mathematics text-white uppercase text-xs tracking-wide;
+  }
+  .badge-environmental {
+    @apply bg-science-environmental text-white uppercase text-xs tracking-wide;
+  }
+  .badge-astronomy {
+    @apply bg-science-astronomy text-white uppercase text-xs tracking-wide;
+  }
+  .badge-geology {
+    @apply bg-science-geology text-white uppercase text-xs tracking-wide;
+  }
+  .badge-default {
+    @apply bg-science-default text-white uppercase text-xs tracking-wide;
+  }
+}
+
+/* Additional utility classes */
+.text-uppercase {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.text-smaller {
+  font-size: 0.9em;
+}
+
+/* Component-specific styles */
+.card-title {
+  @apply text-base font-medium uppercase;
+}
+
+.tab-label {
+  @apply text-xs uppercase tracking-wide;
+}
+
+.section-title {
+  @apply text-sm uppercase tracking-wide font-medium;
+}
+
+/* Add this to ensure all cards don't have white borders */
+.card {
+  @apply border-0 shadow-md;
+}
+
+/* Ensure JetBrains Mono is applied to all text */
+body,
+button,
+input,
+select,
+textarea,
+p,
+span,
+div,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-jetbrains-mono), monospace;
+}
