@@ -4,7 +4,7 @@ import { Calendar } from "@/components/ui/calendar"
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   FileText,
   Database,
@@ -21,6 +21,13 @@ import {
   Eye,
   BookOpen,
   Activity,
+  Beaker,
+  Microscope,
+  Zap,
+  LineChart,
+  Award,
+  Brain,
+  Atom,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

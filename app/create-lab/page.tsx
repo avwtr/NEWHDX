@@ -1,17 +1,19 @@
 "use client"
 
 import { Label as UILable } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { X, Check } from "lucide-react"
+import { researchAreas } from "@/lib/research-areas"
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { FileUploader } from "@/components/file-uploader"
-import { ArrowLeft, Check, Beaker, Sparkles, ArrowRight } from "lucide-react"
+import { ArrowLeft, Beaker, Sparkles, ArrowRight, Search, Plus, Copy, Mail, MessageSquare, Share2, Users, Lightbulb, FileText, DollarSign } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -38,6 +40,8 @@ const labTemplates = [
     members: 1,
     materials: 0,
     image: "/placeholder.svg?height=200&width=300",
+    disabled: true,
+    comingSoon: true,
   },
 ]
 
@@ -97,12 +101,21 @@ export default function CreateLabPage() {
   const [labDetails, setLabDetails] = useState({
     name: "",
     description: "",
-    researchField: "",
-    institution: "",
-    tags: "",
   })
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [categoriesError, setCategoriesError] = useState("")
+  const [detailsError, setDetailsError] = useState("")
   const [invitedCollaborators, setInvitedCollaborators] = useState<number[]>([])
   const [isCreating, setIsCreating] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; email: string; avatar?: string }>>([])
+  const [selectedFounders, setSelectedFounders] = useState<Array<{ id: string; name: string; email: string; avatar?: string }>>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [profilePic, setProfilePic] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Handle template selection
   const handleSelectTemplate = (templateId: string) => {
@@ -144,21 +157,6 @@ export default function CreateLabPage() {
         setLabDetails({
           name: aiDescription.split(" ").slice(0, 3).join(" ") + " Lab",
           description: aiDescription,
-          researchField: aiDescription.toLowerCase().includes("genomics")
-            ? "biology"
-            : aiDescription.toLowerCase().includes("neural")
-              ? "neuroscience"
-              : aiDescription.toLowerCase().includes("climate")
-                ? "environmental"
-                : aiDescription.toLowerCase().includes("quantum")
-                  ? "physics"
-                  : "other",
-          institution: "",
-          tags: aiDescription
-            .split(" ")
-            .filter((word) => word.length > 5)
-            .slice(0, 5)
-            .join(", "),
         })
 
         // Move to details step
@@ -176,12 +174,29 @@ export default function CreateLabPage() {
     })
   }
 
-  // Handle select changes
-  const handleSelectChange = (name: string, value: string) => {
-    setLabDetails({
-      ...labDetails,
-      [name]: value,
+  // Handle category selection
+  const handleCategoryClick = (value: string) => {
+    setSelectedCategories((prev) => {
+      const newCategories = prev.includes(value) 
+        ? prev.filter((category) => category !== value)
+        : prev.length < 10 
+          ? [...prev, value]
+          : prev
+
+      // Clear error if at least one category is selected
+      if (categoriesError && newCategories.length > 0) {
+        setCategoriesError("")
+      }
+
+      return newCategories
     })
+  }
+
+  // Handle removing a category
+  const handleRemoveCategory = (e: React.MouseEvent, value: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setSelectedCategories((prev) => prev.filter((category) => category !== value))
   }
 
   // Toggle collaborator invitation
@@ -204,6 +219,21 @@ export default function CreateLabPage() {
     } else if (step === "ai-description") {
       handleGenerateWithAI()
     } else if (step === "details") {
+      let hasError = false
+      setDetailsError("")
+      setCategoriesError("")
+      if (!labDetails.name.trim()) {
+        setDetailsError("Lab name is required.")
+        hasError = true
+      } else if (!labDetails.description.trim()) {
+        setDetailsError("Lab description is required.")
+        hasError = true
+      }
+      if (selectedCategories.length === 0) {
+        setCategoriesError("At least one science category is required.")
+        hasError = true
+      }
+      if (hasError) return
       setStep("invite")
     } else if (step === "invite") {
       setStep("finalize")
@@ -245,6 +275,59 @@ export default function CreateLabPage() {
     return labTemplates.find((t) => t.id === selectedTemplate)
   }
 
+  // Handle search
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query)
+    if (query.length < 2) {
+      setSearchResults([])
+      return
+    }
+    
+    setIsSearching(true)
+    // In a real app, this would call your API to search for users
+    // For now, we'll simulate a search with some sample data
+    setTimeout(() => {
+      setSearchResults([
+        { id: "1", name: "Dr. Sarah Johnson", email: "sjohnson@research.edu", avatar: "/placeholder.svg" },
+        { id: "2", name: "Alex Kim", email: "akim@research.edu", avatar: "/placeholder.svg" },
+        { id: "3", name: "Maria Lopez", email: "mlopez@research.edu", avatar: "/placeholder.svg" },
+      ])
+      setIsSearching(false)
+    }, 500)
+  }
+
+  // Handle add founder
+  const handleAddFounder = (founder: { id: string; name: string; email: string; avatar?: string }) => {
+    if (selectedFounders.length >= 3) return
+    if (selectedFounders.some(f => f.id === founder.id)) return
+    
+    setSelectedFounders([...selectedFounders, founder])
+    setSearchQuery("")
+    setSearchResults([])
+  }
+
+  // Handle remove founder
+  const handleRemoveFounder = (id: string) => {
+    setSelectedFounders(selectedFounders.filter(f => f.id !== id))
+  }
+
+  // Handle profile picture change
+  const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        setProfilePic(ev.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  // Open file picker
+  const handleProfilePicClick = () => {
+    fileInputRef.current?.click()
+  }
+
   // Render template selection step
   const renderTemplateStep = () => {
     return (
@@ -258,8 +341,14 @@ export default function CreateLabPage() {
           {labTemplates.map((template) => (
             <div
               key={template.id}
-              className={`relative cursor-pointer transition-all duration-200 transform hover:scale-[1.02] ${selectedTemplate === template.id ? "ring-2 ring-accent" : ""}`}
-              onClick={() => handleSelectTemplate(template.id)}
+              className={`relative cursor-pointer transition-all duration-200 transform hover:scale-[1.02] ${
+                template.disabled 
+                  ? "opacity-50 cursor-not-allowed" 
+                  : selectedTemplate === template.id 
+                  ? "ring-2 ring-accent" 
+                  : ""
+              }`}
+              onClick={() => !template.disabled && handleSelectTemplate(template.id)}
             >
               <Card className="overflow-hidden h-full">
                 <div className="relative h-40 overflow-hidden">
@@ -267,6 +356,11 @@ export default function CreateLabPage() {
                   <div className="absolute inset-0 flex items-center justify-center">
                     <template.icon className="h-20 w-20 text-accent opacity-40" />
                   </div>
+                  {template.comingSoon && (
+                    <div className="absolute top-2 right-2 bg-gray-800 text-gray-300 text-xs px-2 py-1 rounded">
+                      COMING SOON
+                    </div>
+                  )}
                 </div>
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
@@ -274,7 +368,7 @@ export default function CreateLabPage() {
                       <CardTitle className="text-lg">{template.name}</CardTitle>
                       <CardDescription className="mt-1">{template.description}</CardDescription>
                     </div>
-                    {selectedTemplate === template.id && (
+                    {!template.disabled && selectedTemplate === template.id && (
                       <div className="bg-accent rounded-full p-1">
                         <Check className="h-4 w-4 text-primary-foreground" />
                       </div>
@@ -398,14 +492,49 @@ export default function CreateLabPage() {
 
   // Render lab details step
   const renderDetailsStep = () => {
+    // Filter research areas based on search term
+    const filteredAreas = searchTerm
+      ? researchAreas.filter((area) => area.label.toLowerCase().includes(searchTerm.toLowerCase()))
+      : researchAreas
+
     return (
       <>
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold uppercase tracking-wide mb-2">Lab Details</h1>
           <p className="text-muted-foreground">Provide information about your lab</p>
+          {detailsError && <p className="text-destructive text-sm mt-2">{detailsError}</p>}
         </div>
 
         <div className="space-y-6 max-w-2xl mx-auto">
+          <div className="flex flex-col items-center space-y-4">
+            <div
+              className="w-32 h-32 rounded-full border-2 border-secondary flex items-center justify-center bg-secondary/10 cursor-pointer relative group"
+              onClick={handleProfilePicClick}
+              tabIndex={0}
+              role="button"
+              aria-label="Upload lab profile picture"
+            >
+              <input
+                type="file"
+                accept="image/*"
+                ref={fileInputRef}
+                onChange={handleProfilePicChange}
+                className="hidden"
+              />
+              {profilePic ? (
+                <img
+                  src={profilePic}
+                  alt="Lab profile"
+                  className="object-cover w-full h-full rounded-full"
+                />
+              ) : (
+                <Plus className="h-10 w-10 text-muted-foreground group-hover:text-accent transition-colors" />
+              )}
+              <div className="absolute inset-0 rounded-full bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <p className="text-xs text-muted-foreground">Upload a lab profile picture (400x400px)</p>
+          </div>
+
           <div className="space-y-2">
             <UILable htmlFor="lab-name">Lab Name</UILable>
             <Input
@@ -429,130 +558,222 @@ export default function CreateLabPage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <UILable htmlFor="research-field">Research Field</UILable>
-              <Select
-                value={labDetails.researchField}
-                onValueChange={(value) => handleSelectChange("researchField", value)}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <UILable>Additional Founders</UILable>
+              <span className="text-sm text-muted-foreground">
+                {selectedFounders.length}/3 selected
+              </span>
+            </div>
+            
+            {selectedFounders.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {selectedFounders.map((founder) => (
+                  <Badge
+                    key={founder.id}
+                    variant="secondary"
+                    className="flex items-center gap-2 py-1 px-2"
+                  >
+                    <Avatar className="h-4 w-4">
+                      <AvatarImage src={founder.avatar} alt={founder.name} />
+                      <AvatarFallback>{founder.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <span>{founder.name}</span>
+                    <button
+                      onClick={() => handleRemoveFounder(founder.id)}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            <div className="relative">
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search for users..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              
+              {searchResults.length > 0 && (
+                <div className="absolute mt-2 w-full bg-background border rounded-md shadow-lg z-10">
+                  {searchResults.map((user) => (
+                    <button
+                      key={user.id}
+                      onClick={() => handleAddFounder(user)}
+                      disabled={selectedFounders.some(f => f.id === user.id) || selectedFounders.length >= 3}
+                      className="w-full p-2 hover:bg-accent flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage src={user.avatar} alt={user.name} />
+                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div className="text-left">
+                        <div className="font-medium">{user.name}</div>
+                        <div className="text-xs text-muted-foreground">{user.email}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <UILable>Science Categories</UILable>
+              {categoriesError && <span className="text-xs text-destructive">{categoriesError}</span>}
+            </div>
+            <div className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-between"
+                onClick={() => setIsDropdownOpen((prev) => !prev)}
               >
-                <SelectTrigger id="research-field">
-                  <SelectValue placeholder="Select primary field" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="neuroscience">Neuroscience</SelectItem>
-                  <SelectItem value="ai">Artificial Intelligence</SelectItem>
-                  <SelectItem value="biology">Biology</SelectItem>
-                  <SelectItem value="chemistry">Chemistry</SelectItem>
-                  <SelectItem value="physics">Physics</SelectItem>
-                  <SelectItem value="medicine">Medicine</SelectItem>
-                  <SelectItem value="environmental">Environmental Science</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+                {selectedCategories.length > 0
+                  ? `${selectedCategories.length} selected`
+                  : "Select science categories..."}
+              </Button>
+
+              {isDropdownOpen && (
+                <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg">
+                  <div className="flex items-center border-b p-2">
+                    <Search className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search science categories..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    />
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto p-1">
+                    {filteredAreas.length === 0 ? (
+                      <div className="py-2 px-3 text-sm text-muted-foreground">No categories found</div>
+                    ) : (
+                      filteredAreas.map((area) => {
+                        const isSelected = selectedCategories.includes(area.value)
+                        return (
+                          <div
+                            key={area.value}
+                            className={`flex items-center px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer ${
+                              isSelected ? "bg-accent/50" : ""
+                            }`}
+                            onClick={() => handleCategoryClick(area.value)}
+                          >
+                            <div className="mr-2 h-4 w-4 flex items-center justify-center border rounded">
+                              {isSelected && <Check className="h-3 w-3" />}
+                            </div>
+                            {area.label}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <UILable htmlFor="institution">Institution</UILable>
-              <Input
-                id="institution"
-                name="institution"
-                value={labDetails.institution}
-                onChange={handleInputChange}
-                placeholder="University or organization"
-              />
-            </div>
-          </div>
+            {selectedCategories.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {selectedCategories.map((category) => {
+                  const area = researchAreas.find((a) => a.value === category)
+                  return (
+                    <Badge key={category} variant="secondary" className="flex items-center gap-1">
+                      {area?.label}
+                      <button
+                        type="button"
+                        className="h-4 w-4 p-0 hover:bg-transparent rounded-full flex items-center justify-center"
+                        onClick={(e) => handleRemoveCategory(e, category)}
+                      >
+                        <X className="h-3 w-3" />
+                        <span className="sr-only">Remove {area?.label}</span>
+                      </button>
+                    </Badge>
+                  )
+                })}
+              </div>
+            )}
 
-          <div className="space-y-2">
-            <UILable htmlFor="lab-tags">Tags</UILable>
-            <Input
-              id="lab-tags"
-              name="tags"
-              value={labDetails.tags}
-              onChange={handleInputChange}
-              placeholder="Enter tags separated by commas (e.g., brain mapping, cognitive science)"
-            />
-            <p className="text-xs text-muted-foreground">Tags help others discover your lab</p>
-          </div>
-
-          <div className="space-y-2">
-            <UILable>Lab Logo</UILable>
-            <FileUploader onChange={() => {}} />
-            <p className="text-xs text-muted-foreground">Recommended size: 400x400px. Max file size: 2MB.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Select up to 10 science categories ({selectedCategories.length}/10 selected)
+            </p>
           </div>
         </div>
       </>
     )
   }
 
-  // Render invite collaborators step
-  const renderInviteStep = () => {
+ const renderInviteStep = () => {
+    const inviteMessage = `Join my new lab: ${labDetails.name || "My Research Lab"} on HDX!`
+    const inviteLink = "https://hdx.science/labs/join?token=abc123xyz456"
+
+    const fullInviteMessage = `${inviteMessage}\n\nClick here to join: ${inviteLink}`
+
+    const handleCopy = () => {
+      navigator.clipboard.writeText(fullInviteMessage)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+
     return (
       <>
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold uppercase tracking-wide mb-2">Invite Collaborators</h1>
-          <p className="text-muted-foreground">Add team members to your lab</p>
+          <p className="text-muted-foreground">Share your lab with colleagues and collaborators</p>
         </div>
 
         <div className="max-w-2xl mx-auto">
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Input placeholder="Search by name or email..." className="flex-1" />
-              <Button variant="outline" className="border-accent text-accent hover:bg-secondary">
-                Search
-              </Button>
-            </div>
+          <div className="bg-gradient-to-br from-science-ai/20 to-accent/10 rounded-xl p-8 mb-8 border border-accent/20">
+            <div className="text-center space-y-6">
+              <div className="inline-flex items-center justify-center p-2 rounded-full bg-accent/20 mb-2">
+                <Sparkles className="h-6 w-6 text-accent" />
+              </div>
 
-            <div className="space-y-3">
-              {sampleCollaborators.map((collaborator) => (
-                <div
-                  key={collaborator.id}
-                  className={`flex items-center justify-between p-3 border rounded-md transition-colors ${invitedCollaborators.includes(collaborator.id) ? "border-accent bg-secondary/30" : "border-secondary"}`}
-                  onClick={() => toggleCollaborator(collaborator.id)}
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={collaborator.avatar} alt={collaborator.name} />
-                      <AvatarFallback>{collaborator.initials}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{collaborator.name}</p>
-                      <p className="text-sm text-muted-foreground">{collaborator.email}</p>
-                    </div>
+              <h2 className="text-2xl font-bold text-center">{inviteMessage}</h2>
+
+              <p className="text-muted-foreground max-w-md mx-auto">
+                Share this invitation with your colleagues to collaborate on your research together
+              </p>
+
+              <div className="flex flex-col items-center justify-center gap-4 mt-4">
+                <div className="relative w-full max-w-md">
+                  <div className="bg-background/80 backdrop-blur-sm border border-accent/20 rounded-lg p-4 text-sm font-mono break-all">
+                    {fullInviteMessage}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-secondary text-foreground">{collaborator.role}</Badge>
-                    {invitedCollaborators.includes(collaborator.id) ? (
-                      <div className="bg-accent rounded-full p-1">
-                        <Check className="h-4 w-4 text-primary-foreground" />
-                      </div>
-                    ) : (
-                      <Button variant="outline" size="sm" className="border-accent text-accent hover:bg-secondary">
-                        Invite
-                      </Button>
-                    )}
+                  <Button className="absolute top-2 right-2 h-8 w-8 p-0" variant="ghost" onClick={handleCopy}>
+                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+
+                <div className="flex gap-2 mt-2">
+                  <Button onClick={handleCopy} className="bg-accent text-primary-foreground hover:bg-accent/90">
+                    {copied ? "Copied!" : "Copy Invitation"}
+                  </Button>
+
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex gap-2 items-center">
+                      <Mail className="h-4 w-4" />
+                      <span className="hidden sm:inline">Email</span>
+                    </Button>
+                    <Button variant="outline" className="flex gap-2 items-center">
+                      <MessageSquare className="h-4 w-4" />
+                      <span className="hidden sm:inline">Message</span>
+                    </Button>
+                    <Button variant="outline" className="flex gap-2 items-center">
+                      <Share2 className="h-4 w-4" />
+                      <span className="hidden sm:inline">Share</span>
+                    </Button>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="border border-secondary rounded-md p-4">
-            <h3 className="text-sm font-medium mb-2">Invite by Email</h3>
-            <div className="flex gap-2">
-              <Input placeholder="Enter email address" className="flex-1" />
-              <Select defaultValue="member">
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="viewer">Viewer</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button className="bg-accent text-primary-foreground hover:bg-accent/90">Send</Button>
+              </div>
             </div>
           </div>
         </div>
@@ -584,32 +805,6 @@ export default function CreateLabPage() {
                 <div className="flex-1">
                   <h3 className="text-lg font-medium">{labDetails.name}</h3>
                   <p className="text-muted-foreground">{labDetails.description}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-secondary">
-                <div>
-                  <h4 className="text-sm font-medium mb-1">Research Field</h4>
-                  <p className="text-sm">{labDetails.researchField || "Not specified"}</p>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium mb-1">Institution</h4>
-                  <p className="text-sm">{labDetails.institution || "Not specified"}</p>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-secondary">
-                <h4 className="text-sm font-medium mb-2">Tags</h4>
-                <div className="flex flex-wrap gap-2">
-                  {labDetails.tags ? (
-                    labDetails.tags.split(",").map((tag, index) => (
-                      <Badge key={index} variant="outline">
-                        {tag.trim()}
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No tags specified</p>
-                  )}
                 </div>
               </div>
             </CardContent>
