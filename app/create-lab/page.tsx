@@ -6,6 +6,8 @@ import { X, Check } from "lucide-react"
 import { researchAreas } from "@/lib/research-areas"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
+import { v4 as uuidv4 } from 'uuid'
+import { useRouter } from "next/navigation"
 
 import type React from "react"
 
@@ -119,6 +121,7 @@ export default function CreateLabPage() {
   const [copied, setCopied] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuth()
+  const router = useRouter()
 
   // Handle template selection
   const handleSelectTemplate = (templateId: string) => {
@@ -271,17 +274,41 @@ export default function CreateLabPage() {
 
     setIsCreating(true)
     try {
-      console.log('Current user:', user)
-      console.log('Supabase auth status:', await supabase.auth.getSession())
+      // 1. Generate a UUID for the lab
+      const labId = uuidv4()
 
+      // 2. Upload profile picture if present
+      let profilePicUrl = null
+      if (profilePic) {
+        // Convert base64 to Blob
+        const res = await fetch(profilePic)
+        const blob = await res.blob()
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('lab-profile-pics')
+          .upload(`${labId}.png`, blob, { upsert: true })
+
+        if (uploadError) {
+          console.error('Error uploading profile pic:', uploadError)
+        } else {
+          const { data: publicUrlData } = supabase
+            .storage
+            .from('lab-profile-pics')
+            .getPublicUrl(`${labId}.png`)
+          profilePicUrl = publicUrlData.publicUrl
+        }
+      }
+
+      // 3. Insert lab with profilePic
       const labData = { 
+        labId,
         labName: labDetails.name,
         description: labDetails.description,
         createdBy: user.id,
         funding_setup: false,
         membership_option: false,
         one_time_donation_option: false,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        profilePic: profilePicUrl // <-- new column
       }
       
       console.log('Attempting to create lab with data:', labData)
@@ -291,11 +318,9 @@ export default function CreateLabPage() {
         .insert([labData])
         .select()
 
-      // Log the raw response
       console.log('Supabase response:', { data, error: labError })
 
       if (labError) {
-        // Log the full error object for debugging
         console.error('Error creating lab:', {
           error: labError,
           message: labError.message,
@@ -314,16 +339,17 @@ export default function CreateLabPage() {
 
       const lab = data
 
+      // 4. Use labId for all related inserts
       // Log activity
       const { error: activityError } = await supabase
         .from('activity')
         .insert([{
-          activity_id: crypto.randomUUID(),
+          activity_id: uuidv4(),
           created_at: new Date().toISOString(),
           activity_name: 'Lab Created',
-          activity_type: 'creation',
+          activity_type: 'labcreation',
           performed_by: user.id,
-          lab_from: lab.id
+          lab_from: labId
         }])
 
       if (activityError) {
@@ -337,7 +363,7 @@ export default function CreateLabPage() {
           .insert(
             selectedCategories.map(category => ({
               created_at: new Date().toISOString(),
-              lab_id: lab.id,
+              lab_id: labId,
               category: category
             }))
           )
@@ -351,7 +377,7 @@ export default function CreateLabPage() {
       const { data: adminData, error: adminError } = await supabase
         .from('labAdmins')
         .insert({
-          lab_id: lab.id,
+          lab_id: labId,
           user: user.id
         })
         .select()
@@ -369,7 +395,7 @@ export default function CreateLabPage() {
       const { data: memberData, error: memberError } = await supabase
         .from('labMembers')
         .insert({
-          lab_id: lab.id,
+          lab_id: labId,
           user: user.id,
           role: 'founder'
         })
@@ -391,24 +417,25 @@ export default function CreateLabPage() {
           await supabase
             .from('labAdmins')
             .insert([{
-              lab_id: lab.id,
-              user_id: founder.id
+              lab_id: labId,
+              user: founder.id
             }])
 
           // Add as member
           await supabase
             .from('labMembers')
             .insert([{
-              lab_id: lab.id,
-              user_id: founder.id
+              lab_id: labId,
+              user: founder.id
             }])
         })
 
         await Promise.all(founderPromises)
       }
 
-      // If all successful, redirect to the new lab
-      window.location.href = `/lab/${lab.id}`
+      // ADD THIS REDIRECT:
+      router.push(`/lab/${labId}`) // <-- This will redirect to the new lab view
+
     } catch (error) {
       console.error('Error in lab creation process:', error)
     } finally {

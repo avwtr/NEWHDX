@@ -17,19 +17,23 @@ interface LabProfileProps {
   handleGuestAction: () => void
   setActiveTab: (tab: string) => void
   router: AppRouterInstance
+  lab: any
+  categories: { category: string }[]
 }
 
-export function LabProfile({
+export default function LabProfile({
   isAdmin,
   isGuest,
   isFollowing,
   setIsFollowing,
-  notifications,
+  notifications = [],
   notificationsSidebarOpen,
   setNotificationsSidebarOpen,
   handleGuestAction,
   setActiveTab,
   router,
+  lab,
+  categories,
 }: LabProfileProps) {
   return (
     <Card className="border-accent">
@@ -37,20 +41,23 @@ export function LabProfile({
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex items-center gap-4">
             <div className="relative h-16 w-16 rounded-md overflow-hidden border-2 border-accent">
-              <Image src="/science-lab-setup.png" alt="Lab Logo" width={64} height={64} className="object-cover" />
+              <Image
+                src={lab.profilePic || "/science-lab-setup.png"}
+                alt="Lab Logo"
+                width={64}
+                height={64}
+                className="object-cover"
+                unoptimized
+              />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">NEUROCOGNITIVE RESEARCH LAB</h2>
+              <h2 className="text-2xl font-bold">{lab.labName}</h2>
               <div className="flex flex-wrap gap-2 mt-1">
-                <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20">
-                  NEUROSCIENCE
-                </Badge>
-                <Badge variant="outline" className="bg-purple-500/10 text-purple-500 border-purple-500/20">
-                  COGNITIVE SCIENCE
-                </Badge>
-                <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
-                  PSYCHOLOGY
-                </Badge>
+                {categories.map((cat, idx) => (
+                  <Badge key={idx} variant="outline" className="rounded-full px-3 py-1">
+                    {cat.category}
+                  </Badge>
+                ))}
               </div>
             </div>
           </div>
@@ -103,9 +110,7 @@ export function LabProfile({
 
       <CardContent>
         <p className="text-sm text-muted-foreground">
-          Investigating the neural correlates of cognitive processes and their implications for understanding human
-          behavior and mental health. Our interdisciplinary approach combines neuroimaging, computational modeling, and
-          behavioral experiments.
+          {lab.description}
         </p>
       </CardContent>
 

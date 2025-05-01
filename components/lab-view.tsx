@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -15,9 +15,11 @@ import { GlobalAddButton } from "@/components/global-add-button"
 import { LabChat } from "@/components/lab-chat"
 import { LabMaterialsExplorer } from "@/components/lab-materials-explorer"
 import type { Contribution } from "@/components/contribution-detail-modal"
+import { useAuth } from "@/components/auth-provider"
+import { supabase } from "@/lib/supabase"
 
 // Sub-components
-import { LabProfile } from "@/components/lab-view/lab-profile"
+import LabProfile from "@/components/lab-view/lab-profile"
 import { LabOverviewTab } from "@/components/lab-view/lab-overview-tab"
 import { LabFundingTab } from "@/components/lab-view/lab-funding-tab"
 import { LabSettingsTab } from "@/components/lab-view/lab-settings-tab"
@@ -35,10 +37,26 @@ import {
   contributionsData,
 } from "@/components/lab-view/lab-data"
 
-export default function LabView() {
+export default function LabView({ lab, categories }) {
+  const { user } = useAuth()
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (user?.id && lab?.labId) {
+        const { data } = await supabase
+          .from("labAdmins")
+          .select("id")
+          .eq("lab_id", lab.labId)
+          .eq("user", user.id)
+        setIsAdmin(!!(data && data.length > 0))
+      }
+    }
+    checkAdmin()
+  }, [user, lab])
+
   const router = useRouter()
   const { currentRole, currentUser } = useRole()
-  const isAdmin = currentRole === "admin"
   const isGuest = currentRole === "guest"
   const isUser = currentRole === "user"
 
@@ -226,7 +244,6 @@ export default function LabView() {
     setEditMembershipDialogOpen(true)
   }
 
-  // Replace the return statement with the new layout
   return (
     <div className="container mx-auto pt-4 pb-8">
       {/* Role indicator banner */}
@@ -269,11 +286,13 @@ export default function LabView() {
       {/* Lab Profile - Full width at the top */}
       <div className="w-full mb-6">
         <LabProfile
+          lab={lab}
+          categories={categories}
+          notifications={notifications || []}
           isAdmin={isAdmin}
           isGuest={isGuest}
           isFollowing={isFollowing}
           setIsFollowing={setIsFollowing}
-          notifications={notifications}
           notificationsSidebarOpen={notificationsSidebarOpen}
           setNotificationsSidebarOpen={setNotificationsSidebarOpen}
           handleGuestAction={handleGuestAction}
