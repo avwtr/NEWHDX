@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Activity,
   AlertCircle,
@@ -26,70 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LogCustomEventDialog } from "@/components/log-custom-event-dialog"
-
-// Sample data for the timeline
-const timelineData = [
-  {
-    id: 1,
-    title: "New experiment started",
-    description: "Initiated experiment on quantum entanglement",
-    date: new Date(2023, 5, 15, 9, 30),
-    type: "experiment",
-    user: {
-      name: "Dr. Jane Smith",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "JS",
-    },
-  },
-  {
-    id: 2,
-    title: "Research paper published",
-    description: "Published findings in Nature journal",
-    date: new Date(2023, 5, 10, 14, 0),
-    type: "publication",
-    user: {
-      name: "Dr. John Doe",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "JD",
-    },
-  },
-  {
-    id: 3,
-    title: "Grant funding received",
-    description: "Received $500,000 grant from National Science Foundation",
-    date: new Date(2023, 5, 5, 11, 15),
-    type: "funding",
-    user: {
-      name: "Dr. Jane Smith",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "JS",
-    },
-  },
-  {
-    id: 4,
-    title: "New team member joined",
-    description: "Dr. Alex Johnson joined the research team",
-    date: new Date(2023, 4, 28, 10, 0),
-    type: "collaboration",
-    user: {
-      name: "Lab Admin",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "LA",
-    },
-  },
-  {
-    id: 5,
-    title: "Milestone achieved",
-    description: "Successfully demonstrated quantum teleportation",
-    date: new Date(2023, 4, 20, 16, 45),
-    type: "milestone",
-    user: {
-      name: "Dr. John Doe",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "JD",
-    },
-  },
-]
+import { supabase } from "@/lib/supabase" // adjust path if needed
 
 // Function to get the appropriate icon for each event type
 function getEventIcon(type: string) {
@@ -131,10 +68,37 @@ function getEventColor(type: string) {
   }
 }
 
-export function LabActivity() {
+export function LabActivity({ labId }: { labId: string }) {
   const [searchQuery, setSearchQuery] = useState("")
-  const [timeline, setTimeline] = useState(timelineData)
+  const [timeline, setTimeline] = useState<any[]>([])
   const [isCustomEventDialogOpen, setIsCustomEventDialogOpen] = useState(false)
+
+  useEffect(() => {
+    async function fetchActivities() {
+      if (!labId) return
+      const { data, error } = await supabase
+        .from("activity")
+        .select("*")
+        .eq("lab_id", labId)
+        .order("created_at", { ascending: false })
+      if (error) {
+        setTimeline([])
+        return
+      }
+      setTimeline(
+        (data || []).map((event) => ({
+          ...event,
+          date: new Date(event.created_at),
+          user: {
+            name: event.user_name || "Unknown",
+            avatar: event.user_avatar || "/placeholder.svg?height=40&width=40",
+            initials: event.user_initials || "??",
+          },
+        }))
+      )
+    }
+    fetchActivities()
+  }, [labId])
 
   // Filter timeline based on search query
   const filteredTimeline = timeline.filter(

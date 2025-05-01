@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -28,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { supabase } from "@/lib/supabase"
 
 interface Contributor {
   id: string
@@ -58,71 +59,8 @@ interface Experiment {
   results?: string
 }
 
-// Sample experiments data
-const sampleExperiments: Experiment[] = [
-  {
-    id: 1,
-    name: "Neural Network Optimization",
-    description:
-      "Optimizing neural network architecture for faster training and improved accuracy in cognitive task prediction.",
-    objective:
-      "Develop a more efficient neural network architecture that reduces training time by 30% while maintaining or improving accuracy.",
-    status: "LIVE",
-    startDate: "2024-01-15",
-    categories: ["ai", "machine-learning", "neural-networks"],
-    contributors: [
-      { id: "1", name: "Dr. Sarah Johnson", initials: "SJ", avatar: "/placeholder.svg?height=32&width=32" },
-      { id: "2", name: "Alex Kim", initials: "AK", avatar: "/placeholder.svg?height=32&width=32" },
-      { id: "3", name: "Maria Lopez", initials: "ML", avatar: "/placeholder.svg?height=32&width=32" },
-    ],
-    files: [
-      { id: "f1", name: "NEURAL_NETWORK_V2.PY", type: "py", addedBy: "Dr. Sarah Johnson", date: "1 week ago" },
-      { id: "f2", name: "TRAINING_DATA.CSV", type: "csv", addedBy: "Alex Kim", date: "5 days ago" },
-      { id: "f3", name: "OPTIMIZATION_RESULTS.JSON", type: "json", addedBy: "Maria Lopez", date: "2 days ago" },
-    ],
-  },
-  {
-    id: 2,
-    name: "fMRI Data Analysis",
-    description: "Analyzing fMRI data to identify brain activity patterns during cognitive tasks.",
-    objective:
-      "Identify specific brain regions activated during complex problem-solving tasks and map the connectivity patterns.",
-    status: "LIVE",
-    startDate: "2024-02-01",
-    categories: ["neuroscience", "brain-mapping", "cognitive-science"],
-    contributors: [
-      { id: "1", name: "Dr. Sarah Johnson", initials: "SJ", avatar: "/placeholder.svg?height=32&width=32" },
-      { id: "4", name: "Robert Kim", initials: "RK", avatar: "/placeholder.svg?height=32&width=32" },
-    ],
-    files: [
-      { id: "f4", name: "FMRI_DATA_2023.CSV", type: "csv", addedBy: "Dr. Sarah Johnson", date: "2 days ago" },
-      { id: "f5", name: "FMRI_ANALYSIS_PIPELINE.PY", type: "py", addedBy: "Dr. Sarah Johnson", date: "1 day ago" },
-    ],
-  },
-  {
-    id: 3,
-    name: "Cognitive Enhancement Study",
-    description: "Investigating the effects of neurofeedback training on cognitive performance.",
-    objective: "Determine if neurofeedback training can improve working memory and attention in healthy adults.",
-    status: "CONCLUDED",
-    startDate: "2023-09-10",
-    endDate: "2024-01-05",
-    categories: ["neuroscience", "cognitive-science", "neurofeedback"],
-    contributors: [
-      { id: "1", name: "Dr. Sarah Johnson", initials: "SJ", avatar: "/placeholder.svg?height=32&width=32" },
-      { id: "5", name: "Emily Chen", initials: "EC", avatar: "/placeholder.svg?height=32&width=32" },
-    ],
-    files: [
-      { id: "f6", name: "COGNITIVE_TEST_RESULTS.CSV", type: "csv", addedBy: "Emily Chen", date: "3 months ago" },
-      { id: "f7", name: "PARTICIPANT_DEMOGRAPHICS.XLSX", type: "xlsx", addedBy: "Emily Chen", date: "3 months ago" },
-      { id: "f8", name: "NEUROFEEDBACK_PROTOCOL.MD", type: "md", addedBy: "Dr. Sarah Johnson", date: "4 months ago" },
-    ],
-    results:
-      "Participants showed a 15% improvement in working memory tasks and a 12% improvement in sustained attention following 8 weeks of neurofeedback training.",
-  },
-]
-
 interface ExperimentsListProps {
+  labId: string
   experiments?: Experiment[]
 }
 
@@ -140,15 +78,31 @@ const generateColorForCategory = (category: string) => {
   return color
 }
 
-export const ExperimentsList: React.FC<ExperimentsListProps> = ({ experiments = sampleExperiments }) => {
-  // Use the provided experiments or fall back to sample data
-  const [displayExperiments, setDisplayExperiments] = useState(experiments || sampleExperiments)
+export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experiments }) => {
+  const [displayExperiments, setDisplayExperiments] = useState<Experiment[]>([])
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [experimentToDelete, setExperimentToDelete] = useState<Experiment | null>(null)
   const { currentRole } = useRoleContext()
   const isAdmin = currentRole === "admin"
+
+  useEffect(() => {
+    async function fetchExperiments() {
+      if (!labId) return
+      const { data, error } = await supabase
+        .from("experiments")
+        .select("*")
+        .eq("lab_id", labId)
+        .order("startDate", { ascending: false })
+      if (error) {
+        setDisplayExperiments([])
+        return
+      }
+      setDisplayExperiments(data || [])
+    }
+    fetchExperiments()
+  }, [labId])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -189,119 +143,125 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ experiments = 
 
   return (
     <div className="space-y-6">
-      {displayExperiments.map((experiment) => (
-        <Card key={experiment.id} className="overflow-hidden">
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <Link href={`/experiments/view?id=${experiment.id}`} className="font-medium text-lg text-accent">
-                  {experiment.name}
-                </Link>
-              </div>
-              <div className="flex items-center gap-2">
-                {isAdmin && (
+      {displayExperiments.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <p>No experiments found for this lab.</p>
+        </div>
+      ) : (
+        displayExperiments.map((experiment) => (
+          <Card key={experiment.id} className="overflow-hidden">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <Link href={`/experiments/view?id=${experiment.id}`} className="font-medium text-lg text-accent">
+                    {experiment.name}
+                  </Link>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:bg-red-500/10 hover:text-red-400"
+                      onClick={() => openDeleteDialog(experiment)}
+                      title="Delete experiment"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-red-500 hover:bg-red-500/10 hover:text-red-400"
-                    onClick={() => openDeleteDialog(experiment)}
-                    title="Delete experiment"
+                    className="h-8 w-8 text-green-500 hover:bg-green-500/10 hover:text-green-400"
+                    onClick={() => {
+                      setSelectedExperiment(experiment)
+                      setSaveDialogOpen(true)
+                    }}
+                    title="Save to profile"
                   >
-                    <Trash2 className="h-5 w-5" />
+                    <PlusCircle className="h-5 w-5" />
                   </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-green-500 hover:bg-green-500/10 hover:text-green-400"
-                  onClick={() => {
-                    setSelectedExperiment(experiment)
-                    setSaveDialogOpen(true)
-                  }}
-                  title="Save to profile"
-                >
-                  <PlusCircle className="h-5 w-5" />
-                </Button>
-                <Badge className={experiment.status === "LIVE" ? "bg-green-600" : "bg-blue-600"}>
-                  {experiment.status}
-                </Badge>
-              </div>
-            </div>
-
-            <p className="text-sm mb-3">{experiment.description}</p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-              <div>
-                <h4 className="text-sm font-medium mb-2">OBJECTIVE</h4>
-                <p className="text-sm text-muted-foreground">{experiment.objective}</p>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-medium mb-2">TIMELINE</h4>
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <Calendar className="h-4 w-4 mr-1" />
-                  <span>Started: {formatDate(experiment.startDate)}</span>
-                </div>
-                {experiment.endDate && (
-                  <div className="flex items-center text-sm text-muted-foreground mt-1">
-                    <CheckCircle className="h-4 w-4 mr-1" />
-                    <span>Concluded: {formatDate(experiment.endDate)}</span>
-                  </div>
-                )}
-                {!experiment.endDate && (
-                  <div className="flex items-center text-sm text-muted-foreground mt-1">
-                    <Clock className="h-4 w-4 mr-1" />
-                    <span>Ongoing</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2 mb-3">
-              {experiment.categories.map((category, index) => {
-                const categoryColor = generateColorForCategory(category)
-                return (
-                  <Badge
-                    key={index}
-                    variant="outline"
-                    className="text-xs"
-                    style={{ backgroundColor: categoryColor, color: "white", borderColor: categoryColor }}
-                  >
-                    {category.toUpperCase()}
+                  <Badge className={experiment.status === "LIVE" ? "bg-green-600" : "bg-blue-600"}>
+                    {experiment.status}
                   </Badge>
-                )
-              })}
-            </div>
-
-            <div className="mb-3">
-              <h4 className="text-sm font-medium mb-2">CONTRIBUTORS</h4>
-              <div className="flex -space-x-2">
-                {experiment.contributors.map((contributor) => (
-                  <Avatar key={contributor.id} className="h-8 w-8 border-2 border-background">
-                    <AvatarImage src={contributor.avatar || "/placeholder.svg"} alt={contributor.name} />
-                    <AvatarFallback>{contributor.initials}</AvatarFallback>
-                  </Avatar>
-                ))}
+                </div>
               </div>
-            </div>
 
-            {experiment.results && (
-              <div>
-                <h4 className="text-sm font-medium mb-2">RESULTS</h4>
-                <p className="text-sm text-muted-foreground">{experiment.results}</p>
+              <p className="text-sm mb-3">{experiment.description}</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                <div>
+                  <h4 className="text-sm font-medium mb-2">OBJECTIVE</h4>
+                  <p className="text-sm text-muted-foreground">{experiment.objective}</p>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-medium mb-2">TIMELINE</h4>
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <Calendar className="h-4 w-4 mr-1" />
+                    <span>Started: {formatDate(experiment.startDate)}</span>
+                  </div>
+                  {experiment.endDate && (
+                    <div className="flex items-center text-sm text-muted-foreground mt-1">
+                      <CheckCircle className="h-4 w-4 mr-1" />
+                      <span>Concluded: {formatDate(experiment.endDate)}</span>
+                    </div>
+                  )}
+                  {!experiment.endDate && (
+                    <div className="flex items-center text-sm text-muted-foreground mt-1">
+                      <Clock className="h-4 w-4 mr-1" />
+                      <span>Ongoing</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
 
-            <div className="flex justify-end mt-4">
-              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" asChild>
-                <Link href={`/experiments/view?id=${experiment.id}`}>
-                  {experiment.status === "LIVE" ? "VIEW EXPERIMENT" : "VIEW RESULTS"}
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {experiment.categories.map((category, index) => {
+                  const categoryColor = generateColorForCategory(category)
+                  return (
+                    <Badge
+                      key={index}
+                      variant="outline"
+                      className="text-xs"
+                      style={{ backgroundColor: categoryColor, color: "white", borderColor: categoryColor }}
+                    >
+                      {category.toUpperCase()}
+                    </Badge>
+                  )
+                })}
+              </div>
+
+              <div className="mb-3">
+                <h4 className="text-sm font-medium mb-2">CONTRIBUTORS</h4>
+                <div className="flex -space-x-2">
+                  {experiment.contributors.map((contributor) => (
+                    <Avatar key={contributor.id} className="h-8 w-8 border-2 border-background">
+                      <AvatarImage src={contributor.avatar || "/placeholder.svg"} alt={contributor.name} />
+                      <AvatarFallback>{contributor.initials}</AvatarFallback>
+                    </Avatar>
+                  ))}
+                </div>
+              </div>
+
+              {experiment.results && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2">RESULTS</h4>
+                  <p className="text-sm text-muted-foreground">{experiment.results}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end mt-4">
+                <Button className="bg-accent text-primary-foreground hover:bg-accent/90" asChild>
+                  <Link href={`/experiments/view?id=${experiment.id}`}>
+                    {experiment.status === "LIVE" ? "VIEW EXPERIMENT" : "VIEW RESULTS"}
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      )}
 
       {/* Save to Profile Dialog */}
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>

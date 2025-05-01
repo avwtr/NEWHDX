@@ -19,6 +19,11 @@ interface LabProfileProps {
   router: AppRouterInstance
   lab: any
   categories: { category: string }[]
+  experimentsCount?: number
+  filesCount?: number
+  fundingTotal?: number
+  membersCount?: number
+  bulletinsCount?: number
 }
 
 export default function LabProfile({
@@ -34,6 +39,11 @@ export default function LabProfile({
   router,
   lab,
   categories,
+  experimentsCount = 0,
+  filesCount = 0,
+  fundingTotal = 0,
+  membersCount = 0,
+  bulletinsCount = 0,
 }: LabProfileProps) {
   return (
     <Card className="border-accent">
@@ -115,29 +125,35 @@ export default function LabProfile({
       </CardContent>
 
       <CardFooter className="flex justify-between pt-0">
-        <div className="grid grid-cols-4 gap-4 w-full">
+        <div className="grid grid-cols-5 gap-4 w-full">
           <div className="flex items-center gap-2 text-sm">
             <FileText className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">24</span>
+            <span className="font-medium">{filesCount}</span>
             <span className="text-muted-foreground">Files</span>
           </div>
 
           <div className="flex items-center gap-2 text-sm">
             <FlaskConical className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">5</span>
+            <span className="font-medium">{experimentsCount}</span>
             <span className="text-muted-foreground">Experiments</span>
           </div>
 
           <div className="flex items-center gap-2 text-sm">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">8</span>
+            <span className="font-medium">{membersCount}</span>
             <span className="text-muted-foreground">Members</span>
           </div>
 
           <div className="flex items-center gap-2 text-sm">
             <DollarSign className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">$125,000</span>
+            <span className="font-medium">${fundingTotal.toLocaleString()}</span>
             <span className="text-muted-foreground">Funding</span>
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">{bulletinsCount}</span>
+            <span className="text-muted-foreground">Bulletins</span>
           </div>
         </div>
       </CardFooter>

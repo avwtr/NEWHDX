@@ -6,8 +6,9 @@ import { Maximize2, Minimize2, Plus, Calendar, Users, Edit, Trash } from "lucide
 import Link from "next/link"
 import { CreateFundDialog } from "@/components/create-fund-dialog"
 import { Badge } from "@/components/ui/badge"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Textarea } from "@/components/ui/textarea"
+import { supabase } from "@/lib/supabase"
 
 interface LabOverviewTabProps {
   isAdmin: boolean
@@ -18,6 +19,7 @@ interface LabOverviewTabProps {
   setExperimentsExpanded: (value: boolean) => void
   setCreateExperimentDialogOpen: (value: boolean) => void
   liveExperimentsData: any[]
+  labId: string
 }
 
 export function LabOverviewTab({
@@ -29,23 +31,30 @@ export function LabOverviewTab({
   setExperimentsExpanded,
   setCreateExperimentDialogOpen,
   liveExperimentsData,
+  labId,
 }: LabOverviewTabProps) {
-  const [bulletins, setBulletins] = useState([
-    {
-      id: 1,
-      text: "Welcome to our lab! We're excited to have you join our research community.",
-      date: new Date(2023, 11, 15),
-    },
-    {
-      id: 2,
-      text: "New equipment arriving next week. Training sessions will be scheduled soon.",
-      date: new Date(2023, 11, 20),
-    },
-  ])
+  const [bulletins, setBulletins] = useState<any[]>([])
   const [isAddingBulletin, setIsAddingBulletin] = useState(false)
   const [newBulletinText, setNewBulletinText] = useState("")
   const [editingBulletinId, setEditingBulletinId] = useState<number | null>(null)
   const [editingText, setEditingText] = useState("")
+
+  useEffect(() => {
+    async function fetchBulletins() {
+      if (!labId) return
+      const { data, error } = await supabase
+        .from("labBulletins")
+        .select("*")
+        .eq("lab_id", labId)
+        .order("created_at", { ascending: false })
+      if (error) {
+        setBulletins([])
+        return
+      }
+      setBulletins(data || [])
+    }
+    fetchBulletins()
+  }, [labId])
 
   const handleAddBulletin = () => {
     if (newBulletinText.trim()) {
@@ -121,60 +130,64 @@ export function LabOverviewTab({
           )}
 
           <div className="space-y-4">
-            {bulletins.map((bulletin) => (
-              <div key={bulletin.id} className="p-4 bg-secondary/50 border border-secondary rounded-lg">
-                {editingBulletinId === bulletin.id ? (
-                  <div className="space-y-2">
-                    <Textarea
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                      className="min-h-[80px]"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setEditingBulletinId(null)}>
-                        Cancel
-                      </Button>
-                      <Button size="sm" onClick={() => handleSaveEdit(bulletin.id)}>
-                        Save
-                      </Button>
+            {bulletins.length === 0 ? (
+              <div className="text-muted-foreground text-sm">No bulletins yet.</div>
+            ) : (
+              bulletins.map((bulletin) => (
+                <div key={bulletin.id} className="p-4 bg-secondary/50 border border-secondary rounded-lg">
+                  {editingBulletinId === bulletin.id ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        className="min-h-[80px]"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setEditingBulletinId(null)}>
+                          Cancel
+                        </Button>
+                        <Button size="sm" onClick={() => handleSaveEdit(bulletin.id)}>
+                          Save
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-sm whitespace-pre-wrap">{bulletin.text}</p>
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="text-xs text-muted-foreground">
-                        {bulletin.date.toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </span>
-                      {isAdmin && (
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => handleEditBulletin(bulletin.id)}
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteBulletin(bulletin.id)}
-                          >
-                            <Trash className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
+                  ) : (
+                    <>
+                      <p className="text-sm whitespace-pre-wrap">{bulletin.text}</p>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(bulletin.created_at).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                        {isAdmin && (
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => handleEditBulletin(bulletin.id)}
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-destructive hover:text-destructive"
+                              onClick={() => handleDeleteBulletin(bulletin.id)}
+                            >
+                              <Trash className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

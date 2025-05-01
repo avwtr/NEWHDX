@@ -37,31 +37,14 @@ import {
   contributionsData,
 } from "@/components/lab-view/lab-data"
 
-export default function LabView({ lab, categories }) {
+export default function LabView({ lab, categories, isGuest, isFollowing, setIsFollowing, notifications, notificationsSidebarOpen, setNotificationsSidebarOpen, handleGuestAction, setActiveTab, router }) {
   const { user } = useAuth()
-  const [isAdmin, setIsAdmin] = useState(false)
 
-  useEffect(() => {
-    const checkAdmin = async () => {
-      if (user?.id && lab?.labId) {
-        const { data } = await supabase
-          .from("labAdmins")
-          .select("id")
-          .eq("lab_id", lab.labId)
-          .eq("user", user.id)
-        setIsAdmin(!!(data && data.length > 0))
-      }
-    }
-    checkAdmin()
-  }, [user, lab])
-
-  const router = useRouter()
   const { currentRole, currentUser } = useRole()
-  const isGuest = currentRole === "guest"
   const isUser = currentRole === "user"
 
   // Tab state
-  const [activeTab, setActiveTab] = useState("overview")
+  const [localActiveTab, setLocalActiveTab] = useState("overview")
   const [expandedTab, setExpandedTab] = useState<string | null>(null)
 
   // File state
@@ -71,9 +54,9 @@ export default function LabView({ lab, categories }) {
   const [tempFileName, setTempFileName] = useState("")
 
   // Notifications state
-  const [notifications, setNotifications] = useState(notificationsData)
+  const [localNotifications, setLocalNotifications] = useState(notificationsData)
   const [showNotifications, setShowNotifications] = useState(true)
-  const [notificationsSidebarOpen, setNotificationsSidebarOpen] = useState(false)
+  const [localNotificationsSidebarOpen, setLocalNotificationsSidebarOpen] = useState(false)
 
   // Funding state
   const [funds, setFunds] = useState(fundingData)
@@ -94,7 +77,7 @@ export default function LabView({ lab, categories }) {
   const [editMembershipDialogOpen, setEditMembershipDialogOpen] = useState(false)
 
   // User interaction states
-  const [isFollowing, setIsFollowing] = useState(false)
+  const [localIsFollowing, setLocalIsFollowing] = useState(false)
 
   // Contributions state
   const [contributions, setContributions] = useState(contributionsData)
@@ -107,8 +90,125 @@ export default function LabView({ lab, categories }) {
   const pendingContributions = contributions.filter((c) => c.status === "pending")
   const pendingCount = pendingContributions.length
 
+  const [experiments, setExperiments] = useState([])
+  const [files, setFiles] = useState([])
+  const [funding, setFunding] = useState([])
+  const [members, setMembers] = useState([])
+  const [bulletins, setBulletins] = useState([])
+
+  // --- Add state for experiments and funding ---
+  const [experimentsCount, setExperimentsCount] = useState(0)
+  const [fundingTotal, setFundingTotal] = useState(0)
+
+  // --- LAB ADMIN STATUS ---
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    const fetchLabData = async () => {
+      if (!lab?.labId) return
+
+      // Fetch experiments
+      const { data: expData } = await supabase
+        .from("experiments")
+        .select("*")
+        .eq("lab_id", lab.labId)
+      setExperiments(expData || [])
+
+      // Fetch files
+      const { data: fileData } = await supabase
+        .from("files")
+        .select("*")
+        .eq("lab_id", lab.labId)
+      setFiles(fileData || [])
+
+      // Fetch funding
+      const { data: fundingData } = await supabase
+        .from("funding")
+        .select("*")
+        .eq("lab_id", lab.labId)
+      setFunding(fundingData || [])
+
+      // Fetch members
+      const { data: memberData } = await supabase
+        .from("labMembers")
+        .select("*")
+        .eq("lab_id", lab.labId)
+      setMembers(memberData || [])
+
+      // Fetch notifications
+      const { data: notificationData } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("lab_id", lab.labId)
+      setLocalNotifications(notificationData || [])
+
+      // Fetch bulletin posts
+      const { data: bulletinData } = await supabase
+        .from("bulletins")
+        .select("*")
+        .eq("lab_id", lab.labId)
+      setBulletins(bulletinData || [])
+    }
+    fetchLabData()
+  }, [lab])
+
+  useEffect(() => {
+    async function fetchExperimentsAndFunding() {
+      if (!lab?.labId) return
+
+      // Fetch experiments count
+      const { count: experiments, error: expError } = await supabase
+        .from("experiments")
+        .select("*", { count: "exact", head: true })
+        .eq("lab_id", lab.labId)
+      setExperimentsCount(expError ? 0 : experiments || 0)
+
+      // Fetch funding goals and sum their currentAmount
+      const { data: fundingGoals, error: fundError } = await supabase
+        .from("funding")
+        .select("currentAmount")
+        .eq("lab_id", lab.labId)
+      if (fundError || !fundingGoals) {
+        setFundingTotal(0)
+      } else {
+        const total = fundingGoals.reduce((sum, goal) => sum + (goal.currentAmount || 0), 0)
+        setFundingTotal(total)
+      }
+    }
+    fetchExperimentsAndFunding()
+  }, [lab?.labId])
+
+  useEffect(() => {
+    async function checkLabAdmin() {
+      if (!user?.id || !lab?.labId) {
+        console.log("Admin check: missing user or lab", { userId: user?.id, labId: lab?.labId })
+        setIsAdmin(false)
+        return
+      }
+      console.log("Admin check: checking for user", user.id, "in lab", lab.labId)
+      const { data, error } = await supabase
+        .from("labAdmins")
+        .select("user")
+        .eq("lab_id", lab.labId)
+        .eq("user", user.id)
+        .limit(1)
+      console.log("Admin check result:", { data, error })
+      if (error || !data) {
+        setIsAdmin(false)
+        return
+      }
+      setIsAdmin(data.length > 0)
+      if (data.length > 0) {
+        console.log("User IS admin for this lab.")
+      } else {
+        console.log("User is NOT admin for this lab.")
+      }
+    }
+    checkLabAdmin()
+  }, [user?.id, lab?.labId])
+
   const handleTabChange = (value: string) => {
-    setActiveTab(value)
+    setLocalActiveTab(value)
     // Reset expanded state when changing tabs
     setExpandedTab(null)
   }
@@ -146,11 +246,11 @@ export default function LabView({ lab, categories }) {
   }
 
   const dismissNotification = (id: number) => {
-    setNotifications(notifications.filter((notification) => notification.id !== id))
+    setLocalNotifications(localNotifications.filter((notification) => notification.id !== id))
   }
 
   const dismissAllNotifications = () => {
-    setNotifications([])
+    setLocalNotifications([])
   }
 
   // Global Add Button handlers
@@ -159,7 +259,7 @@ export default function LabView({ lab, categories }) {
   }
 
   const handleNewFolder = () => {
-    setActiveTab("lab-materials")
+    setLocalActiveTab("lab-materials")
     setCreateNewFolder(true)
   }
 
@@ -172,11 +272,11 @@ export default function LabView({ lab, categories }) {
   }
 
   const handleSettings = () => {
-    setActiveTab("settings")
+    setLocalActiveTab("settings")
     setActiveSettingsTab("general")
   }
 
-  const handleGuestAction = () => {
+  const localHandleGuestAction = () => {
     setLoginPromptOpen(true)
     setTimeout(() => setLoginPromptOpen(false), 3000)
   }
@@ -275,9 +375,9 @@ export default function LabView({ lab, categories }) {
       )}
 
       {/* Notifications Bar - Only visible for admins */}
-      {isAdmin && showNotifications && notifications.length > 0 && (
+      {isAdmin && showNotifications && localNotifications.length > 0 && (
         <LabNotifications
-          notifications={notifications}
+          notifications={localNotifications}
           onDismiss={dismissNotification}
           onDismissAll={dismissAllNotifications}
         />
@@ -288,16 +388,21 @@ export default function LabView({ lab, categories }) {
         <LabProfile
           lab={lab}
           categories={categories}
-          notifications={notifications || []}
+          notifications={localNotifications}
           isAdmin={isAdmin}
           isGuest={isGuest}
-          isFollowing={isFollowing}
-          setIsFollowing={setIsFollowing}
-          notificationsSidebarOpen={notificationsSidebarOpen}
-          setNotificationsSidebarOpen={setNotificationsSidebarOpen}
-          handleGuestAction={handleGuestAction}
-          setActiveTab={setActiveTab}
+          isFollowing={localIsFollowing}
+          setIsFollowing={setLocalIsFollowing}
+          notificationsSidebarOpen={localNotificationsSidebarOpen}
+          setNotificationsSidebarOpen={setLocalNotificationsSidebarOpen}
+          handleGuestAction={localHandleGuestAction}
+          setActiveTab={setLocalActiveTab}
           router={router}
+          experimentsCount={experimentsCount}
+          filesCount={files.length}
+          fundingTotal={fundingTotal}
+          membersCount={members.length}
+          bulletinsCount={bulletins.length}
         />
       </div>
 
@@ -311,7 +416,7 @@ export default function LabView({ lab, categories }) {
               <button
                 onClick={() => handleTabChange("overview")}
                 className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  activeTab === "overview" ? "bg-accent text-background" : "hover:bg-muted"
+                  localActiveTab === "overview" ? "bg-accent text-background" : "hover:bg-muted"
                 }`}
               >
                 <Home className="h-5 w-5" />
@@ -321,7 +426,7 @@ export default function LabView({ lab, categories }) {
               <button
                 onClick={() => handleTabChange("lab-materials")}
                 className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  activeTab === "lab-materials" ? "bg-accent text-background" : "hover:bg-muted"
+                  localActiveTab === "lab-materials" ? "bg-accent text-background" : "hover:bg-muted"
                 }`}
               >
                 <FileText className="h-5 w-5" />
@@ -331,7 +436,7 @@ export default function LabView({ lab, categories }) {
               <button
                 onClick={() => handleTabChange("experiments")}
                 className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  activeTab === "experiments" ? "bg-accent text-background" : "hover:bg-muted"
+                  localActiveTab === "experiments" ? "bg-accent text-background" : "hover:bg-muted"
                 }`}
               >
                 <FlaskConical className="h-5 w-5" />
@@ -341,7 +446,7 @@ export default function LabView({ lab, categories }) {
               <button
                 onClick={() => handleTabChange("funding")}
                 className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  activeTab === "funding" ? "bg-accent text-background" : "hover:bg-muted"
+                  localActiveTab === "funding" ? "bg-accent text-background" : "hover:bg-muted"
                 }`}
               >
                 <DollarSign className="h-5 w-5" />
@@ -351,11 +456,11 @@ export default function LabView({ lab, categories }) {
               {isAdmin && (
                 <button
                   onClick={() => {
-                    setActiveTab("settings")
+                    setLocalActiveTab("settings")
                     setActiveSettingsTab("general")
                   }}
                   className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                    activeTab === "settings" ? "bg-accent text-background" : "hover:bg-muted"
+                    localActiveTab === "settings" ? "bg-accent text-background" : "hover:bg-muted"
                   }`}
                 >
                   <Users className="h-5 w-5" />
@@ -376,7 +481,7 @@ export default function LabView({ lab, categories }) {
 
         {/* Main content area */}
         <div className="flex-1">
-          {activeTab === "overview" && (
+          {localActiveTab === "overview" && (
             <LabOverviewTab
               isAdmin={isAdmin}
               expandedTab={expandedTab}
@@ -389,11 +494,11 @@ export default function LabView({ lab, categories }) {
             />
           )}
 
-          {activeTab === "lab-materials" && (
+          {localActiveTab === "lab-materials" && (
             <LabMaterialsExplorer createNewFolder={createNewFolder} userRole={currentRole} />
           )}
 
-          {activeTab === "experiments" && (
+          {localActiveTab === "experiments" && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle>EXPERIMENTS</CardTitle>
@@ -433,7 +538,7 @@ export default function LabView({ lab, categories }) {
             </Card>
           )}
 
-          {activeTab === "funding" && (
+          {localActiveTab === "funding" && (
             <LabFundingTab
               isAdmin={isAdmin}
               isGuest={isGuest}
@@ -445,17 +550,17 @@ export default function LabView({ lab, categories }) {
               donationBenefits={donationBenefits}
               isDonationsActive={isDonationsActive}
               toggleDonations={toggleDonations}
-              handleGuestAction={handleGuestAction}
+              handleGuestAction={localHandleGuestAction}
               handleEditFund={handleEditFund}
               handleManageMembership={handleManageMembership}
             />
           )}
 
-          {activeTab === "settings" && isAdmin && (
+          {localActiveTab === "settings" && isAdmin && (
             <LabSettingsTab
               activeSettingsTab={activeSettingsTab}
               setActiveSettingsTab={setActiveSettingsTab}
-              setActiveTab={setActiveTab}
+              setActiveTab={setLocalActiveTab}
               pendingCount={pendingCount}
               contributionSearch={contributionSearch}
               setContributionSearch={setContributionSearch}
@@ -472,12 +577,12 @@ export default function LabView({ lab, categories }) {
       {!isGuest && <LabChat />}
 
       {/* Notifications Sidebar - only for admins */}
-      {isAdmin && notificationsSidebarOpen && (
+      {isAdmin && localNotificationsSidebarOpen && (
         <NotificationsSidebar
-          notifications={notifications}
+          notifications={localNotifications}
           dismissNotification={dismissNotification}
           dismissAllNotifications={dismissAllNotifications}
-          setNotificationsSidebarOpen={setNotificationsSidebarOpen}
+          setNotificationsSidebarOpen={setLocalNotificationsSidebarOpen}
         />
       )}
 
