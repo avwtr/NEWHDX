@@ -4,6 +4,8 @@ import { Label as UILable } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { X, Check } from "lucide-react"
 import { researchAreas } from "@/lib/research-areas"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
 
 import type React from "react"
 
@@ -116,6 +118,7 @@ export default function CreateLabPage() {
   const [profilePic, setProfilePic] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { user } = useAuth()
 
   // Handle template selection
   const handleSelectTemplate = (templateId: string) => {
@@ -260,14 +263,157 @@ export default function CreateLabPage() {
   }
 
   // Handle lab creation
-  const handleCreateLab = () => {
+  const handleCreateLab = async () => {
+    if (!user?.id) {
+      console.error('No authenticated user found')
+      return
+    }
+
     setIsCreating(true)
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      console.log('Current user:', user)
+      console.log('Supabase auth status:', await supabase.auth.getSession())
+
+      const labData = { 
+        labName: labDetails.name,
+        description: labDetails.description,
+        createdBy: user.id,
+        funding_setup: false,
+        membership_option: false,
+        one_time_donation_option: false,
+        created_at: new Date().toISOString()
+      }
+      
+      console.log('Attempting to create lab with data:', labData)
+
+      const { data, error: labError } = await supabase
+        .from('labs')
+        .insert([labData])
+        .select()
+
+      // Log the raw response
+      console.log('Supabase response:', { data, error: labError })
+
+      if (labError) {
+        // Log the full error object for debugging
+        console.error('Error creating lab:', {
+          error: labError,
+          message: labError.message,
+          details: labError.details,
+          hint: labError.hint,
+          code: labError.code,
+          data: labData
+        })
+        return
+      }
+
+      if (!data) {
+        console.error('No lab data returned after creation')
+        return
+      }
+
+      const lab = data
+
+      // Log activity
+      const { error: activityError } = await supabase
+        .from('activity')
+        .insert([{
+          activity_id: crypto.randomUUID(),
+          created_at: new Date().toISOString(),
+          activity_name: 'Lab Created',
+          activity_type: 'creation',
+          performed_by: user.id,
+          lab_from: lab.id
+        }])
+
+      if (activityError) {
+        console.error('Error logging activity:', activityError)
+      }
+
+      // Add categories
+      if (selectedCategories.length > 0) {
+        const { error: categoryError } = await supabase
+          .from('labCategories')
+          .insert(
+            selectedCategories.map(category => ({
+              created_at: new Date().toISOString(),
+              lab_id: lab.id,
+              category: category
+            }))
+          )
+
+        if (categoryError) {
+          console.error('Error adding categories:', categoryError)
+        }
+      }
+
+      // Add lab admin (creator)
+      const { data: adminData, error: adminError } = await supabase
+        .from('labAdmins')
+        .insert({
+          lab_id: lab.id,
+          user: user.id
+        })
+        .select()
+
+      if (adminError) {
+        console.error('Error adding lab admin:', {
+          error: adminError,
+          errorMessage: adminError.message,
+          errorDetails: adminError.details
+        })
+        return
+      }
+
+      // Add lab member (creator)
+      const { data: memberData, error: memberError } = await supabase
+        .from('labMembers')
+        .insert({
+          lab_id: lab.id,
+          user: user.id,
+          role: 'founder'
+        })
+        .select()
+
+      if (memberError) {
+        console.error('Error adding lab member:', {
+          error: memberError,
+          errorMessage: memberError.message,
+          errorDetails: memberError.details
+        })
+        return
+      }
+
+      // Add selected founders as admins and members
+      if (selectedFounders.length > 0) {
+        const founderPromises = selectedFounders.map(async (founder) => {
+          // Add as admin
+          await supabase
+            .from('labAdmins')
+            .insert([{
+              lab_id: lab.id,
+              user_id: founder.id
+            }])
+
+          // Add as member
+          await supabase
+            .from('labMembers')
+            .insert([{
+              lab_id: lab.id,
+              user_id: founder.id
+            }])
+        })
+
+        await Promise.all(founderPromises)
+      }
+
+      // If all successful, redirect to the new lab
+      window.location.href = `/lab/${lab.id}`
+    } catch (error) {
+      console.error('Error in lab creation process:', error)
+    } finally {
       setIsCreating(false)
-      // Redirect to the new lab page
-      window.location.href = "/"
-    }, 2000)
+    }
   }
 
   // Get selected template data

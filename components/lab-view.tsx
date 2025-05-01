@@ -292,7 +292,7 @@ export default function LabView() {
               <button
                 onClick={() => handleTabChange("overview")}
                 className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  activeTab === "overview" ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+                  activeTab === "overview" ? "bg-accent text-background" : "hover:bg-muted"
                 }`}
               >
                 <Home className="h-5 w-5" />
@@ -302,7 +302,7 @@ export default function LabView() {
               <button
                 onClick={() => handleTabChange("lab-materials")}
                 className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  activeTab === "lab-materials" ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+                  activeTab === "lab-materials" ? "bg-accent text-background" : "hover:bg-muted"
                 }`}
               >
                 <FileText className="h-5 w-5" />
@@ -312,7 +312,7 @@ export default function LabView() {
               <button
                 onClick={() => handleTabChange("experiments")}
                 className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  activeTab === "experiments" ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+                  activeTab === "experiments" ? "bg-accent text-background" : "hover:bg-muted"
                 }`}
               >
                 <FlaskConical className="h-5 w-5" />
@@ -322,7 +322,7 @@ export default function LabView() {
               <button
                 onClick={() => handleTabChange("funding")}
                 className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  activeTab === "funding" ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+                  activeTab === "funding" ? "bg-accent text-background" : "hover:bg-muted"
                 }`}
               >
                 <DollarSign className="h-5 w-5" />
@@ -336,7 +336,7 @@ export default function LabView() {
                     setActiveSettingsTab("general")
                   }}
                   className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                    activeTab === "settings" ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+                    activeTab === "settings" ? "bg-accent text-background" : "hover:bg-muted"
                   }`}
                 >
                   <Users className="h-5 w-5" />

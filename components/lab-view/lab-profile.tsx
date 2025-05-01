@@ -67,12 +67,12 @@ export function LabProfile({
               </Button>
             ) : (
               <Button
-                variant={isFollowing ? "outline" : "default"}
+                variant={isFollowing ? "default" : "outline"}
                 size="sm"
                 className={
                   isFollowing
-                    ? "border-accent text-accent hover:bg-accent hover:text-accent-foreground"
-                    : "bg-accent text-accent-foreground hover:bg-accent/90"
+                    ? "bg-background text-foreground hover:bg-background/90"
+                    : "bg-accent text-background hover:bg-accent/90"
                 }
                 onClick={isGuest ? handleGuestAction : () => setIsFollowing(!isFollowing)}
               >
