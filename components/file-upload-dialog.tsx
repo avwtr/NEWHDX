@@ -17,8 +17,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { FileIcon, UploadIcon } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { supabase } from "@/lib/supabaseClient"
+import { useAuth } from "@/components/auth-provider"
 
 interface FileUploadDialogProps {
+  labId: string;
   open?: boolean
   onOpenChange?: (open: boolean) => void
   experimentId?: string
@@ -28,6 +31,7 @@ interface FileUploadDialogProps {
 }
 
 export function FileUploadDialog({
+  labId,
   open,
   onOpenChange,
   experimentId,
@@ -41,8 +45,10 @@ export function FileUploadDialog({
   const [dragActive, setDragActive] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedFolder, setSelectedFolder] = useState("root")
+  const [fileTag, setFileTag] = useState("file")
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isOpen, setIsOpen] = useState(open || false)
+  const { user } = useAuth();
 
   // Handle dialog open state
   const handleOpenChange = (newOpen: boolean) => {
@@ -109,18 +115,66 @@ export function FileUploadDialog({
       else if (["txt", "md", "json"].includes(fileExtension)) fileType = "text"
       else if (["py", "js", "ts", "r"].includes(fileExtension)) fileType = fileExtension
 
-      // Create a file object
+      // 1. Insert into files table to get the UUID
+      const { data: inserted, error: dbError } = await supabase.from("files").insert([
+        {
+          fileType: fileExtension,
+          filename: fileName,
+          fileSize: `${(selectedFile.size / 1024).toFixed(1)} KB`,
+          labID: labId,
+          folder: selectedFolder,
+          initiallycreatedBy: user?.id || null,
+          lastUpdatedBy: user?.id || null,
+          lastUpdated: new Date().toISOString(),
+          fileTag: fileTag || "file",
+        },
+      ]).select()
+      if (dbError || !inserted || !inserted[0]?.id) {
+        console.error("Supabase DB insert error:", dbError)
+        throw dbError || new Error("Failed to insert file record")
+      }
+      const fileId = inserted[0].id
+
+      // 2. Upload to storage using the UUID as the object name
+      const storagePath = `${labId}/${fileId}`
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("labmaterials")
+        .upload(storagePath, selectedFile)
+      if (uploadError) {
+        // Rollback DB insert if storage upload fails
+        await supabase.from("files").delete().eq("id", fileId)
+        console.error("Supabase upload error:", uploadError)
+        throw uploadError
+      }
+
+      // 3. Get the public URL
+      const { data: urlData } = supabase.storage
+        .from("labmaterials")
+        .getPublicUrl(storagePath)
+
+      // 4. Insert activity log
+      await supabase.from("activity").insert([
+        {
+          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          activity_name: "File Uploaded",
+          activity_type: "fileupload",
+          performed_by: user?.id || null,
+          lab_from: labId,
+        },
+      ])
+
+      // 5. Create a file object for the UI
       const fileObject = {
-        id: Math.random().toString(36).substring(2, 9),
-        name: fileName.toUpperCase(),
+        id: fileId,
+        name: fileName,
         type: fileExtension,
         size: `${(selectedFile.size / 1024).toFixed(1)} KB`,
-        author: "Current User", // In a real app, this would be the current user
+        author: user?.email || "Current User",
         date: "Just now",
         description: fileDescription,
         folder: selectedFolder,
-        // In a real app, we would have a URL to the uploaded file
-        url: URL.createObjectURL(selectedFile),
+        url: urlData?.publicUrl || "",
+        storagePath,
       }
 
       // Call the callback to add the file
@@ -137,7 +191,10 @@ export function FileUploadDialog({
       setSelectedFolder("root")
       handleOpenChange(false)
     } catch (error) {
-      console.error("Error uploading file:", error)
+      console.error("Error uploading file:", error, JSON.stringify(error))
+      if (error instanceof Error) {
+        alert(error.message)
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -229,6 +286,25 @@ export function FileUploadDialog({
               </Select>
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label htmlFor="fileTag">File Tag</Label>
+            <Select value={fileTag} onValueChange={setFileTag}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a tag" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="file">File (default)</SelectItem>
+                <SelectItem value="dataset">Dataset</SelectItem>
+                <SelectItem value="code file">Code File</SelectItem>
+                <SelectItem value="note">Note</SelectItem>
+                <SelectItem value="link">Link</SelectItem>
+                <SelectItem value="publication">Publication</SelectItem>
+                <SelectItem value="protocol">Protocol</SelectItem>
+                <SelectItem value="model">Model</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="fileDescription">Description (Optional)</Label>

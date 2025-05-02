@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label"
 interface CreateFolderDialogProps {
   isOpen: boolean
   onClose: () => void
-  onCreateFolder: (name: string) => void
+  onCreateFolder: (name: string, parent: string) => void
 }
 
 export function CreateFolderDialog({ isOpen, onClose, onCreateFolder }: CreateFolderDialogProps) {
@@ -31,18 +31,14 @@ export function CreateFolderDialog({ isOpen, onClose, onCreateFolder }: CreateFo
     if (!folderName.trim()) return
 
     setIsCreating(true)
+    onCreateFolder(folderName, parentFolder)
+    setIsCreating(false)
+    onClose()
 
-    // Simulate API call
-    setTimeout(() => {
-      onCreateFolder(folderName)
-      setIsCreating(false)
-      onClose()
-
-      // Reset form
-      setFolderName("NEW_FOLDER")
-      setFolderDescription("")
-      setParentFolder("root")
-    }, 500)
+    // Reset form
+    setFolderName("NEW_FOLDER")
+    setFolderDescription("")
+    setParentFolder("root")
   }
 
   return (

@@ -5,7 +5,7 @@ import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
 import { useAuth } from "@/components/auth-provider"
 
-type Role = "admin" | "researcher" | "student" | "guest"
+type Role = "admin" | "user" | "guest"
 
 interface RoleContextType {
   currentRole: Role
@@ -26,7 +26,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   // Set role based on authentication status
   useEffect(() => {
     if (user) {
-      setCurrentRole("researcher")
+      setCurrentRole("user")
     } else {
       setCurrentRole("guest")
     }

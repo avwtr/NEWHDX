@@ -495,7 +495,7 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
           )}
 
           {localActiveTab === "lab-materials" && (
-            <LabMaterialsExplorer createNewFolder={createNewFolder} userRole={currentRole} />
+            <LabMaterialsExplorer labId={lab.labId} createNewFolder={createNewFolder} isAdmin={isAdmin} />
           )}
 
           {localActiveTab === "experiments" && (

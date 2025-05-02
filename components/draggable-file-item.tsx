@@ -81,20 +81,21 @@ export function DraggableFileItem({
   // Determine file tag if not provided
   const fileTag = tag || getAutoTag(type)
 
-  function getAutoTag(fileType: string): string | undefined {
-    const lowerType = fileType.toLowerCase()
+  function getAutoTag(fileType: string | undefined | null): string | undefined {
+    if (!fileType) return undefined;
+    const lowerType = fileType.toLowerCase();
 
     // Tabular data files
     if (["csv", "xlsx", "json", "fits"].includes(lowerType)) {
-      return "DATASET"
+      return "DATASET";
     }
 
     // Code files
     if (["py", "js", "ts", "r", "c", "cpp", "java", "php", "rb", "go", "rust"].includes(lowerType)) {
-      return "CODE"
+      return "CODE";
     }
 
-    return undefined
+    return undefined;
   }
 
   const getTagColor = (tag?: string): string => {
@@ -114,7 +115,8 @@ export function DraggableFileItem({
     }
   }
 
-  const getFileIcon = (type: string) => {
+  const getFileIcon = (type: string | undefined | null) => {
+    if (!type) return <FileIcon className="h-5 w-5 mr-2 text-accent" />;
     switch (type.toLowerCase()) {
       case "csv":
       case "xlsx":

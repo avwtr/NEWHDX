@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Maximize2, Minimize2, Upload, FileIcon, FolderPlus } from "lucide-react"
@@ -12,219 +12,84 @@ import { FileUploadDialog } from "@/components/file-upload-dialog"
 import { DraggableFolder } from "@/components/draggable-folder"
 import { DraggableFileItem } from "@/components/draggable-file-item"
 import { toast } from "@/hooks/use-toast"
-
-// Sample folder data
-const initialFolders = [
-  {
-    id: "datasets",
-    name: "DATASETS",
-    count: 4,
-    lastUpdated: "2 days ago",
-    files: [
-      {
-        id: "fmri-data",
-        name: "FMRI_DATA_2023.CSV",
-        type: "csv",
-        size: "1.2 MB",
-        author: "Dr. Johnson",
-        date: "2 days ago",
-      },
-      {
-        id: "patient-responses",
-        name: "PATIENT_RESPONSES.XLSX",
-        type: "xlsx",
-        size: "845 KB",
-        author: "Alex Kim",
-        date: "3 days ago",
-      },
-      {
-        id: "brain-scans",
-        name: "BRAIN_SCANS_METADATA.JSON",
-        type: "json",
-        size: "128 KB",
-        author: "Dr. Johnson",
-        date: "2 days ago",
-      },
-      {
-        id: "cognitive-test",
-        name: "COGNITIVE_TEST_RESULTS.CSV",
-        type: "csv",
-        size: "2.1 MB",
-        author: "Maya Patel",
-        date: "1 week ago",
-      },
-    ],
-  },
-  {
-    id: "models",
-    name: "MODELS",
-    count: 3,
-    lastUpdated: "1 week ago",
-    files: [
-      {
-        id: "neural-network",
-        name: "NEURAL_NETWORK_V2.PY",
-        type: "py",
-        size: "45 KB",
-        author: "Dr. Johnson",
-        date: "1 week ago",
-      },
-      {
-        id: "brain-mapping",
-        name: "BRAIN_MAPPING_MODEL.H5",
-        type: "h5",
-        size: "250 MB",
-        author: "Alex Kim",
-        date: "2 weeks ago",
-      },
-      {
-        id: "prediction-algorithm",
-        name: "PREDICTION_ALGORITHM.PY",
-        type: "py",
-        size: "32 KB",
-        author: "Maya Patel",
-        date: "10 days ago",
-      },
-    ],
-  },
-  {
-    id: "protocols",
-    name: "PROTOCOLS",
-    count: 2,
-    lastUpdated: "3 days ago",
-    files: [
-      {
-        id: "experiment-procedure",
-        name: "EXPERIMENT_PROCEDURE.MD",
-        type: "md",
-        size: "15 KB",
-        author: "Dr. Johnson",
-        date: "3 days ago",
-        tag: "PROTOCOL",
-      },
-      {
-        id: "data-collection",
-        name: "DATA_COLLECTION_PROTOCOL.PDF",
-        type: "pdf",
-        size: "1.8 MB",
-        author: "Research Team",
-        date: "1 week ago",
-        tag: "PROTOCOL",
-      },
-    ],
-  },
-  {
-    id: "publications",
-    name: "PUBLICATIONS",
-    count: 3,
-    lastUpdated: "1 week ago",
-    files: [
-      {
-        id: "neural-network-paper",
-        name: "NEURAL NETWORK ADAPTATIONS IN COGNITIVE LEARNING",
-        type: "md",
-        size: "42 KB",
-        author: "Dr. Sarah Johnson",
-        date: "1 week ago",
-        tag: "PUBLICATION",
-      },
-      {
-        id: "brain-mapping-paper",
-        name: "MAPPING BRAIN ACTIVITY DURING COMPLEX PROBLEM SOLVING",
-        type: "md",
-        size: "38 KB",
-        author: "Dr. Sarah Johnson",
-        date: "2 weeks ago",
-        tag: "PUBLICATION",
-      },
-      {
-        id: "bci-advances",
-        name: "ADVANCES IN BRAIN-COMPUTER INTERFACE TECHNOLOGIES",
-        type: "md",
-        size: "45 KB",
-        author: "Alex Kim",
-        date: "3 weeks ago",
-        tag: "PUBLICATION",
-      },
-    ],
-  },
-  {
-    id: "experiments",
-    name: "EXPERIMENTS",
-    count: 2,
-    lastUpdated: "5 days ago",
-    files: [
-      {
-        id: "experiment-notes",
-        name: "EXPERIMENT_NOTES.TXT",
-        type: "txt",
-        size: "8 KB",
-        author: "Maya Patel",
-        date: "5 days ago",
-        tag: "EXPERIMENT",
-      },
-      {
-        id: "experiment-results",
-        name: "EXPERIMENT_RESULTS_SUMMARY.MD",
-        type: "md",
-        size: "22 KB",
-        author: "Alex Kim",
-        date: "6 days ago",
-        tag: "EXPERIMENT",
-      },
-    ],
-  },
-]
-
-// Root level files
-const initialRootFiles = [
-  {
-    id: "fmri-analysis",
-    name: "FMRI_ANALYSIS_PIPELINE.PY",
-    type: "py",
-    size: "78 KB",
-    author: "Dr. Johnson",
-    date: "1 day ago",
-  },
-  {
-    id: "cognitive-results",
-    name: "COGNITIVE_TEST_RESULTS.CSV",
-    type: "csv",
-    size: "1.5 MB",
-    author: "Alex Kim",
-    date: "3 days ago",
-  },
-  {
-    id: "lab-overview",
-    name: "LAB_OVERVIEW.MD",
-    type: "md",
-    size: "12 KB",
-    author: "Dr. Johnson",
-    date: "1 day ago",
-    tag: "PUBLICATION",
-  },
-]
+import { supabase } from "@/lib/supabaseClient"
+import { useAuth } from "@/components/auth-provider"
 
 interface LabMaterialsExplorerProps {
+  labId: string;
   createNewFolder?: boolean
-  userRole?: string
+  isAdmin?: boolean
 }
 
-export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: LabMaterialsExplorerProps) {
-  const isAdmin = userRole === "admin"
+export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }: LabMaterialsExplorerProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [openFolders, setOpenFolders] = useState<string[]>(["datasets", "publications"]) // Open datasets and publications by default
-  const [folders, setFolders] = useState(initialFolders)
-  const [rootFiles, setRootFiles] = useState(initialRootFiles)
-  const [draggedItem, setDraggedItem] = useState<{ id: string; name: string; type: string; isFolder?: boolean } | null>(
-    null,
-  )
+  const [openFolders, setOpenFolders] = useState<string[]>([])
+  const [folders, setFolders] = useState<any[]>([])
+  const [rootFiles, setRootFiles] = useState<any[]>([])
+  const [draggedItem, setDraggedItem] = useState<{ id: string; name: string; type: string; isFolder?: boolean } | null>(null)
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isCreateFolderDialogOpen, setIsCreateFolderDialogOpen] = useState(false)
   const [isCreateFileDialogOpen, setIsCreateFileDialogOpen] = useState(false)
+  const [undoStack, setUndoStack] = useState<Array<{ file: any, oldFolder: string }>>([])
+  const { user } = useAuth();
+
+  // Fetch files/folders for this lab
+  const fetchFilesAndFolders = async () => {
+    // 1. Fetch all file records for this lab from DB
+    const { data: fileRecords, error: dbError } = await supabase
+      .from("files")
+      .select("*")
+      .eq("labID", labId)
+      .order("filename", { ascending: true });
+    if (dbError) {
+      console.error("Error fetching file records:", dbError);
+      return;
+    }
+    // 2. Organize files into folders
+    const folderNames = new Set<string>();
+    fileRecords?.forEach(file => {
+      if (file.folder && file.folder !== "root") {
+        folderNames.add(file.folder);
+      }
+    });
+
+    const foldersArr = Array.from(folderNames).map(folderName => {
+      // Only show real files (not .keep) in the folder
+      const files = fileRecords
+        .filter(f => f.folder === folderName && f.filename !== ".keep")
+        .map(file => ({
+          ...file,
+          author: file.author || '',
+          date: file.date || ''
+        }));
+      return {
+        id: folderName,
+        name: folderName.toUpperCase(),
+        files
+      };
+    });
+
+    const rootFiles: any[] = [];
+    fileRecords?.forEach(file => {
+      if ((!file.folder || file.folder === "root") && file.filename !== ".keep") {
+        rootFiles.push({
+          ...file,
+          author: file.author || '',
+          date: file.date || ''
+        });
+      }
+    });
+    setFolders(foldersArr);
+    setRootFiles(rootFiles);
+  };
+
+  // Fetch files/folders only on mount or labId change
+  useEffect(() => {
+    fetchFilesAndFolders();
+  }, [labId]);
 
   // Toggle folder open/closed state
   const toggleFolder = (folderId: string) => {
@@ -242,75 +107,194 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
     openAllFolders()
   }
 
-  // Rename folder
-  const handleRenameFolder = (folderId: string, newName: string) => {
-    if (!isAdmin) return
-    setFolders((prev) => prev.map((folder) => (folder.id === folderId ? { ...folder, name: newName } : folder)))
-  }
+  // Move file between folders or to/from root (DB only)
+  const moveFile = async (file: any, newFolder: string) => {
+    // Remove the file from all folders and root
+    const updatedFolders = folders.map(folder => ({
+      ...folder,
+      files: folder.files.filter((f: any) => f.id !== file.id),
+    }));
+    const updatedRootFiles = rootFiles.filter((f: any) => f.id !== file.id);
 
-  // Rename file within a folder
-  const handleRenameFile = (fileId: string, newName: string) => {
-    if (!isAdmin) return
-
-    // Check if file is in root
-    const rootFileIndex = rootFiles.findIndex((file) => file.id === fileId)
-
-    if (rootFileIndex !== -1) {
-      setRootFiles((prev) => prev.map((file) => (file.id === fileId ? { ...file, name: newName } : file)))
-      return
+    // Add the file to the new folder or root
+    if (newFolder === "root") {
+      setRootFiles([...updatedRootFiles, { ...file, folder: "root", filename: file.filename || file.name }]);
+      setFolders(updatedFolders);
+    } else {
+      setFolders(updatedFolders.map(folder =>
+        folder.id === newFolder
+          ? { ...folder, files: [...folder.files, { ...file, folder: newFolder, filename: file.filename || file.name }] }
+          : folder
+      ));
+      setRootFiles(updatedRootFiles);
     }
 
-    // Check in folders
-    setFolders((prev) =>
-      prev.map((folder) => ({
-        ...folder,
-        files: folder.files.map((file) => (file.id === fileId ? { ...file, name: newName } : file)),
-      })),
-    )
-  }
+    // Backend: update folder column in files table
+    try {
+      const { error: updateError } = await supabase
+        .from("files")
+        .update({ folder: newFolder })
+        .eq("id", file.id)
+        .eq("labID", labId);
+      if (updateError) throw updateError;
+      toast({
+        title: "File moved",
+        description: "File has been moved to the new folder.",
+      });
+    } catch (error) {
+      // Optionally: refetch or rollback UI
+      fetchFilesAndFolders();
+      toast({
+        title: "Error",
+        description: "Failed to move file. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Rename file
+  const handleRenameFile = async (fileId: string, newName: string) => {
+    if (!isAdmin) return;
+    let prevFolders = JSON.parse(JSON.stringify(folders));
+    let prevRootFiles = JSON.parse(JSON.stringify(rootFiles));
+    let fileToRename = rootFiles.find((file: any) => file.id === fileId);
+    let sourceFolderId = "";
+    if (!fileToRename) {
+      for (const folder of folders) {
+        const foundFile = folder.files.find((file: any) => file.id === fileId);
+        if (foundFile) {
+          fileToRename = foundFile;
+          sourceFolderId = folder.id;
+          break;
+        }
+      }
+    }
+    if (!fileToRename) return;
+    // Optimistically update UI
+    if (sourceFolderId && sourceFolderId !== "root") {
+      setFolders((prev) => prev.map((folder) => folder.id === sourceFolderId ? { ...folder, files: folder.files.map((file: any) => file.id === fileId ? { ...file, filename: newName } : file) } : folder));
+    } else {
+      setRootFiles((prev) => prev.map((file: any) => file.id === fileId ? { ...file, filename: newName } : file));
+    }
+    // Backend
+    const oldPath = sourceFolderId && sourceFolderId !== "root" ? `${labId}/${sourceFolderId}/${fileToRename.filename}` : `${labId}/${fileToRename.filename}`;
+    const newPath = sourceFolderId && sourceFolderId !== "root" ? `${labId}/${sourceFolderId}/${newName}` : `${labId}/${newName}`;
+    const { error: moveError } = await supabase.storage.from("labmaterials").move(oldPath, newPath);
+    const { error: dbError } = await supabase.from("files").update({ filename: newName }).eq("id", fileToRename.id);
+    if (moveError || dbError) {
+      setFolders(prevFolders);
+      setRootFiles(prevRootFiles);
+      toast({ title: "Error", description: `Failed to rename file: ${(moveError || dbError)?.message}` });
+      return;
+    }
+    toast({ title: "File Renamed", description: `${fileToRename.filename} renamed to ${newName}.` });
+  };
 
   // Delete file
-  const handleDeleteFile = (fileId: string) => {
-    if (!isAdmin) return
-
-    // Check if file is in root
-    const rootFileIndex = rootFiles.findIndex((file) => file.id === fileId)
-
-    if (rootFileIndex !== -1) {
-      setRootFiles((prev) => prev.filter((file) => file.id !== fileId))
-
-      toast({
-        title: "File Deleted",
-        description: `File has been deleted from root.`,
-      })
-      return
-    }
-
-    // Check in folders
-    let folderFound = false
-    setFolders((prev) =>
-      prev.map((folder) => {
-        const fileIndex = folder.files.findIndex((file) => file.id === fileId)
-        if (fileIndex !== -1) {
-          folderFound = true
-          return {
-            ...folder,
-            files: folder.files.filter((file) => file.id !== fileId),
-            count: folder.files.length - 1,
-            lastUpdated: "Just now",
-          }
+  const handleDeleteFile = async (fileId: string) => {
+    if (!isAdmin) return;
+    let prevFolders = JSON.parse(JSON.stringify(folders));
+    let prevRootFiles = JSON.parse(JSON.stringify(rootFiles));
+    let fileToDelete = rootFiles.find((file: any) => file.id === fileId);
+    let sourceFolderId = "";
+    if (!fileToDelete) {
+      for (const folder of folders) {
+        const foundFile = folder.files.find((file: any) => file.id === fileId);
+        if (foundFile) {
+          fileToDelete = foundFile;
+          sourceFolderId = folder.id;
+          break;
         }
-        return folder
-      }),
-    )
-
-    if (folderFound) {
-      toast({
-        title: "File Deleted",
-        description: `File has been deleted.`,
-      })
+      }
     }
-  }
+    if (!fileToDelete) return;
+    // Optimistically update UI
+    if (sourceFolderId && sourceFolderId !== "root") {
+      setFolders((prev) => prev.map((folder) => folder.id === sourceFolderId ? { ...folder, files: folder.files.filter((file: any) => file.id !== fileId) } : folder));
+    } else {
+      setRootFiles((prev) => prev.filter((file: any) => file.id !== fileId));
+    }
+    // Backend
+    const filePath = sourceFolderId && sourceFolderId !== "root" ? `${labId}/${sourceFolderId}/${fileToDelete.filename}` : `${labId}/${fileToDelete.filename}`;
+    const { error: delError } = await supabase.storage.from("labmaterials").remove([filePath]);
+    const { error: dbError } = await supabase.from("files").delete().eq("id", fileToDelete.id);
+    if (delError || dbError) {
+      setFolders(prevFolders);
+      setRootFiles(prevRootFiles);
+      toast({ title: "Error", description: `Failed to delete file: ${(delError || dbError)?.message}` });
+      return;
+    }
+    toast({ title: "File Deleted", description: `${fileToDelete.filename} deleted successfully.` });
+  };
+
+  // Delete folder
+  const handleDeleteFolder = async (folderId: string) => {
+    if (!isAdmin) return;
+    let prevFolders = JSON.parse(JSON.stringify(folders));
+    // Optimistically update UI
+    setFolders((prev) => prev.filter((folder) => folder.id !== folderId));
+    // Backend
+    const { data: folderFiles } = await supabase.storage.from("labmaterials").list(`${labId}/${folderId}`, { limit: 1000 });
+    const filePaths = (folderFiles || []).filter((f: any) => f.id !== null && f.name !== ".keep").map((f: any) => `${labId}/${folderId}/${f.name}`);
+    await supabase.storage.from("labmaterials").remove([...filePaths, `${labId}/${folderId}/.keep`]);
+    await supabase.from("files").delete().eq("folder", folderId).eq("labID", labId);
+    // No rollback for folder delete (could be added if needed)
+    toast({ title: "Folder Deleted", description: `Folder ${folderId} and its files deleted.` });
+  };
+
+  // Rename folder
+  const handleRenameFolder = async (folderId: string, newName: string) => {
+    if (!isAdmin) return;
+    let prevFolders = JSON.parse(JSON.stringify(folders));
+    // Optimistically update UI
+    setFolders((prev) => prev.map((folder) => folder.id === folderId ? { ...folder, id: newName, name: newName.toUpperCase() } : folder));
+    // Backend
+    const { data: folderFiles } = await supabase.storage.from("labmaterials").list(`${labId}/${folderId}`, { limit: 1000 });
+    for (const f of folderFiles || []) {
+      if (f.id !== null && f.name !== ".keep") {
+        const oldPath = `${labId}/${folderId}/${f.name}`;
+        const newPath = `${labId}/${newName}/${f.name}`;
+        await supabase.storage.from("labmaterials").move(oldPath, newPath);
+      }
+    }
+    await supabase.storage.from("labmaterials").move(`${labId}/${folderId}/.keep`, `${labId}/${newName}/.keep`);
+    await supabase.from("files").update({ folder: newName }).eq("folder", folderId).eq("labID", labId);
+    // No rollback for folder rename (could be added if needed)
+    toast({ title: "Folder Renamed", description: `Folder ${folderId} renamed to ${newName}.` });
+  };
+
+  // Create folder (database-driven, .keep row)
+  const createFolder = async (folderName: string, parentFolder: string = "root") => {
+    if (!isAdmin) return;
+    console.log("[createFolder] Called with:", folderName, parentFolder);
+    console.log("[createFolder] labId:", labId);
+    console.log("[createFolder] user?.id:", user?.id);
+    // Optimistically update UI
+    setFolders((prev) => [...prev, { id: folderName, name: folderName.toUpperCase(), files: [] }]);
+    // Backend: insert a .keep row in files table with all required columns
+    const { error, data } = await supabase.from("files").insert([
+      {
+        filename: ".keep",
+        fileType: "folder",
+        fileSize: "0 KB",
+        labID: labId,
+        folder: folderName,
+        fileTag: "folder",
+        initiallycreatedBy: user?.id || null,
+        lastUpdatedBy: user?.id || null,
+        lastUpdated: new Date().toISOString(),
+      },
+    ]);
+    if (error) {
+      setFolders((prev) => prev.filter((folder) => folder.id !== folderName));
+      console.error("[createFolder] Supabase insert error:", error);
+      toast({ title: "Error", description: `Failed to create folder: ${JSON.stringify(error)} | labId: ${labId} | userId: ${user?.id}` });
+      return;
+    }
+    toast({ title: "Folder Created", description: `New folder \"${folderName}\" has been created` });
+    // Refetch files/folders to ensure UI is up to date
+    fetchFilesAndFolders();
+  };
 
   // Handle drag start
   const handleDragStart = (e: React.DragEvent, id: string, name: string, type: string, isFolder = false) => {
@@ -358,7 +342,7 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
   }
 
   // Handle drop
-  const handleDrop = (e: React.DragEvent, targetId?: string) => {
+  const handleDrop = async (e: React.DragEvent, targetId?: string) => {
     if (!isAdmin) return
 
     e.preventDefault()
@@ -366,7 +350,7 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
     setIsDraggingOver(false)
 
     // Handle external files dropped from desktop
-    if (e.dataTransfer?.files.length > 0) {
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
       const files = Array.from(e.dataTransfer.files)
       handleExternalFileDrop(files, targetId)
       return
@@ -377,13 +361,36 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
 
     // Handle internal drag and drop
     if (draggedItem?.isFolder) {
-      // TODO: Implement folder moving logic if needed
-      toast({
-        title: "Folder Moving",
-        description: "Folder moving is not implemented yet",
-      })
+      // Folder drag-and-drop: move folder into another folder
+      const sourceFolder = draggedItem.name
+      const destFolder = targetId
+      if (!sourceFolder || !destFolder || sourceFolder === destFolder) return
+      // New folder path: destFolder/sourceFolder
+      const newFolderPath = `${destFolder}/${sourceFolder}`
+      // Update all files in the source folder to the new folder path
+      try {
+        // Update in DB
+        const { error } = await supabase
+          .from("files")
+          .update({ folder: newFolderPath })
+          .eq("folder", sourceFolder)
+          .eq("labID", labId)
+        if (error) throw error
+        toast({
+          title: "Folder Moved",
+          description: `Folder '${sourceFolder}' moved into '${destFolder}'.`,
+        })
+        fetchFilesAndFolders()
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: `Failed to move folder: ${err.message}`,
+          variant: "destructive",
+        })
+      }
     } else if (draggedItem) {
-      moveFile(draggedItem.id, targetId)
+      // File drag-and-drop
+      moveFile(draggedItem, targetId || "root")
     }
 
     setDraggedItem(null)
@@ -432,80 +439,6 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
     }
   }
 
-  // Move file between folders or to/from root
-  const moveFile = (fileId: string, targetFolderId?: string) => {
-    if (!isAdmin) return
-
-    // Find the file
-    let fileToMove = rootFiles.find((file) => file.id === fileId)
-    let sourceIsRoot = false
-    let sourceFolderId = ""
-
-    if (fileToMove) {
-      sourceIsRoot = true
-    } else {
-      // Check in folders
-      for (const folder of folders) {
-        const foundFile = folder.files.find((file) => file.id === fileId)
-        if (foundFile) {
-          fileToMove = foundFile
-          sourceFolderId = folder.id
-          break
-        }
-      }
-    }
-
-    if (!fileToMove) return
-
-    // Remove from source
-    if (sourceIsRoot) {
-      setRootFiles((prev) => prev.filter((file) => file.id !== fileId))
-    } else {
-      setFolders((prev) =>
-        prev.map((folder) =>
-          folder.id === sourceFolderId
-            ? {
-                ...folder,
-                files: folder.files.filter((file) => file.id !== fileId),
-                count: folder.files.length - 1,
-                lastUpdated: "Just now",
-              }
-            : folder,
-        ),
-      )
-    }
-
-    // Add to target
-    if (!targetFolderId) {
-      // Move to root
-      setRootFiles((prev) => [...prev, fileToMove!])
-
-      toast({
-        title: "File Moved",
-        description: `${fileToMove.name} moved to root`,
-      })
-    } else {
-      // Move to folder
-      setFolders((prev) =>
-        prev.map((folder) =>
-          folder.id === targetFolderId
-            ? {
-                ...folder,
-                files: [...folder.files, fileToMove!],
-                count: folder.files.length + 1,
-                lastUpdated: "Just now",
-              }
-            : folder,
-        ),
-      )
-
-      toast({
-        title: "File Moved",
-        description: `${fileToMove.name} moved to ${folders.find((f) => f.id === targetFolderId)?.name || "folder"}`,
-      })
-    }
-  }
-
   // Handle file upload completion
   const handleUploadComplete = (files: any[]) => {
     if (!isAdmin) return
@@ -533,27 +466,6 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
     toast({
       title: "Upload Complete",
       description: `${files.length} file(s) uploaded successfully`,
-    })
-  }
-
-  // Create a new folder
-  const createFolder = (folderName: string) => {
-    if (!isAdmin) return
-
-    const newFolder = {
-      id: `folder-${Date.now()}`,
-      name: folderName,
-      count: 0,
-      lastUpdated: "Just now",
-      files: [],
-    }
-
-    setFolders([...folders, newFolder])
-    setOpenFolders([...openFolders, newFolder.id]) // Open the new folder
-
-    toast({
-      title: "Folder Created",
-      description: `New folder "${folderName}" has been created`,
     })
   }
 
@@ -604,10 +516,11 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
         description: "Navigating to publication editor...",
       })
       // This would be replaced with actual navigation in a real app
-      // router.push(`/publications/edit/${fileId}`)
+      // router.push(`
     }
   }
 
+  // --- RESTORE THE RETURN BLOCK ---
   return (
     <Card className={isExpanded ? "fixed inset-4 z-50 overflow-auto" : ""}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -618,60 +531,39 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
           </Button>
         </div>
       </CardHeader>
-
       <CardContent
         ref={containerRef}
         className={`space-y-4 ${isExpanded ? "min-h-[calc(100vh-200px)]" : ""} relative`}
         onDragOver={isAdmin ? handleContainerDragOver : undefined}
         onDragLeave={isAdmin ? handleContainerDragLeave : undefined}
-        onDrop={isAdmin ? handleDrop : undefined}
+        onDrop={isAdmin ? (e) => handleDrop(e, undefined) : undefined}
       >
-        {/* Drop indicator overlay */}
-        {isAdmin && isDraggingOver && !dropTargetId && (
-          <div className="absolute inset-0 border-2 border-dashed border-accent bg-accent/10 rounded-md flex items-center justify-center z-10 pointer-events-none">
-            <div className="bg-card p-4 rounded-md shadow-lg text-center">
-              <p className="text-lg font-bold text-accent">Drop Files Here</p>
-              <p className="text-sm text-muted-foreground">Release to upload files to root</p>
-            </div>
-          </div>
-        )}
-
         <div className="flex justify-center mb-4">
-          {userRole === "admin" && (
+          {isAdmin && (
             <div className="flex gap-2">
-              <Button
-                className="bg-accent text-primary-foreground hover:bg-accent/90"
-                onClick={() => setIsUploadDialogOpen(true)}
-              >
+              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsUploadDialogOpen(true)}>
                 <Upload className="h-4 w-4 mr-2" />
                 UPLOAD FILE
               </Button>
-              <Button
-                className="bg-accent text-primary-foreground hover:bg-accent/90"
-                onClick={() => setIsCreateFileDialogOpen(true)}
-              >
+              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFileDialogOpen(true)}>
                 <FileIcon className="h-4 w-4 mr-2" />
                 CREATE FILE
               </Button>
-              <Button
-                className="bg-accent text-primary-foreground hover:bg-accent/90"
-                onClick={() => setIsCreateFolderDialogOpen(true)}
-              >
+              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFolderDialogOpen(true)}>
                 <FolderPlus className="h-4 w-4 mr-2" />
                 NEW FOLDER
               </Button>
             </div>
           )}
         </div>
-
         <div className="space-y-4">
-          {folders.map((folder) => (
+          {folders.map(folder => (
             <DraggableFolder
               key={folder.id}
               id={folder.id}
               name={folder.name}
-              count={folder.count}
-              lastUpdated={folder.lastUpdated}
+              count={folder.files.length}
+              lastUpdated={folder.lastUpdated || ""}
               files={folder.files}
               isOpen={openFolders.includes(folder.id)}
               onToggle={toggleFolder}
@@ -680,37 +572,36 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
-              userRole={userRole}
-              renderFileItem={(file) => (
+              userRole={isAdmin ? "admin" : "user"}
+              renderFileItem={(file: any) => (
                 <DraggableFileItem
-                  key={file.id}
+                  key={file.id || `${folder.id}-${file.filename}`}
                   id={file.id}
-                  name={file.name}
-                  type={file.type}
-                  size={file.size}
+                  name={file.filename}
+                  type={file.fileType || file.type || ''}
+                  size={file.fileSize}
+                  tag={file.fileTag}
                   author={file.author}
                   date={file.date}
-                  tag={file.tag}
                   onRename={handleRenameFile}
                   onDragStart={handleDragStart}
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
                   onDelete={handleDeleteFile}
                   isDraggedOver={dropTargetId === file.id}
-                  userRole={userRole}
-                  onClick={file.tag === "PUBLICATION" ? () => handlePublicationClick(file.id) : undefined}
+                  userRole={isAdmin ? "admin" : "user"}
                 />
               )}
             />
           ))}
-
-          {rootFiles.map((file) => (
+          {rootFiles.map((file: any) => (
             <DraggableFileItem
-              key={file.id}
+              key={file.id || `root-${file.filename}`}
               id={file.id}
-              name={file.name}
-              type={file.type}
-              size={file.size}
+              name={file.filename}
+              type={file.fileType || file.type || ''}
+              size={file.fileSize}
+              tag={file.fileTag}
               author={file.author}
               date={file.date}
               onRename={handleRenameFile}
@@ -719,17 +610,13 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
               onDrop={handleDrop}
               onDelete={handleDeleteFile}
               isDraggedOver={dropTargetId === file.id}
-              userRole={userRole}
+              userRole={isAdmin ? "admin" : "user"}
             />
           ))}
         </div>
-
         {isExpanded && (
           <div className="fixed bottom-8 right-8">
-            <Button
-              onClick={() => setIsExpanded(false)}
-              className="bg-accent text-primary-foreground hover:bg-accent/90"
-            >
+            <Button onClick={() => setIsExpanded(false)} className="bg-accent text-primary-foreground hover:bg-accent/90">
               <Minimize2 className="h-4 w-4 mr-2" />
               Close Expanded View
             </Button>
@@ -737,33 +624,25 @@ export function LabMaterialsExplorer({ createNewFolder, userRole = "admin" }: La
         )}
       </CardContent>
       <CardFooter>
-        <Button
-          variant="outline"
-          className="w-full border-accent text-accent hover:bg-secondary"
-          onClick={handleBrowseAll}
-        >
-          BROWSE ALL FILES
-        </Button>
+       
       </CardFooter>
-
       {/* Dialogs */}
       {isUploadDialogOpen && (
         <FileUploadDialog
+          labId={labId}
           open={isUploadDialogOpen}
           onOpenChange={setIsUploadDialogOpen}
           onClose={() => setIsUploadDialogOpen(false)}
           onUploadComplete={handleUploadComplete}
         />
       )}
-
       {isCreateFolderDialogOpen && (
         <CreateFolderDialog
-          onCreateFolder={createFolder}
+          onCreateFolder={(name, parent) => createFolder(name, parent)}
           onClose={() => setIsCreateFolderDialogOpen(false)}
           isOpen={isCreateFolderDialogOpen}
         />
       )}
-
       {isCreateFileDialogOpen && <CreateFileDialog onClose={() => setIsCreateFileDialogOpen(false)} />}
     </Card>
   )
