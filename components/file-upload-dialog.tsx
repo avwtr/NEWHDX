@@ -127,6 +127,7 @@ export function FileUploadDialog({
           lastUpdatedBy: user?.id || null,
           lastUpdated: new Date().toISOString(),
           fileTag: fileTag || "file",
+          storageKey: null,
         },
       ]).select()
       if (dbError || !inserted || !inserted[0]?.id) {
@@ -136,10 +137,10 @@ export function FileUploadDialog({
       const fileId = inserted[0].id
 
       // 2. Upload to storage using the UUID as the object name
-      const storagePath = `${labId}/${fileId}`
+      const storageKey = `${labId}/${fileId}${fileExtension ? '.' + fileExtension : ''}`
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("labmaterials")
-        .upload(storagePath, selectedFile)
+        .upload(storageKey, selectedFile)
       if (uploadError) {
         // Rollback DB insert if storage upload fails
         await supabase.from("files").delete().eq("id", fileId)
@@ -147,12 +148,15 @@ export function FileUploadDialog({
         throw uploadError
       }
 
-      // 3. Get the public URL
+      // 3. Update the files table with the correct storageKey
+      await supabase.from("files").update({ storageKey }).eq("id", fileId)
+
+      // 4. Get the public URL
       const { data: urlData } = supabase.storage
         .from("labmaterials")
-        .getPublicUrl(storagePath)
+        .getPublicUrl(storageKey)
 
-      // 4. Insert activity log
+      // 5. Insert activity log
       await supabase.from("activity").insert([
         {
           activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
@@ -163,7 +167,7 @@ export function FileUploadDialog({
         },
       ])
 
-      // 5. Create a file object for the UI
+      // 6. Create a file object for the UI
       const fileObject = {
         id: fileId,
         name: fileName,
@@ -174,7 +178,7 @@ export function FileUploadDialog({
         description: fileDescription,
         folder: selectedFolder,
         url: urlData?.publicUrl || "",
-        storagePath,
+        storageKey,
       }
 
       // Call the callback to add the file

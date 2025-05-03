@@ -35,9 +35,6 @@ interface DraggableFolderProps {
   onToggle: (id: string) => void
   onRenameFolder: (id: string, newName: string) => void
   onRenameFile: (id: string, newName: string) => void
-  onDragStart: (e: React.DragEvent, id: string, name: string, type: string, isFolder?: boolean) => void
-  onDragOver: (e: React.DragEvent) => void
-  onDrop: (e: React.DragEvent, targetId?: string) => void
   renderFileItem: (file: FileProps) => React.ReactNode
   userRole?: string
   onDeleteFolder?: (id: string) => void
@@ -53,9 +50,6 @@ export function DraggableFolder({
   onToggle,
   onRenameFolder,
   onRenameFile,
-  onDragStart,
-  onDragOver,
-  onDrop,
   renderFileItem,
   userRole = "guest",
   onDeleteFolder,
@@ -91,7 +85,6 @@ export function DraggableFolder({
     if (!isAdmin) return
     e.stopPropagation()
     setIsBeingDragged(true)
-    onDragStart(e, id, name, "folder", true)
 
     // Create a ghost image for dragging
     if (folderRef.current) {
@@ -132,8 +125,13 @@ export function DraggableFolder({
     if (!isAdmin) return
     e.preventDefault()
     e.stopPropagation()
+    // Only highlight if dragging a file, not a folder
+    try {
+      const data = e.dataTransfer.getData('application/json');
+      const obj = JSON.parse(data);
+      if (obj && obj.isFolder) return;
+    } catch {}
     setIsDropTarget(true)
-    onDragOver(e)
   }
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -141,14 +139,6 @@ export function DraggableFolder({
     e.preventDefault()
     e.stopPropagation()
     setIsDropTarget(false)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    if (!isAdmin) return
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDropTarget(false)
-    onDrop(e, id)
   }
 
   const confirmDelete = () => {
@@ -177,7 +167,6 @@ export function DraggableFolder({
         `}
         onDragOver={isAdmin ? handleDragOver : undefined}
         onDragLeave={isAdmin ? handleDragLeave : undefined}
-        onDrop={isAdmin ? handleDrop : undefined}
       >
         <div
           className={`flex items-center p-3 hover:bg-secondary/50 cursor-pointer transition-colors
@@ -262,7 +251,7 @@ export function DraggableFolder({
               className={`border-t ${isDropTarget ? "border-accent" : "border-secondary"}`}
             >
               <div className={`p-2 space-y-1 ${isDropTarget ? "bg-accent/5" : ""}`}>
-                {files.map((file) => renderFileItem({ ...file, tag: file.tag }))}
+                {files.map((file) => renderFileItem(file))}
                 {files.length === 0 && (
                   <div
                     className={`text-center py-4 ${isDropTarget ? "text-accent font-medium" : "text-muted-foreground"}`}

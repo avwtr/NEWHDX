@@ -14,6 +14,7 @@ import { DraggableFileItem } from "@/components/draggable-file-item"
 import { toast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/components/auth-provider"
+import { DndContext, useDraggable, useDroppable, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 
 interface LabMaterialsExplorerProps {
   labId: string;
@@ -35,6 +36,15 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   const [isCreateFileDialogOpen, setIsCreateFileDialogOpen] = useState(false)
   const [undoStack, setUndoStack] = useState<Array<{ file: any, oldFolder: string }>>([])
   const { user } = useAuth();
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Minimum px to move before drag starts
+      },
+    })
+  );
 
   // Fetch files/folders for this lab
   const fetchFilesAndFolders = async () => {
@@ -44,6 +54,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       .select("*")
       .eq("labID", labId)
       .order("filename", { ascending: true });
+    console.log("[fetchFilesAndFolders] fileRecords:", fileRecords, "error:", dbError);
     if (dbError) {
       console.error("Error fetching file records:", dbError);
       return;
@@ -170,24 +181,33 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       }
     }
     if (!fileToRename) return;
+
+    // Get extension and build new filename
+    const extension = fileToRename.filename.includes('.')
+      ? fileToRename.filename.split('.').pop()
+      : '';
+    let newFileName = newName;
+    if (extension && !newName.endsWith(`.${extension}`)) {
+      newFileName = `${newName}.${extension}`;
+    }
+
     // Optimistically update UI
     if (sourceFolderId && sourceFolderId !== "root") {
-      setFolders((prev) => prev.map((folder) => folder.id === sourceFolderId ? { ...folder, files: folder.files.map((file: any) => file.id === fileId ? { ...file, filename: newName } : file) } : folder));
+      setFolders((prev) => prev.map((folder) => folder.id === sourceFolderId ? { ...folder, files: folder.files.map((file: any) => file.id === fileId ? { ...file, filename: newFileName } : file) } : folder));
     } else {
-      setRootFiles((prev) => prev.map((file: any) => file.id === fileId ? { ...file, filename: newName } : file));
+      setRootFiles((prev) => prev.map((file: any) => file.id === fileId ? { ...file, filename: newFileName } : file));
     }
-    // Backend
-    const oldPath = sourceFolderId && sourceFolderId !== "root" ? `${labId}/${sourceFolderId}/${fileToRename.filename}` : `${labId}/${fileToRename.filename}`;
-    const newPath = sourceFolderId && sourceFolderId !== "root" ? `${labId}/${sourceFolderId}/${newName}` : `${labId}/${newName}`;
-    const { error: moveError } = await supabase.storage.from("labmaterials").move(oldPath, newPath);
-    const { error: dbError } = await supabase.from("files").update({ filename: newName }).eq("id", fileToRename.id);
-    if (moveError || dbError) {
+
+    // Backend: Only update filename in DB
+    const { error: dbError } = await supabase.from("files").update({ filename: newFileName }).eq("id", fileToRename.id);
+    if (dbError) {
       setFolders(prevFolders);
       setRootFiles(prevRootFiles);
-      toast({ title: "Error", description: `Failed to rename file: ${(moveError || dbError)?.message}` });
+      toast({ title: "Error", description: `Failed to rename file in DB: ${dbError.message}` });
       return;
     }
-    toast({ title: "File Renamed", description: `${fileToRename.filename} renamed to ${newName}.` });
+    await fetchFilesAndFolders();
+    toast({ title: "File Renamed", description: `${fileToRename.filename} renamed to ${newFileName}.` });
   };
 
   // Delete file
@@ -300,13 +320,10 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   const handleDragStart = (e: React.DragEvent, id: string, name: string, type: string, isFolder = false) => {
     if (!isAdmin) return
 
-    setDraggedItem({ id, name, type, isFolder })
-
-    // Set drag image and data
-    if (e.dataTransfer) {
-      e.dataTransfer.setData("text/plain", JSON.stringify({ id, name, type, isFolder }))
-      e.dataTransfer.effectAllowed = "move"
-    }
+    // Use DataTransfer API for DnD
+    const dragData = { id, name, type, isFolder };
+    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+    e.dataTransfer.effectAllowed = "move";
   }
 
   // Handle drag over
@@ -342,7 +359,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   }
 
   // Handle drop
-  const handleDrop = async (e: React.DragEvent, targetId?: string) => {
+  const handleDrop = async (e: React.DragEvent, targetId?: string, fileObj?: any) => {
     if (!isAdmin) return
 
     e.preventDefault()
@@ -353,6 +370,12 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
       const files = Array.from(e.dataTransfer.files)
       handleExternalFileDrop(files, targetId)
+      return
+    }
+
+    // If fileObj is present (from folder drop), use it
+    if (fileObj) {
+      moveFile(fileObj, targetId || "root")
       return
     }
 
@@ -440,33 +463,13 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   }
 
   // Handle file upload completion
-  const handleUploadComplete = (files: any[]) => {
-    if (!isAdmin) return
-
-    // Determine where to add the files based on the folder property
-    files.forEach((file) => {
-      if (file.folder === "root") {
-        setRootFiles((prev) => [...prev, file])
-      } else {
-        setFolders((prev) =>
-          prev.map((folder) =>
-            folder.id === file.folder
-              ? {
-                  ...folder,
-                  files: [...folder.files, file],
-                  count: folder.files.length + 1,
-                  lastUpdated: "Just now",
-                }
-              : folder,
-          ),
-        )
-      }
-    })
-
+  const handleUploadComplete = async (_files: any[]) => {
+    // Only refresh the file list, do NOT insert/upload again!
+    await fetchFilesAndFolders();
     toast({
       title: "Upload Complete",
-      description: `${files.length} file(s) uploaded successfully`,
-    })
+      description: `File(s) uploaded successfully`,
+    });
   }
 
   // Effect to create a new folder when createNewFolder prop changes
@@ -520,130 +523,230 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     }
   }
 
-  // --- RESTORE THE RETURN BLOCK ---
+  // dnd-kit drop handler
+  function handleDndDrop(event: any) {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!active || !over) return;
+    const fileId = active.id;
+    const targetFolder = over.id;
+    // Find the file object
+    let fileObj = rootFiles.find(f => f.id === fileId);
+    if (!fileObj) {
+      for (const folder of folders) {
+        fileObj = folder.files.find((f: any) => f.id === fileId);
+        if (fileObj) break;
+      }
+    }
+    if (fileObj && (targetFolder === 'root' || folders.some(f => f.id === targetFolder))) {
+      moveFile(fileObj, targetFolder);
+    }
+  }
+
+  // dnd-kit drag start handler
+  function handleDndDragStart(event: any) {
+    setActiveDragId(event.active.id);
+  }
+
+  // Find the file object for the overlay
+  let activeDragFile: any = null;
+  if (activeDragId) {
+    activeDragFile = rootFiles.find(f => f.id === activeDragId);
+    if (!activeDragFile) {
+      for (const folder of folders) {
+        activeDragFile = folder.files.find((f: any) => f.id === activeDragId);
+        if (activeDragFile) break;
+      }
+    }
+  }
+
   return (
-    <Card className={isExpanded ? "fixed inset-4 z-50 overflow-auto" : ""}>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle>LAB MATERIALS</CardTitle>
-        <div className="flex gap-2 items-center">
-          <Button variant="ghost" size="icon" onClick={() => setIsExpanded(!isExpanded)} className="h-8 w-8">
-            {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent
-        ref={containerRef}
-        className={`space-y-4 ${isExpanded ? "min-h-[calc(100vh-200px)]" : ""} relative`}
-        onDragOver={isAdmin ? handleContainerDragOver : undefined}
-        onDragLeave={isAdmin ? handleContainerDragLeave : undefined}
-        onDrop={isAdmin ? (e) => handleDrop(e, undefined) : undefined}
-      >
-        <div className="flex justify-center mb-4">
-          {isAdmin && (
-            <div className="flex gap-2">
-              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsUploadDialogOpen(true)}>
-                <Upload className="h-4 w-4 mr-2" />
-                UPLOAD FILE
-              </Button>
-              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFileDialogOpen(true)}>
-                <FileIcon className="h-4 w-4 mr-2" />
-                CREATE FILE
-              </Button>
-              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFolderDialogOpen(true)}>
-                <FolderPlus className="h-4 w-4 mr-2" />
-                NEW FOLDER
+    <DndContext sensors={sensors} onDragEnd={handleDndDrop} onDragStart={handleDndDragStart}>
+      <Card className={isExpanded ? "fixed inset-4 z-50 overflow-auto" : ""}>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle>LAB MATERIALS</CardTitle>
+          <div className="flex gap-2 items-center">
+            <Button variant="ghost" size="icon" onClick={() => setIsExpanded(!isExpanded)} className="h-8 w-8">
+              {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent
+          ref={containerRef}
+          className={`space-y-4 ${isExpanded ? "min-h-[calc(100vh-200px)]" : ""} relative${isDraggingOver ? " bg-accent/10 border-2 border-dashed border-accent" : ""}`}
+          onDragOver={isAdmin ? (e) => { handleContainerDragOver(e); console.log('[CardContent] Drag over'); } : undefined}
+          onDragLeave={isAdmin ? handleContainerDragLeave : undefined}
+        >
+          <div className="flex justify-center mb-4">
+            {isAdmin && (
+              <div className="flex gap-2">
+                <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsUploadDialogOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  UPLOAD FILE
+                </Button>
+                <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFileDialogOpen(true)}>
+                  <FileIcon className="h-4 w-4 mr-2" />
+                  CREATE FILE
+                </Button>
+                <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFolderDialogOpen(true)}>
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  NEW FOLDER
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="space-y-4">
+            {/* Render folders as droppables */}
+            {folders.map(folder => (
+              <DroppableFolder
+                key={folder.id}
+                id={folder.id}
+                folder={folder}
+                isOpen={openFolders.includes(folder.id)}
+                onToggle={toggleFolder}
+                onRenameFolder={handleRenameFolder}
+                onRenameFile={handleRenameFile}
+                userRole={isAdmin ? "admin" : "user"}
+                renderFileItem={(file: any) => (
+                  <DraggableFileItemDnd
+                    key={file.id || `${folder.id}-${file.filename}`}
+                    id={file.id}
+                    file={file}
+                    onRename={handleRenameFile}
+                    onDelete={handleDeleteFile}
+                    userRole={isAdmin ? "admin" : "user"}
+                  />
+                )}
+              />
+            ))}
+            {/* Render root files as draggables */}
+            {rootFiles.map((file: any) => (
+              <DraggableFileItemDnd
+                key={file.id || `root-${file.filename}`}
+                id={file.id}
+                file={file}
+                onRename={handleRenameFile}
+                onDelete={handleDeleteFile}
+                userRole={isAdmin ? "admin" : "user"}
+              />
+            ))}
+            {/* Root drop zone as a droppable */}
+            <DroppableRoot />
+          </div>
+          {/* dnd-kit DragOverlay for file drag preview */}
+          <DragOverlay>
+            {activeDragFile ? (
+              <div style={{ boxShadow: '0 4px 24px #0008', borderRadius: 8, background: '#222', padding: 8 }}>
+                <DraggableFileItem
+                  id={activeDragFile.id}
+                  name={activeDragFile.filename}
+                  type={activeDragFile.fileType || activeDragFile.type || ''}
+                  size={activeDragFile.fileSize}
+                  tag={activeDragFile.fileTag}
+                  author={activeDragFile.author}
+                  date={activeDragFile.date}
+                  userRole={isAdmin ? "admin" : "user"}
+                  onRename={() => {}}
+                  onDragStart={(e, id, name, type) => {}}
+                  onDragOver={(e) => {}}
+                  onDrop={(e, targetId) => {}}
+                  onDelete={() => {}}
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
+          {isExpanded && (
+            <div className="fixed bottom-8 right-8">
+              <Button onClick={() => setIsExpanded(false)} className="bg-accent text-primary-foreground hover:bg-accent/90">
+                <Minimize2 className="h-4 w-4 mr-2" />
+                Close Expanded View
               </Button>
             </div>
           )}
-        </div>
-        <div className="space-y-4">
-          {folders.map(folder => (
-            <DraggableFolder
-              key={folder.id}
-              id={folder.id}
-              name={folder.name}
-              count={folder.files.length}
-              lastUpdated={folder.lastUpdated || ""}
-              files={folder.files}
-              isOpen={openFolders.includes(folder.id)}
-              onToggle={toggleFolder}
-              onRenameFolder={handleRenameFolder}
-              onRenameFile={handleRenameFile}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              userRole={isAdmin ? "admin" : "user"}
-              renderFileItem={(file: any) => (
-                <DraggableFileItem
-                  key={file.id || `${folder.id}-${file.filename}`}
-                  id={file.id}
-                  name={file.filename}
-                  type={file.fileType || file.type || ''}
-                  size={file.fileSize}
-                  tag={file.fileTag}
-                  author={file.author}
-                  date={file.date}
-                  onRename={handleRenameFile}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                  onDelete={handleDeleteFile}
-                  isDraggedOver={dropTargetId === file.id}
-                  userRole={isAdmin ? "admin" : "user"}
-                />
-              )}
-            />
-          ))}
-          {rootFiles.map((file: any) => (
-            <DraggableFileItem
-              key={file.id || `root-${file.filename}`}
-              id={file.id}
-              name={file.filename}
-              type={file.fileType || file.type || ''}
-              size={file.fileSize}
-              tag={file.fileTag}
-              author={file.author}
-              date={file.date}
-              onRename={handleRenameFile}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onDelete={handleDeleteFile}
-              isDraggedOver={dropTargetId === file.id}
-              userRole={isAdmin ? "admin" : "user"}
-            />
-          ))}
-        </div>
-        {isExpanded && (
-          <div className="fixed bottom-8 right-8">
-            <Button onClick={() => setIsExpanded(false)} className="bg-accent text-primary-foreground hover:bg-accent/90">
-              <Minimize2 className="h-4 w-4 mr-2" />
-              Close Expanded View
-            </Button>
-          </div>
+        </CardContent>
+        <CardFooter>
+         
+        </CardFooter>
+        {/* Dialogs */}
+        {isUploadDialogOpen && (
+          <FileUploadDialog
+            labId={labId}
+            open={isUploadDialogOpen}
+            onOpenChange={setIsUploadDialogOpen}
+            onClose={() => setIsUploadDialogOpen(false)}
+            onUploadComplete={handleUploadComplete}
+          />
         )}
-      </CardContent>
-      <CardFooter>
-       
-      </CardFooter>
-      {/* Dialogs */}
-      {isUploadDialogOpen && (
-        <FileUploadDialog
-          labId={labId}
-          open={isUploadDialogOpen}
-          onOpenChange={setIsUploadDialogOpen}
-          onClose={() => setIsUploadDialogOpen(false)}
-          onUploadComplete={handleUploadComplete}
-        />
-      )}
-      {isCreateFolderDialogOpen && (
-        <CreateFolderDialog
-          onCreateFolder={(name, parent) => createFolder(name, parent)}
-          onClose={() => setIsCreateFolderDialogOpen(false)}
-          isOpen={isCreateFolderDialogOpen}
-        />
-      )}
-      {isCreateFileDialogOpen && <CreateFileDialog onClose={() => setIsCreateFileDialogOpen(false)} />}
-    </Card>
+        {isCreateFolderDialogOpen && (
+          <CreateFolderDialog
+            onCreateFolder={(name, parent) => createFolder(name, parent)}
+            onClose={() => setIsCreateFolderDialogOpen(false)}
+            isOpen={isCreateFolderDialogOpen}
+          />
+        )}
+        {isCreateFileDialogOpen && <CreateFileDialog onClose={() => setIsCreateFileDialogOpen(false)} />}
+      </Card>
+    </DndContext>
   )
+}
+
+// --- dnd-kit wrappers ---
+function DraggableFileItemDnd({ id, file, ...props }: any) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+  return (
+    <div ref={setNodeRef} {...attributes} {...listeners} style={{ opacity: isDragging ? 0.5 : 1 }}>
+      <DraggableFileItem
+        id={id}
+        name={file.filename}
+        type={file.fileType || file.type || ''}
+        size={file.fileSize}
+        tag={file.fileTag}
+        author={file.author}
+        date={file.date}
+        {...props}
+      />
+    </div>
+  );
+}
+
+function DroppableFolder({ id, folder, isOpen, onToggle, renderFileItem, ...props }: any) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} style={{ background: isOver ? '#222e' : undefined }}>
+      <DraggableFolder
+        id={id}
+        name={folder.name}
+        count={folder.files.length}
+        lastUpdated={folder.lastUpdated || ""}
+        files={folder.files}
+        isOpen={isOpen}
+        onToggle={onToggle}
+        renderFileItem={renderFileItem}
+        userRole={props.userRole}
+        onRenameFolder={props.onRenameFolder}
+        onRenameFile={props.onRenameFile}
+      />
+    </div>
+  );
+}
+
+function DroppableRoot() {
+  const { setNodeRef, isOver } = useDroppable({ id: 'root' });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        border: '2px dashed #00f2',
+        background: isOver ? '#0ff4' : '#0000',
+        borderRadius: 8,
+        padding: 24,
+        marginTop: 24,
+        textAlign: 'center',
+        color: '#00f',
+        fontWeight: 600,
+      }}
+    >
+      Drop here to move file(s) to <span style={{ fontWeight: 700 }}>ROOT</span>
+    </div>
+  );
 }
