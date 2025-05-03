@@ -684,7 +684,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
             isOpen={isCreateFolderDialogOpen}
           />
         )}
-        {isCreateFileDialogOpen && <CreateFileDialog onClose={() => setIsCreateFileDialogOpen(false)} />}
+        {isCreateFileDialogOpen && <CreateFileDialog labId={labId} onClose={() => setIsCreateFileDialogOpen(false)} onFileCreated={fetchFilesAndFolders} />}
       </Card>
     </DndContext>
   )

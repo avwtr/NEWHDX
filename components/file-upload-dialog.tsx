@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,7 @@ export function FileUploadDialog({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isOpen, setIsOpen] = useState(open || false)
   const { user } = useAuth();
+  const [folders, setFolders] = useState<string[]>([]);
 
   // Handle dialog open state
   const handleOpenChange = (newOpen: boolean) => {
@@ -204,6 +205,21 @@ export function FileUploadDialog({
     }
   }
 
+  useEffect(() => {
+    async function fetchFolders() {
+      const { data, error } = await supabase
+        .from("files")
+        .select("folder")
+        .eq("labID", labId);
+      if (!error && data) {
+        // Exclude root and duplicates
+        const folderNames = Array.from(new Set(data.map((f: any) => f.folder).filter((f: string) => f && f !== "root")));
+        setFolders(folderNames);
+      }
+    }
+    if (labId) fetchFolders();
+  }, [labId]);
+
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -281,11 +297,9 @@ export function FileUploadDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="root">ROOT (No Folder)</SelectItem>
-                  <SelectItem value="datasets">DATASETS</SelectItem>
-                  <SelectItem value="models">MODELS</SelectItem>
-                  <SelectItem value="protocols">PROTOCOLS</SelectItem>
-                  <SelectItem value="publications">PUBLICATIONS</SelectItem>
-                  <SelectItem value="experiments">EXPERIMENTS</SelectItem>
+                  {folders.map((folder) => (
+                    <SelectItem key={folder} value={folder}>{folder.toUpperCase()}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

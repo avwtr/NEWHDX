@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -18,12 +18,16 @@ import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/comp
 import { DocumentEditor } from "@/components/editors/document-editor"
 import { TabularDataEditor } from "@/components/editors/tabular-data-editor"
 import { CodeEditor } from "@/components/editors/code-editor"
+import { supabase } from "@/lib/supabaseClient"
+import { useAuth } from "@/components/auth-provider"
 
 interface CreateFileDialogProps {
-  onClose: () => void
+  labId: string;
+  onClose: () => void;
+  onFileCreated?: () => void;
 }
 
-export function CreateFileDialog({ onClose }: CreateFileDialogProps) {
+export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDialogProps) {
   const [step, setStep] = useState<"select" | "edit">("select")
   const [selectedFileType, setSelectedFileType] = useState<string | null>(null)
   const [fileName, setFileName] = useState("")
@@ -47,6 +51,30 @@ export function CreateFileDialog({ onClose }: CreateFileDialogProps) {
       ["", "", ""],
     ],
   })
+
+  const [folders, setFolders] = useState<string[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+  const { user } = useAuth()
+
+  useEffect(() => {
+    async function fetchFolders() {
+      const { data, error } = await supabase
+        .from("files")
+        .select("folder")
+        .eq("labID", labId)
+      if (!error && data) {
+        const folderNames = Array.from(new Set(data.map((f: any) => f.folder).filter((f: string) => f && f !== "root")))
+        setFolders(folderNames)
+      }
+    }
+    if (labId) fetchFolders()
+  }, [labId])
+
+  function tabularToCSV(data: { columns: string[]; rows: string[][] }) {
+    const header = data.columns.join(",")
+    const rows = data.rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\n")
+    return header + "\n" + rows
+  }
 
   // File type options
   const fileTypeOptions = [
@@ -93,21 +121,67 @@ export function CreateFileDialog({ onClose }: CreateFileDialogProps) {
     }
   }
 
-  const handleSave = () => {
-    // Here you would save the file to the HDX platform
-    console.log("Saving file:", {
-      type: selectedFileType,
-      name: fileName,
-      description: fileDescription,
-      folder,
-      tag: documentTag,
-      content:
-        selectedFileType === "document" ? documentContent : selectedFileType === "code" ? codeContent : tabularData,
-    })
-
-    // Show success message or notification
-    alert("File saved successfully!")
-    handleClose()
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      let fileContent = ""
+      let extension = "txt"
+      let fileType = "text"
+      if (selectedFileType === "tabular") {
+        fileContent = tabularToCSV(tabularData)
+        extension = "csv"
+        fileType = "csv"
+      } else if (selectedFileType === "code") {
+        fileContent = codeContent
+        extension = codeLanguage === "python" ? "py" : codeLanguage === "javascript" ? "js" : codeLanguage === "r" ? "r" : "txt"
+        fileType = extension
+      } else if (selectedFileType === "document") {
+        fileContent = documentContent
+        extension = documentFormat === "markdown" ? "md" : documentFormat === "html" ? "html" : "txt"
+        fileType = extension
+      }
+      const fullFileName = fileName.endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`
+      // Always use Blob to get the correct file size
+      const encoder = new TextEncoder();
+      const fileUint8 = encoder.encode(fileContent);
+      const blob = new Blob([fileUint8], { type: "text/plain" });
+      const fileSizeKB = `${(blob.size / 1024).toFixed(1)} KB`;
+      // 1. Insert DB row
+      const { data: inserted, error: dbError } = await supabase.from("files").insert([
+        {
+          fileType: fileType,
+          filename: fullFileName,
+          fileSize: fileSizeKB,
+          labID: labId,
+          folder: folder,
+          initiallycreatedBy: user?.id || null,
+          lastUpdatedBy: user?.id || null,
+          lastUpdated: new Date().toISOString(),
+          fileTag: documentTag || selectedFileType,
+          storageKey: null,
+        },
+      ]).select()
+      if (dbError || !inserted || !inserted[0]?.id) throw dbError || new Error("Failed to insert file record")
+      const fileId = inserted[0].id
+      // 2. Upload to storage
+      const storageKey = folder && folder !== "root"
+        ? `${labId}/${folder}/${fullFileName}`
+        : `${labId}/${fullFileName}`;
+      const { error: uploadError } = await supabase.storage.from("labmaterials").upload(storageKey, blob)
+      if (uploadError) {
+        await supabase.from("files").delete().eq("id", fileId)
+        throw uploadError
+      }
+      // 3. Update DB row with storageKey
+      await supabase.from("files").update({ storageKey }).eq("id", fileId)
+      if (onFileCreated) onFileCreated();
+      alert("File created and saved to HDX!")
+      handleClose()
+    } catch (error) {
+      alert("Error creating file: " + (error instanceof Error ? error.message : JSON.stringify(error)))
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const selectedOption = selectedFileType ? fileTypeOptions.find((option) => option.id === selectedFileType) : null
@@ -198,9 +272,9 @@ export function CreateFileDialog({ onClose }: CreateFileDialogProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="root">Root (Lab Repository)</SelectItem>
-                      <SelectItem value="datasets">DATASETS</SelectItem>
-                      <SelectItem value="models">MODELS</SelectItem>
-                      <SelectItem value="protocols">PROTOCOLS</SelectItem>
+                      {folders.map((folder) => (
+                        <SelectItem key={folder} value={folder}>{folder.toUpperCase()}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -273,9 +347,9 @@ export function CreateFileDialog({ onClose }: CreateFileDialogProps) {
                   <Download className="h-4 w-4 mr-2" />
                   Export
                 </Button>
-                <Button onClick={handleSave} className="bg-accent text-primary-foreground hover:bg-accent/90">
+                <Button onClick={handleSave} className="bg-accent text-primary-foreground hover:bg-accent/90" disabled={isSaving}>
                   <Save className="h-4 w-4 mr-2" />
-                  Save to HDX
+                  {isSaving ? "Saving..." : "Save to HDX"}
                 </Button>
               </div>
             </DialogFooter>
