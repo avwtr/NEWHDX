@@ -38,6 +38,7 @@ interface DraggableFolderProps {
   renderFileItem: (file: FileProps) => React.ReactNode
   userRole?: string
   onDeleteFolder?: (id: string) => void
+  actions?: React.ReactNode
 }
 
 export function DraggableFolder({
@@ -53,6 +54,7 @@ export function DraggableFolder({
   renderFileItem,
   userRole = "guest",
   onDeleteFolder,
+  actions,
 }: DraggableFolderProps) {
   const isAdmin = userRole === "admin"
   const [isRenamingFolder, setIsRenamingFolder] = useState(false)
@@ -207,6 +209,7 @@ export function DraggableFolder({
                       <Edit2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
+                  {actions}
                 </div>
               )}
               <p className="text-xs text-muted-foreground">

@@ -18,6 +18,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { supabase } from "@/lib/supabaseClient"
+import { firebaseStorage } from "@/lib/firebaseClient"
+import { getDownloadURL, ref as firebaseRef, uploadBytes, deleteObject } from "firebase/storage"
 
 interface FileViewerDialogProps {
   file: {
@@ -28,6 +31,9 @@ interface FileViewerDialogProps {
     author: string
     date: string
     content?: string
+    url?: string
+    storageKey?: string
+    path?: string
   }
   isOpen: boolean
   onClose: () => void
@@ -60,219 +66,241 @@ export function FileViewerDialog({
       ["", "", ""],
     ],
   })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string>("")
 
   // Reset editing state when dialog opens/closes
   useEffect(() => {
     if (isOpen) {
       setIsEditing(false)
-
-      // Initialize content based on file type
-      initializeContent()
     }
   }, [isOpen, file])
 
-  const initializeContent = () => {
-    // In a real app, you would fetch the actual content from an API
-    // For now, we'll generate mock content based on file type
-
-    const fileType = file.type.toLowerCase()
-
-    // Document files
-    if (fileType === "md" || fileType === "txt") {
-      setDocumentFormat(fileType === "md" ? "markdown" : "plaintext")
-      setDocumentContent(
-        `# ${file.name}\n\nThis is a sample document content for ${file.name}.\n\nCreated by ${file.author} on ${file.date}.\n\n## Section 1\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam euismod, nisl eget aliquam ultricies, nisl nisl aliquet nisl, eget aliquam nisl nisl eget nisl.`,
-      )
-    }
-
-    // Code files
-    else if (["py", "js", "ts", "r"].includes(fileType)) {
-      setCodeLanguage(
-        fileType === "py" ? "python" : fileType === "js" ? "javascript" : fileType === "ts" ? "javascript" : "r",
-      )
-
-      if (fileType === "py") {
-        setCodeContent(
-          `# ${file.name}
-# Author: ${file.author}
-# Date: ${file.date}
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-def analyze_data(data_path):
-    """
-    Analyze the data from the given path
-    
-    Parameters:
-    data_path (str): Path to the data file
-    
-    Returns:
-    dict: Analysis results
-    """
-    # Load data
-    data = pd.read_csv(data_path)
-    
-    # Perform analysis
-    results = {
-        "mean": data.mean(),
-        "median": data.median(),
-        "std": data.std()
-    }
-    
-    return results
-
-if __name__ == "__main__":
-    results = analyze_data("data/sample.csv")
-    print(results)
-`,
-        )
-      } else if (fileType === "js" || fileType === "ts") {
-        setCodeContent(
-          `// ${file.name}
-// Author: ${file.author}
-// Date: ${file.date}
-
-/**
- * Analyzes data from the given source
- * @param {string} dataSource - Path or URL to the data
- * @returns {Object} Analysis results
- */
-async function analyzeData(dataSource) {
-  try {
-    // Fetch data
-    const response = await fetch(dataSource);
-    const data = await response.json();
-    
-    // Perform analysis
-    const results = {
-      count: data.length,
-      summary: data.reduce((acc, item) => {
-        // Calculate summary statistics
-        return acc;
-      }, {})
-    };
-    
-    return results;
-  } catch (error) {
-    console.error("Error analyzing data:", error);
-    throw error;
-  }
-}
-
-// Example usage
-analyzeData('/api/data')
-  .then(results => console.log(results))
-  .catch(error => console.error(error));
-`,
-        )
-      } else {
-        setCodeContent(
-          `# ${file.name}
-# Author: ${file.author}
-# Date: ${file.date}
-
-# Load libraries
-library(tidyverse)
-library(ggplot2)
-
-# Function to analyze data
-analyze_data <- function(data_path) {
-  # Read data
-  data <- read.csv(data_path)
-  
-  # Perform analysis
-  results <- list(
-    mean = mean(data$value),
-    median = median(data$value),
-    sd = sd(data$value)
-  )
-  
-  return(results)
-}
-
-# Example usage
-results <- analyze_data("data/sample.csv")
-print(results)
-`,
-        )
+  // Fetch file content if not present
+  useEffect(() => {
+    let ignore = false;
+    async function fetchContent() {
+      setLoading(true);
+      setError(null);
+      try {
+        let url = null;
+        const type = file.type?.toLowerCase();
+       
+        if (file.url) {
+          url = file.url;
+          if (["jpg","jpeg","png","gif","svg","pdf"].includes(type)) {
+            setPreviewUrl(url);
+            setLoading(false);
+            return;
+          } else {
+            // Fetch text content from url
+            const resp = await fetch(url);
+            const text = await resp.text();
+            if (["md", "txt"].includes(type)) setDocumentContent(text);
+            else if (["py", "js", "ts", "r"].includes(type)) setCodeContent(text);
+            else if (["csv", "xlsx", "json"].includes(type)) setTabularData({ columns: ["Data"], rows: text.split("\n").map(row => [row]) });
+          }
+        } else if (file.storageKey) {
+          // Firebase Storage
+          url = await getDownloadURL(firebaseRef(firebaseStorage, file.storageKey));
+          if (["jpg","jpeg","png","gif","svg","pdf"].includes(type)) {
+            setPreviewUrl(url);
+            setLoading(false);
+            return;
+          } else {
+            const resp = await fetch(url);
+            const text = await resp.text();
+            if (["md", "txt"].includes(type)) setDocumentContent(text);
+            else if (["py", "js", "ts", "r"].includes(type)) setCodeContent(text);
+            else if (["csv", "xlsx", "json"].includes(type)) setTabularData({ columns: ["Data"], rows: text.split("\n").map(row => [row]) });
+          }
+        } else if (file.path) {
+          // Supabase Storage
+          const { data, error } = await supabase.storage.from("labmaterials").download(file.path);
+          if (error) throw error;
+          if (["jpg","jpeg","png","gif","svg","pdf"].includes(type)) {
+            const blobUrl = URL.createObjectURL(data);
+            setPreviewUrl(blobUrl);
+            setLoading(false);
+            return;
+          } else {
+            const text = await data.text();
+            if (["md", "txt"].includes(type)) setDocumentContent(text);
+            else if (["py", "js", "ts", "r"].includes(type)) setCodeContent(text);
+            else if (["csv", "xlsx", "json"].includes(type)) setTabularData({ columns: ["Data"], rows: text.split("\n").map(row => [row]) });
+          }
+        }
+      } catch (err: any) {
+        if (!ignore) setError("Failed to load file preview.");
+      } finally {
+        if (!ignore) setLoading(false);
       }
     }
+    if (isOpen) fetchContent();
+    return () => { ignore = true; };
+  }, [file, isOpen]);
 
-    // Tabular data files
-    else if (["csv", "xlsx", "json"].includes(fileType)) {
-      // Generate mock tabular data
-      const columns = ["ID", "Name", "Value", "Category", "Date"]
-      const rows = []
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const fileType = file.type.toLowerCase();
+      let content;
+      let blob;
 
-      for (let i = 1; i <= 10; i++) {
-        rows.push([
-          `${i}`,
-          `Sample ${i}`,
-          `${Math.round(Math.random() * 100)}`,
-          ["A", "B", "C"][Math.floor(Math.random() * 3)],
-          `2023-${Math.floor(Math.random() * 12) + 1}-${Math.floor(Math.random() * 28) + 1}`,
-        ])
+      // Prepare content based on file type
+      if (fileType === "md" || fileType === "txt") {
+        content = documentContent;
+        blob = new Blob([content], { type: 'text/plain' });
+      } else if (["py", "js", "ts", "r"].includes(fileType)) {
+        content = codeContent;
+        blob = new Blob([content], { type: 'text/plain' });
+      } else if (["csv", "xlsx", "json"].includes(fileType)) {
+        content = JSON.stringify(tabularData);
+        blob = new Blob([content], { type: 'application/json' });
       }
 
-      setTabularData({ columns, rows })
+      if (!content || !blob) {
+        throw new Error("No content to save");
+      }
+
+      // Save to appropriate storage
+      if (file.storageKey) {
+        // Firebase Storage
+        const fileRef = firebaseRef(firebaseStorage, file.storageKey);
+        await uploadBytes(fileRef, blob);
+        const url = await getDownloadURL(fileRef);
+        // Update Supabase record with new URL
+        await supabase
+          .from("files")
+          .update({ url })
+          .eq("id", file.id);
+      } else if (file.path) {
+        // Supabase Storage
+        await supabase.storage
+          .from("labmaterials")
+          .upload(file.path, blob, { upsert: true });
+      }
+
+      // Call the onSave callback
+      if (onSave) {
+        onSave(file.id, content);
+      }
+
+      toast({
+        title: "File Saved",
+        description: `${file.name} has been saved successfully.`,
+      });
+
+      setIsEditing(false);
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: `Failed to save file: ${err.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
-  const handleSave = () => {
-    // Determine which content to save based on file type
-    const fileType = file.type.toLowerCase()
-    let content
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      // Delete from storage
+      if (file.storageKey) {
+        // Firebase Storage
+        const fileRef = firebaseRef(firebaseStorage, file.storageKey);
+        await deleteObject(fileRef);
+      } else if (file.path) {
+        // Supabase Storage
+        await supabase.storage
+          .from("labmaterials")
+          .remove([file.path]);
+      }
 
-    if (fileType === "md" || fileType === "txt") {
-      content = documentContent
-    } else if (["py", "js", "ts", "r"].includes(fileType)) {
-      content = codeContent
-    } else if (["csv", "xlsx", "json"].includes(fileType)) {
-      content = tabularData
+      // Delete from database
+      await supabase
+        .from("files")
+        .delete()
+        .eq("id", file.id);
+
+      // Call the onDelete callback
+      if (onDelete) {
+        onDelete(file.id);
+      }
+
+      setIsDeleteDialogOpen(false);
+      onClose();
+
+      toast({
+        title: "File Deleted",
+        description: `${file.name} has been deleted.`,
+        variant: "destructive",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: `Failed to delete file: ${err.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // Call the onSave callback with the file ID and content
-    if (onSave) {
-      onSave(file.id, content)
+  const handleDownload = async () => {
+    setLoading(true);
+    try {
+      let url;
+      if (file.url) {
+        url = file.url;
+      } else if (file.storageKey) {
+        // Firebase Storage
+        url = await getDownloadURL(firebaseRef(firebaseStorage, file.storageKey));
+      } else if (file.path) {
+        // Supabase Storage
+        const { data } = await supabase.storage
+          .from("labmaterials")
+          .download(file.path);
+        if (!data) throw new Error("Failed to download file");
+        url = URL.createObjectURL(data);
+      }
+
+      if (!url) throw new Error("No download URL available");
+
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up object URL if created
+      if (file.path && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+
+      toast({
+        title: "File Downloaded",
+        description: `${file.name} has been downloaded.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: `Failed to download file: ${err.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-
-    toast({
-      title: "File Saved",
-      description: `${file.name} has been saved successfully.`,
-    })
-
-    setIsEditing(false)
-  }
-
-  const handleDelete = () => {
-    if (onDelete) {
-      onDelete(file.id)
-    }
-
-    setIsDeleteDialogOpen(false)
-    onClose()
-
-    toast({
-      title: "File Deleted",
-      description: `${file.name} has been deleted.`,
-      variant: "destructive",
-    })
-  }
-
-  const handleDownload = () => {
-    // In a real app, this would trigger a file download
-    // For now, we'll just show a toast
-    toast({
-      title: "File Downloaded",
-      description: `${file.name} has been downloaded.`,
-    })
-  }
+  };
 
   const renderFileViewer = () => {
     const fileType = file.type.toLowerCase()
-
+    if (loading) return <div className="p-8 text-center text-muted-foreground">Loading preview...</div>;
+    if (error) return <div className="p-8 text-center text-destructive">{error}</div>;
     // Document files
     if (fileType === "md" || fileType === "txt") {
       return (
@@ -287,7 +315,6 @@ print(results)
         </div>
       )
     }
-
     // Code files
     else if (["py", "js", "ts", "r"].includes(fileType)) {
       return (
@@ -302,7 +329,6 @@ print(results)
         </div>
       )
     }
-
     // Tabular data files
     else if (["csv", "xlsx", "json"].includes(fileType)) {
       return (
@@ -311,7 +337,25 @@ print(results)
         </div>
       )
     }
-
+    // Images and PDFs
+    else if (["jpg", "jpeg", "png", "gif", "svg"].includes(fileType)) {
+      return (
+        <div className="flex justify-center p-4 bg-gray-50 rounded-md">
+          <img src={previewUrl || "/placeholder.svg?height=300&width=400"} alt={file.name} className="max-h-[500px] object-contain" />
+        </div>
+      )
+    } else if (fileType === "pdf") {
+      return (
+        <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-md">
+          <iframe src={previewUrl || undefined} title="PDF Preview" className="w-full max-w-2xl h-[500px] rounded-md border" />
+          <p className="text-lg font-medium mb-2">{file.name}</p>
+          <p className="text-sm text-muted-foreground mb-4">PDF Document</p>
+          <Button asChild variant="outline" size="sm" className="gap-2">
+            <a href={previewUrl || "#"} target="_blank" rel="noopener noreferrer"><Download className="h-4 w-4" /> Download PDF</a>
+          </Button>
+        </div>
+      )
+    }
     // Other file types
     else {
       return (

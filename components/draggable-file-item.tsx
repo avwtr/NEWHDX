@@ -44,6 +44,7 @@ interface FileItemProps {
   onDragOver: (e: React.DragEvent) => void
   onDrop: (e: React.DragEvent, targetId?: string) => void
   onDelete?: (id: string) => void
+  onDownload?: (file: { id: string; name: string; type: string; size: string; author: string; date: string; content?: string; url?: string; storageKey?: string; path?: string }) => void
   isDragging?: boolean
   isDraggedOver?: boolean
   userRole?: string
@@ -63,6 +64,7 @@ export function DraggableFileItem({
   onDragOver = () => {},
   onDrop = () => {},
   onDelete = () => {},
+  onDownload = () => {},
   isDragging,
   isDraggedOver,
   userRole = "guest",
@@ -329,7 +331,7 @@ export function DraggableFileItem({
           >
             <PlusCircle className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="sm" className="text-accent hover:bg-secondary/80">
+          <Button variant="ghost" size="sm" className="text-accent hover:bg-secondary/80" onClick={() => onDownload({ id, name, type, size, author, date })}>
             DOWNLOAD
           </Button>
           {isAdmin && (
