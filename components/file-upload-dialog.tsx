@@ -19,6 +19,8 @@ import { FileIcon, UploadIcon } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/components/auth-provider"
+import { firebaseStorage } from "@/lib/firebaseClient"
+import { ref as firebaseRef, uploadBytesResumable, getDownloadURL } from "firebase/storage"
 
 interface FileUploadDialogProps {
   labId: string;
@@ -50,6 +52,7 @@ export function FileUploadDialog({
   const [isOpen, setIsOpen] = useState(open || false)
   const { user } = useAuth();
   const [folders, setFolders] = useState<string[]>([]);
+  const MAX_FILE_SIZE_MB = 50;
 
   // Handle dialog open state
   const handleOpenChange = (newOpen: boolean) => {
@@ -102,6 +105,77 @@ export function FileUploadDialog({
     e.preventDefault()
 
     if (!selectedFile || !fileName) return
+
+    // Hybrid upload logic
+    if (selectedFile.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      setIsSubmitting(true);
+      const fileExtension = fileName.split(".").pop()?.toLowerCase() || "";
+      const firebasePath = `BIG_FILES/${labId}/${selectedFile.name}`;
+      const storageRef = firebaseRef(firebaseStorage, firebasePath);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+          uploadTask.on(
+            'state_changed',
+            () => {}, // progress
+            (error) => {
+              alert("Firebase upload error: " + error.message);
+              setIsSubmitting(false);
+              reject(error);
+            },
+            async () => {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              // Insert into Supabase DB
+              const { error: dbError } = await supabase.from("files").insert([
+                {
+                  filename: fileName,
+                  fileType: fileExtension,
+                  fileSize: `${(selectedFile.size / 1024).toFixed(1)} KB`,
+                  labID: labId,
+                  folder: selectedFolder,
+                  fileTag: fileTag || "file",
+                  storageKey: firebasePath,
+                  url: downloadURL,
+                  initiallycreatedBy: user?.id || null,
+                  lastUpdatedBy: user?.id || null,
+                  lastUpdated: new Date().toISOString(),
+                }
+              ]);
+              if (dbError) {
+                alert("Supabase DB insert error: " + dbError.message);
+                setIsSubmitting(false);
+                reject(dbError);
+                return;
+              }
+              setIsSubmitting(false);
+              setFileName("");
+              setFileDescription("");
+              setSelectedFile(null);
+              setSelectedFolder("root");
+              handleOpenChange(false);
+              if (onUploadComplete) onUploadComplete([
+                {
+                  name: fileName,
+                  url: downloadURL,
+                  storageProvider: "firebase",
+                  storageKey: firebasePath,
+                  folder: selectedFolder,
+                  size: `${(selectedFile.size / 1024).toFixed(1)} KB`,
+                  type: fileExtension,
+                  author: user?.email || "Current User",
+                  date: "Just now",
+                  description: fileDescription,
+                }
+              ]);
+              resolve();
+            }
+          );
+        });
+      } catch (error) {
+        // Already handled above
+      }
+      return;
+    }
 
     setIsSubmitting(true)
 

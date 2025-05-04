@@ -15,6 +15,8 @@ import { toast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/components/auth-provider"
 import { DndContext, useDraggable, useDroppable, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { deleteObject, ref as firebaseRef, getStorage, uploadBytes, getDownloadURL } from "firebase/storage";
+import { firebaseStorage } from "@/lib/firebaseClient";
 
 interface LabMaterialsExplorerProps {
   labId: string;
@@ -118,6 +120,14 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     openAllFolders()
   }
 
+  // Helper to infer if a file is stored in Firebase (big file)
+  const isFirebaseFile = (file: any) => {
+    if (file.fileSize && file.fileSize.includes('MB')) {
+      return parseFloat(file.fileSize) > 50;
+    }
+    return false;
+  };
+
   // Move file between folders or to/from root (DB only)
   const moveFile = async (file: any, newFolder: string) => {
     // Remove the file from all folders and root
@@ -198,16 +208,35 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       setRootFiles((prev) => prev.map((file: any) => file.id === fileId ? { ...file, filename: newFileName } : file));
     }
 
-    // Backend: Only update filename in DB
-    const { error: dbError } = await supabase.from("files").update({ filename: newFileName }).eq("id", fileToRename.id);
-    if (dbError) {
+    try {
+      // Optionally: rename in storage
+      if (isFirebaseFile(fileToRename)) {
+        // Firebase: copy to new name, delete old
+        const oldRef = firebaseRef(firebaseStorage, fileToRename.storageKey);
+        const newStorageKey = `BIG_FILES/${labId}/${newFileName}`;
+        const newRef = firebaseRef(firebaseStorage, newStorageKey);
+        // Download old file
+        const url = await getDownloadURL(oldRef);
+        const response = await fetch(url);
+        const blob = await response.blob();
+        // Upload to new location
+        await uploadBytes(newRef, blob);
+        // Delete old file
+        await deleteObject(oldRef);
+        // Update DB
+        await supabase.from("files").update({ filename: newFileName, storageKey: newStorageKey, url: await getDownloadURL(newRef) }).eq("id", fileToRename.id);
+      } else {
+        // Supabase: just update DB (optionally, implement move in storage)
+        await supabase.from("files").update({ filename: newFileName }).eq("id", fileToRename.id);
+      }
+      await fetchFilesAndFolders();
+      toast({ title: "File Renamed", description: `${fileToRename.filename} renamed to ${newFileName}.` });
+    } catch (err: any) {
       setFolders(prevFolders);
       setRootFiles(prevRootFiles);
-      toast({ title: "Error", description: `Failed to rename file in DB: ${dbError.message}` });
+      toast({ title: "Error", description: `Failed to rename file: ${err.message}` });
       return;
     }
-    await fetchFilesAndFolders();
-    toast({ title: "File Renamed", description: `${fileToRename.filename} renamed to ${newFileName}.` });
   };
 
   // Delete file
@@ -235,16 +264,24 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       setRootFiles((prev) => prev.filter((file: any) => file.id !== fileId));
     }
     // Backend
-    const filePath = sourceFolderId && sourceFolderId !== "root" ? `${labId}/${sourceFolderId}/${fileToDelete.filename}` : `${labId}/${fileToDelete.filename}`;
-    const { error: delError } = await supabase.storage.from("labmaterials").remove([filePath]);
-    const { error: dbError } = await supabase.from("files").delete().eq("id", fileToDelete.id);
-    if (delError || dbError) {
+    try {
+      if (isFirebaseFile(fileToDelete)) {
+        // Delete from Firebase Storage
+        const firebaseFileRef = firebaseRef(firebaseStorage, fileToDelete.storageKey);
+        await deleteObject(firebaseFileRef);
+      } else {
+        // Supabase Storage
+        const filePath = sourceFolderId && sourceFolderId !== "root" ? `${labId}/${sourceFolderId}/${fileToDelete.filename}` : `${labId}/${fileToDelete.filename}`;
+        await supabase.storage.from("labmaterials").remove([filePath]);
+      }
+      await supabase.from("files").delete().eq("id", fileToDelete.id);
+      toast({ title: "File Deleted", description: `${fileToDelete.filename} deleted successfully.` });
+    } catch (err: any) {
       setFolders(prevFolders);
       setRootFiles(prevRootFiles);
-      toast({ title: "Error", description: `Failed to delete file: ${(delError || dbError)?.message}` });
+      toast({ title: "Error", description: `Failed to delete file: ${err.message}` });
       return;
     }
-    toast({ title: "File Deleted", description: `${fileToDelete.filename} deleted successfully.` });
   };
 
   // Delete folder
