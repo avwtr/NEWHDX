@@ -22,6 +22,7 @@ interface LabSettingsTabProps {
   setContributionFilter: (value: string) => void
   filteredContributions: any[]
   handleViewContribution: (contribution: any) => void
+  SettingsDialogComponent?: React.ReactNode
 }
 
 export function LabSettingsTab({
@@ -35,6 +36,7 @@ export function LabSettingsTab({
   setContributionFilter,
   filteredContributions,
   handleViewContribution,
+  SettingsDialogComponent,
 }: LabSettingsTabProps) {
   return (
     <div className="mt-4">
@@ -66,7 +68,7 @@ export function LabSettingsTab({
             </TabsList>
 
             <TabsContent value="general">
-              <SettingsDialog />
+              {SettingsDialogComponent ? SettingsDialogComponent : <SettingsDialog lab={{}} />}
             </TabsContent>
 
             <TabsContent value="contributions">
@@ -150,13 +152,13 @@ export function LabSettingsTab({
                                   {contribution.files.length} file{contribution.files.length !== 1 && "s"}
                                 </span>
                               </div>
-                              {contribution.files.some((f) => f.type === "code") && (
+                              {contribution.files.some((f: any) => f.type === "code") && (
                                 <div className="flex items-center gap-1 text-xs text-blue-400">
                                   <Code className="h-3.5 w-3.5" />
                                   <span>Code</span>
                                 </div>
                               )}
-                              {contribution.files.some((f) => f.type === "data") && (
+                              {contribution.files.some((f: any) => f.type === "data") && (
                                 <div className="flex items-center gap-1 text-xs text-green-400">
                                   <Database className="h-3.5 w-3.5" />
                                   <span>Data</span>

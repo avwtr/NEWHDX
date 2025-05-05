@@ -174,6 +174,18 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
       }
       // 3. Update DB row with storageKey
       await supabase.from("files").update({ storageKey }).eq("id", fileId)
+
+      // Add activity log
+      await supabase.from("activity").insert([
+        {
+          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          activity_name: `File Created: ${fullFileName} in ${folder === "root" ? "ROOT" : folder.toUpperCase()}`,
+          activity_type: "filecreated",
+          performed_by: user?.id || null,
+          lab_from: labId
+        }
+      ]);
+
       if (onFileCreated) onFileCreated();
       alert("File created and saved to HDX!")
       handleClose()

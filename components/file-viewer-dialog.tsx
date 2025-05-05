@@ -22,6 +22,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { firebaseStorage } from "@/lib/firebaseClient"
 import { getDownloadURL, ref as firebaseRef, uploadBytes, deleteObject } from "firebase/storage"
 import Papa from "papaparse"
+import { useAuth } from "@/components/auth-provider"
 
 interface FileViewerDialogProps {
   file: {
@@ -43,6 +44,7 @@ interface FileViewerDialogProps {
   userRole?: string
   onDelete?: (fileId: string) => void
   onSave?: (fileId: string, content: any) => void
+  labId: string
 }
 
 // Helper to determine if a file is stored in Firebase (over 50MB)
@@ -127,6 +129,7 @@ export function FileViewerDialog({
   userRole = "guest",
   onDelete,
   onSave,
+  labId,
 }: FileViewerDialogProps) {
   const isAdmin = userRole === "admin"
   const [isEditing, setIsEditing] = useState(false)
@@ -144,6 +147,8 @@ export function FileViewerDialog({
   const [tabularData, setTabularData] = useState<{ columns: string[]; rows: string[][] }>({ columns: [], rows: [] });
 
   const [lastUpdatedByName, setLastUpdatedByName] = useState<string>("");
+  const { user } = useAuth();
+
   useEffect(() => {
     if (file.lastUpdatedBy) {
       fetchUsername(file.lastUpdatedBy).then(setLastUpdatedByName);
@@ -287,6 +292,16 @@ export function FileViewerDialog({
 
       // Update DB content (if you want to keep a content field in DB)
       await onSave(file.id, saveContent);
+      // Log activity after successful save
+      await supabase.from("activity").insert([
+        {
+          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          activity_name: `File Edited: ${file.name}`,
+          activity_type: "fileedit",
+          performed_by: user?.id || null,
+          lab_from: labId
+        }
+      ]);
       setIsEditing(false);
       toast({
         title: "File Saved",

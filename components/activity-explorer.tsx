@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react"
 import { LogCustomEventDialog } from "@/components/log-custom-event-dialog"
+import { supabase } from "@/lib/supabase"
 
 // Sample data for the activity log
 const activityData = [
@@ -1250,10 +1251,47 @@ const ActivityTimeline = ({ activities }: { activities: typeof activityData }) =
   )
 }
 
-// Main Activity Explorer Component
-export default function ActivityExplorer() {
+interface ActivityExplorerProps {
+  labId: string
+}
+
+export default function ActivityExplorer({ labId }: ActivityExplorerProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCustomEventModalOpen, setIsCustomEventModalOpen] = useState(false)
+  const [activities, setActivities] = useState<any[]>([])
+  const [usernames, setUsernames] = useState<{ [userId: string]: { username: string, initials: string } }>({})
+
+  useEffect(() => {
+    async function fetchActivities() {
+      if (!labId) return;
+      const { data, error } = await supabase
+        .from("activity")
+        .select("*")
+        .eq("lab_from", labId)
+        .order("created_at", { ascending: false })
+      if (error) {
+        console.error("Error fetching activity logs:", error)
+        setActivities([])
+        return
+      }
+      setActivities(data || [])
+      // Fetch usernames for all unique performed_by values
+      const uniqueUserIds = Array.from(new Set((data || []).map((a: any) => a.performed_by).filter(Boolean)))
+      if (uniqueUserIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id,username')
+          .in('user_id', uniqueUserIds)
+        const usernameMap: { [userId: string]: { username: string, initials: string } } = {}
+        profiles?.forEach((profile: any) => {
+          const initials = profile.username ? profile.username.split(' ').map((n: string) => n[0]).join('').toUpperCase() : "U"
+          usernameMap[profile.user_id] = { username: profile.username || "Unknown", initials }
+        })
+        setUsernames(usernameMap)
+      }
+    }
+    fetchActivities()
+  }, [labId])
 
   const handleAddCustomEvent = (event: {
     title: string
@@ -1337,7 +1375,7 @@ export default function ActivityExplorer() {
                     LOG CUSTOM EVENT
                   </Button>
                 </div>
-                <ActivityTimeline activities={activityData} />
+                <ActivityTimeline activities={activities} />
               </div>
             </TabsContent>
           </Tabs>
@@ -1369,28 +1407,35 @@ export default function ActivityExplorer() {
 
       <CardContent>
         <div className="space-y-6">
-          {activityData.slice(0, 4).map((activity) => (
-            <div key={activity.id} className="flex gap-3 pb-4 border-b border-secondary last:border-b-0">
-              <Avatar className="h-8 w-8 flex-shrink-0">
-                <AvatarImage src={activity.user.avatar || "/placeholder.svg"} alt={activity.user.name} />
-                <AvatarFallback>{activity.user.initials}</AvatarFallback>
-              </Avatar>
-              <div className="space-y-2 min-w-0 flex-1 pr-2">
-                <p className="text-sm break-words">
-                  <span className="font-medium">{activity.user.name}</span>{" "}
-                  {activity.type === "file_upload" && "uploaded a file"}
-                  {activity.type === "doc_update" && "updated documentation"}
-                  {activity.type === "comment" && "commented on a contribution"}
-                  {activity.type === "fork" && "forked the lab"}
-                </p>
-                <div className="flex items-center text-xs text-muted-foreground flex-wrap">
-                  {getActivityIcon(activity.type)}
-                  <span className="ml-1 break-all">{activity.content}</span>
+          {activities.slice(0, 4).map((activity, index) => {
+            const userInfo = usernames[activity.performed_by] || { username: "Unknown", initials: "U" }
+            const key = activity.id || activity.activity_id || activity.created_at || index;
+            return (
+              <div key={key} className="flex gap-3 pb-4 border-b border-secondary last:border-b-0">
+                <Avatar className="h-8 w-8 flex-shrink-0">
+                  <AvatarImage src="/placeholder.svg" alt={userInfo.username} />
+                  <AvatarFallback>{userInfo.initials}</AvatarFallback>
+                </Avatar>
+                <div className="space-y-2 min-w-0 flex-1 pr-2">
+                  <p className="text-sm break-words">
+                    <span className="font-medium">{userInfo.username}</span>{" "}
+                    {activity.activity_type === "fileupload" && "uploaded a file"}
+                    {activity.activity_type === "filecreated" && "created a file"}
+                    {activity.activity_type === "filedelete" && "deleted a file"}
+                    {activity.activity_type === "filemoved" && "moved a file"}
+                    {activity.activity_type === "fileedited" && "edited a file"}
+                    {activity.activity_type === "bulletinposted" && "posted a bulletin"}
+                    {activity.activity_type === "bulletinedited" && "edited a bulletin"}
+                    {activity.activity_type === "bulletindeleted" && "deleted a bulletin"}
+                  </p>
+                  <div className="flex items-center text-xs text-muted-foreground flex-wrap">
+                    <span className="ml-1 break-all">{activity.activity_name}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{activity.created_at ? new Date(activity.created_at).toLocaleString() : ""}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">{activity.timestamp}</p>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </CardContent>
     </Card>

@@ -235,10 +235,10 @@ export function FileUploadDialog({
       await supabase.from("activity").insert([
         {
           activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          activity_name: "File Uploaded",
+          activity_name: `File Uploaded: ${fileName} to ${selectedFolder === "root" ? "ROOT" : selectedFolder.toUpperCase()}`,
           activity_type: "fileupload",
           performed_by: user?.id || null,
-          lab_from: labId,
+          lab_from: labId
         },
       ])
 

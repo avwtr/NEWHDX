@@ -26,6 +26,7 @@ import { LabSettingsTab } from "@/components/lab-view/lab-settings-tab"
 import { NotificationsSidebar } from "@/components/lab-view/notifications-sidebar"
 import { LoginPrompt } from "@/components/lab-view/login-prompt"
 import { LabDialogs } from "@/components/lab-view/lab-dialogs"
+import { SettingsDialog } from "@/components/settings-dialog"
 
 // Data imports
 import {
@@ -37,10 +38,25 @@ import {
   contributionsData,
 } from "@/components/lab-view/lab-data"
 
-export default function LabView({ lab, categories, isGuest, isFollowing, setIsFollowing, notifications, notificationsSidebarOpen, setNotificationsSidebarOpen, handleGuestAction, setActiveTab, router }) {
+// Add type for props
+interface LabViewProps {
+  lab: any;
+  categories: any;
+  isGuest: any;
+  isFollowing: any;
+  setIsFollowing: any;
+  notifications: any;
+  notificationsSidebarOpen: any;
+  setNotificationsSidebarOpen: any;
+  handleGuestAction: any;
+  setActiveTab: any;
+  router: any;
+}
+
+export default function LabView({ lab, categories, isGuest, isFollowing, setIsFollowing, notifications, notificationsSidebarOpen, setNotificationsSidebarOpen, handleGuestAction, setActiveTab, router }: LabViewProps) {
   const { user } = useAuth()
 
-  const { currentRole, currentUser } = useRole()
+  const { currentRole } = useRole()
   const isUser = currentRole === "user"
 
   // Tab state
@@ -90,11 +106,11 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
   const pendingContributions = contributions.filter((c) => c.status === "pending")
   const pendingCount = pendingContributions.length
 
-  const [experiments, setExperiments] = useState([])
-  const [files, setFiles] = useState([])
-  const [funding, setFunding] = useState([])
-  const [members, setMembers] = useState([])
-  const [bulletins, setBulletins] = useState([])
+  const [experiments, setExperiments] = useState<any[]>([])
+  const [files, setFiles] = useState<any[]>([])
+  const [funding, setFunding] = useState<any[]>([])
+  const [members, setMembers] = useState<any[]>([])
+  const [bulletins, setBulletins] = useState<any[]>([])
 
   // --- Add state for experiments and funding ---
   const [experimentsCount, setExperimentsCount] = useState(0)
@@ -102,6 +118,8 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
 
   // --- LAB ADMIN STATUS ---
   const [isAdmin, setIsAdmin] = useState(false)
+
+  const [labState, setLabState] = useState(lab)
 
   useEffect(() => {
     const fetchLabData = async () => {
@@ -386,7 +404,7 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
       {/* Lab Profile - Full width at the top */}
       <div className="w-full mb-6">
         <LabProfile
-          lab={lab}
+          lab={labState}
           categories={categories}
           notifications={localNotifications}
           isAdmin={isAdmin}
@@ -402,7 +420,6 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
           filesCount={files.length}
           fundingTotal={fundingTotal}
           membersCount={members.length}
-          bulletinsCount={bulletins.length}
         />
       </div>
 
@@ -476,7 +493,7 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
           </div>
 
           {/* Activity Explorer */}
-          <ActivityExplorer />
+          <ActivityExplorer labId={lab.labId} />
         </div>
 
         {/* Main content area */}
@@ -491,6 +508,7 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
               setExperimentsExpanded={setExperimentsExpanded}
               setCreateExperimentDialogOpen={setCreateExperimentDialogOpen}
               liveExperimentsData={liveExperimentsData}
+              labId={lab.labId}
             />
           )}
 
@@ -528,7 +546,7 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
                 </div>
               </CardHeader>
               <CardContent>
-                <ExperimentsList />
+                <ExperimentsList labId={lab.labId} />
               </CardContent>
               <CardFooter>
                 <Button variant="outline" className="w-full border-accent text-accent hover:bg-secondary" asChild>
@@ -568,6 +586,7 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
               setContributionFilter={setContributionFilter}
               filteredContributions={filteredContributions}
               handleViewContribution={handleViewContribution}
+              SettingsDialogComponent={<SettingsDialog lab={labState} onLabUpdated={setLabState} />}
             />
           )}
         </div>

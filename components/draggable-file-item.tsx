@@ -66,6 +66,7 @@ interface FileItemProps {
   isDraggedOver?: boolean
   userRole?: string
   onClick?: () => void
+  labId: string
 }
 
 // Utility to format file sizes
@@ -123,6 +124,7 @@ export function DraggableFileItem({
   isDraggedOver,
   userRole = "guest",
   onClick,
+  labId,
 }: FileItemProps) {
   const isAdmin = userRole === "admin"
   const [isRenaming, setIsRenaming] = useState(false)
@@ -485,6 +487,7 @@ export function DraggableFileItem({
           userRole={userRole}
           onDelete={handleDeleteFile}
           onSave={handleSaveFile}
+          labId={labId}
         />
       )}
     </>

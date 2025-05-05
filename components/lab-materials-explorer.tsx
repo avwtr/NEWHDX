@@ -167,9 +167,24 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
         .eq("id", file.id)
         .eq("labID", labId);
       if (updateError) throw updateError;
+
+      // Activity log with more detailed information
+      const username = await fetchUsername(user?.id || "");
+      const oldFolder = file.folder || "root";
+      const newFolderName = newFolder === "root" ? "ROOT" : newFolder.toUpperCase();
+      await supabase.from("activity").insert([
+        {
+          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          activity_name: `File Moved: ${file.filename || file.name} from ${oldFolder.toUpperCase()} to ${newFolderName}`,
+          activity_type: "filemoved",
+          performed_by: user?.id,
+          lab_from: labId
+        }
+      ]);
+
       toast({
         title: "File moved",
-        description: "File has been moved to the new folder.",
+        description: `File has been moved to ${newFolderName}.`,
       });
     } catch (error) {
       // Optionally: refetch or rollback UI
@@ -240,15 +255,13 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       }
       await fetchFilesAndFolders();
       // Activity log
-      const username = await fetchUsername(user?.id || "");
       await supabase.from("activity").insert([
         {
           activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          activity_name: "File Renamed",
+          activity_name: `File Renamed: ${fileToRename.filename} to ${newFileName}`,
           activity_type: "filerenamed",
           performed_by: user?.id,
-          lab_from: labId,
-          log: `File '${fileToRename.filename}' was renamed to '${newFileName}' by ${username}`,
+          lab_from: labId
         }
       ]);
       toast({ title: "File Renamed", description: `${fileToRename.filename} renamed to ${newFileName}.` });
@@ -260,60 +273,88 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     }
   };
 
-  // Delete file
-  const handleDeleteFile = async (fileId: string) => {
+  // Handle file delete
+  const handleFileDelete = async (fileId: string) => {
     if (!isAdmin) return;
-    let prevFolders = JSON.parse(JSON.stringify(folders));
-    let prevRootFiles = JSON.parse(JSON.stringify(rootFiles));
-    let fileToDelete = rootFiles.find((file: any) => file.id === fileId);
-    let sourceFolderId = "";
-    if (!fileToDelete) {
-      for (const folder of folders) {
-        const foundFile = folder.files.find((file: any) => file.id === fileId);
-        if (foundFile) {
-          fileToDelete = foundFile;
-          sourceFolderId = folder.id;
-          break;
+    console.log("[handleFileDelete] Starting deletion for fileId:", fileId);
+    try {
+      // Find the file
+      let fileToDelete = rootFiles.find(f => f.id === fileId);
+      let sourceFolderId = "";
+      if (!fileToDelete) {
+        for (const folder of folders) {
+          fileToDelete = folder.files.find((f: any) => f.id === fileId);
+          if (fileToDelete) {
+            sourceFolderId = folder.id;
+            break;
+          }
         }
       }
-    }
-    if (!fileToDelete) return;
-    // Optimistically update UI
-    if (sourceFolderId && sourceFolderId !== "root") {
-      setFolders((prev) => prev.map((folder) => folder.id === sourceFolderId ? { ...folder, files: folder.files.filter((file: any) => file.id !== fileId) } : folder));
-    } else {
-      setRootFiles((prev) => prev.filter((file: any) => file.id !== fileId));
-    }
-    // Backend
-    try {
+      if (!fileToDelete) {
+        console.log("[handleFileDelete] File not found:", fileId);
+        return;
+      }
+      console.log("[handleFileDelete] Found file to delete:", fileToDelete);
+
+      // Optimistically update UI
+      if (sourceFolderId) {
+        setFolders(prev => prev.map(folder =>
+          folder.id === sourceFolderId
+            ? { ...folder, files: folder.files.filter((f: any) => f.id !== fileId) }
+            : folder
+        ));
+      } else {
+        setRootFiles(prev => prev.filter((f: any) => f.id !== fileId));
+      }
+
+      // Delete from storage
+      console.log("[handleFileDelete] Deleting from storage...");
       if (isFirebaseFile(fileToDelete)) {
-        // Delete from Firebase Storage
         const firebaseFileRef = firebaseRef(firebaseStorage, fileToDelete.storageKey);
         await deleteObject(firebaseFileRef);
       } else {
-        // Supabase Storage
-        const filePath = sourceFolderId && sourceFolderId !== "root" ? `${labId}/${sourceFolderId}/${fileToDelete.filename}` : `${labId}/${fileToDelete.filename}`;
+        const filePath = sourceFolderId ? `${labId}/${sourceFolderId}/${fileToDelete.filename}` : `${labId}/${fileToDelete.filename}`;
         await supabase.storage.from("labmaterials").remove([filePath]);
       }
-      await supabase.from("files").delete().eq("id", fileToDelete.id);
-      // Activity log
+
+      // Delete from database
+      console.log("[handleFileDelete] Deleting from database...");
+      await supabase.from("files").delete().eq("id", fileId);
+
+      // Activity log with detailed information
+      console.log("[handleFileDelete] Creating activity log...");
       const username = await fetchUsername(user?.id || "");
-      await supabase.from("activity").insert([
-        {
-          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          activity_name: "File Deleted",
-          activity_type: "filedelete",
-          performed_by: user?.id,
-          lab_from: labId,
-          log: `File '${fileToDelete.filename}' was deleted by ${username}`,
-        }
-      ]);
-      toast({ title: "File Deleted", description: `${fileToDelete.filename} deleted successfully.` });
-    } catch (err: any) {
-      setFolders(prevFolders);
-      setRootFiles(prevRootFiles);
-      toast({ title: "Error", description: `Failed to delete file: ${err.message}` });
-      return;
+      const folderName = sourceFolderId ? sourceFolderId.toUpperCase() : "ROOT";
+      const activityData = {
+        activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+        activity_name: `File Deleted: ${fileToDelete.filename} from ${folderName}`,
+        activity_type: "filedelete",
+        performed_by: user?.id,
+        lab_from: labId
+      };
+      console.log("[handleFileDelete] Activity data:", activityData);
+      
+      const { error: activityError } = await supabase.from("activity").insert([activityData]);
+      if (activityError) {
+        console.error("[handleFileDelete] Activity log error:", activityError);
+      } else {
+        console.log("[handleFileDelete] Activity log created successfully");
+      }
+
+      toast({
+        title: "File Deleted",
+        description: `${fileToDelete.filename} has been deleted.`,
+      });
+    } catch (error) {
+      console.error("[handleFileDelete] Error:", error);
+      const err = error as Error;
+      toast({
+        title: "Error",
+        description: `Failed to delete file: ${err.message}`,
+        variant: "destructive",
+      });
+      // Refresh to ensure UI is in sync
+      fetchFilesAndFolders();
     }
   };
 
@@ -341,11 +382,10 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       await supabase.from("activity").insert([
         {
           activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          activity_name: "Folder Deleted",
+          activity_name: `Folder Deleted: ${folderId}`,
           activity_type: "folderdeleted",
           performed_by: user?.id,
-          lab_from: labId,
-          log: `Folder '${folderId}' was deleted by ${username}`,
+          lab_from: labId
         }
       ]);
       toast({ title: "Folder Deleted", description: `Folder ${folderId} and its files deleted.` });
@@ -410,11 +450,10 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     await supabase.from("activity").insert([
       {
         activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-        activity_name: "Folder Created",
+        activity_name: `Folder Created: ${folderName}`,
         activity_type: "foldercreated",
         performed_by: user?.id,
-        lab_from: labId,
-        log: `Folder '${folderName}' was created by ${username}`,
+        lab_from: labId
       }
     ]);
     toast({ title: "Folder Created", description: `New folder \"${folderName}\" has been created` });
@@ -692,76 +731,6 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     }
   };
 
-  // Handle file delete
-  const handleFileDelete = async (fileId: string) => {
-    if (!isAdmin) return;
-    try {
-      // Find the file
-      let fileToDelete = rootFiles.find(f => f.id === fileId);
-      let sourceFolderId = "";
-      if (!fileToDelete) {
-        for (const folder of folders) {
-          fileToDelete = folder.files.find((f: any) => f.id === fileId);
-          if (fileToDelete) {
-            sourceFolderId = folder.id;
-            break;
-          }
-        }
-      }
-      if (!fileToDelete) return;
-
-      // Optimistically update UI
-      if (sourceFolderId) {
-        setFolders(prev => prev.map(folder =>
-          folder.id === sourceFolderId
-            ? { ...folder, files: folder.files.filter((f: any) => f.id !== fileId) }
-            : folder
-        ));
-      } else {
-        setRootFiles(prev => prev.filter((f: any) => f.id !== fileId));
-      }
-
-      // Delete from storage
-      if (isFirebaseFile(fileToDelete)) {
-        const firebaseFileRef = firebaseRef(firebaseStorage, fileToDelete.storageKey);
-        await deleteObject(firebaseFileRef);
-      } else {
-        const filePath = sourceFolderId ? `${labId}/${sourceFolderId}/${fileToDelete.filename}` : `${labId}/${fileToDelete.filename}`;
-        await supabase.storage.from("labmaterials").remove([filePath]);
-      }
-
-      // Delete from database
-      await supabase.from("files").delete().eq("id", fileId);
-
-      // Activity log
-      const username = await fetchUsername(user?.id || "");
-      await supabase.from("activity").insert([
-        {
-          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          activity_name: "File Deleted",
-          activity_type: "filedelete",
-          performed_by: user?.id,
-          lab_from: labId,
-          log: `File '${fileToDelete.filename}' was deleted by ${username}`,
-        }
-      ]);
-
-      toast({
-        title: "File Deleted",
-        description: `${fileToDelete.filename} has been deleted.`,
-      });
-    } catch (error) {
-      const err = error as Error;
-      toast({
-        title: "Error",
-        description: `Failed to delete file: ${err.message}`,
-        variant: "destructive",
-      });
-      // Refresh to ensure UI is in sync
-      fetchFilesAndFolders();
-    }
-  };
-
   // Handle file download
   const handleFileDownload = async (file: any) => {
     try {
@@ -817,6 +786,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       onDelete={handleFileDelete}
       onDownload={handleFileDownload}
       userRole={isAdmin ? "admin" : "user"}
+      labId={labId}
     />
   );
 
@@ -922,14 +892,15 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
             {rootFiles.map((file: any) => (
               <DraggableFileItemDnd
                 key={file.id || `root-${file.filename}`}
-              id={file.id}
+                id={file.id}
                 file={file}
-              onRename={handleRenameFile}
+                onRename={handleRenameFile}
                 onDelete={handleFileDelete}
                 onDownload={handleFileDownload}
                 userRole={isAdmin ? "admin" : "user"}
-            />
-          ))}
+                labId={labId}
+              />
+            ))}
             {/* Root drop zone as a droppable */}
             <DroppableRoot />
         </div>
@@ -953,6 +924,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
                   onDrop={(e, targetId) => {}}
                   onDelete={() => {}}
                   onDownload={() => handleFileDownload(activeDragFile)}
+                  labId={labId}
                 />
               </div>
             ) : null}

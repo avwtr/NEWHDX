@@ -76,7 +76,7 @@ export default function LabProfile({
                 variant="outline"
                 size="sm"
                 className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
-                onClick={() => router.push("/create-lab")}
+                onClick={() => setActiveTab("settings")}
               >
                 EDIT LAB
               </Button>

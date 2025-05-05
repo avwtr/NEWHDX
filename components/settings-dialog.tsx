@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,10 +13,21 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Users, Bell, Tag, Info, X, Plus } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { toast } from "@/hooks/use-toast"
 
-export function SettingsDialog() {
-  const [labName, setLabName] = useState("Neuroscience Lab")
-  const [description, setDescription] = useState("Research on neural networks and brain mapping technologies")
+interface SettingsDialogProps {
+  lab: any
+  onLabUpdated?: (lab: any) => void
+}
+
+export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
+  const [labName, setLabName] = useState(lab.labName || "")
+  const [description, setDescription] = useState(lab.description || "")
+  const [profilePic, setProfilePic] = useState(lab.profilePic || "")
+  const [newProfilePicFile, setNewProfilePicFile] = useState<File | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedTags, setSelectedTags] = useState(["neuroscience", "brain-mapping", "cognitive-science"])
 
   // Sample admins data
@@ -55,6 +66,55 @@ export function SettingsDialog() {
       ...notificationSettings,
       [key]: !notificationSettings[key],
     })
+  }
+
+  const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setNewProfilePicFile(file)
+      setProfilePic(URL.createObjectURL(file))
+    }
+  }
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    let profilePicUrl = profilePic
+    try {
+      // If a new profile pic is selected, upload it
+      if (newProfilePicFile) {
+        const fileExt = newProfilePicFile.name.split('.').pop()
+        const uniqueSuffix = Date.now()
+        const fileName = `${lab.labId}-${uniqueSuffix}.${fileExt}`
+        console.log("Uploading profile pic (unique):", fileName, newProfilePicFile.size, newProfilePicFile.type)
+        const uploadResponse = await supabase.storage.from("lab-profile-pics").upload(fileName, newProfilePicFile)
+        console.log("Upload response (unique):", uploadResponse)
+        if (uploadResponse.error) {
+          toast({ title: "Error uploading profile pic", description: uploadResponse.error.message || String(uploadResponse.error), variant: "destructive" })
+          setIsSaving(false)
+          return
+        }
+        const { data: publicUrlData } = supabase.storage.from("lab-profile-pics").getPublicUrl(fileName)
+        console.log("Public URL data:", publicUrlData)
+        if (!publicUrlData?.publicUrl) {
+          toast({ title: "Error getting public URL", description: "No public URL returned", variant: "destructive" })
+          setIsSaving(false)
+          return
+        }
+        profilePicUrl = publicUrlData.publicUrl
+      }
+      // Update the labs table
+      const { error } = await supabase
+        .from("labs")
+        .update({ labName, description, profilePic: profilePicUrl })
+        .eq("labId", lab.labId)
+      if (error) throw error
+      toast({ title: "Lab updated", description: "Lab details saved successfully." })
+      if (onLabUpdated) onLabUpdated({ ...lab, labName, description, profilePic: profilePicUrl })
+    } catch (err: any) {
+      toast({ title: "Error updating lab", description: err.message || String(err), variant: "destructive" })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -110,10 +170,19 @@ export function SettingsDialog() {
               <Label>Lab Logo</Label>
               <div className="flex items-center gap-4">
                 <Avatar className="h-20 w-20">
-                  <AvatarImage src="/placeholder.svg?height=80&width=80" alt="Lab logo" />
-                  <AvatarFallback>NL</AvatarFallback>
+                  <AvatarImage src={profilePic || "/placeholder.svg?height=80&width=80"} alt="Lab logo" />
+                  <AvatarFallback>{lab.labName ? lab.labName[0] : "L"}</AvatarFallback>
                 </Avatar>
-                <FileUploader onChange={() => {}} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  style={{ display: "none" }}
+                  onChange={handleProfilePicChange}
+                />
+                <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSaving}>
+                  Change Logo
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">Recommended size: 400x400px. Max file size: 2MB.</p>
             </div>
@@ -270,7 +339,9 @@ export function SettingsDialog() {
       </CardContent>
       <CardFooter className="flex justify-between">
         <Button variant="outline">Cancel</Button>
-        <Button className="bg-accent text-primary-foreground hover:bg-accent/90">Save Changes</Button>
+        <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save Changes"}
+        </Button>
       </CardFooter>
     </Card>
   )

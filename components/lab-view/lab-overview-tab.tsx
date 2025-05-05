@@ -2,13 +2,14 @@
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Maximize2, Minimize2, Plus, Calendar, Users, Edit, Trash } from "lucide-react"
+import { Maximize2, Minimize2, Plus, Calendar, Users, Edit, Trash, Image as ImageIcon } from "lucide-react"
 import Link from "next/link"
 import { CreateFundDialog } from "@/components/create-fund-dialog"
 import { Badge } from "@/components/ui/badge"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
 
 interface LabOverviewTabProps {
   isAdmin: boolean
@@ -20,6 +21,27 @@ interface LabOverviewTabProps {
   setCreateExperimentDialogOpen: (value: boolean) => void
   liveExperimentsData: any[]
   labId: string
+}
+
+// Hook to fetch and cache usernames by user ID
+function useUsername(userId: string | undefined) {
+  const [username, setUsername] = useState<string>("");
+  const cache = useRef<{ [key: string]: string }>({});
+  useEffect(() => {
+    async function fetchUsername() {
+      if (!userId) { setUsername(""); return; }
+      if (cache.current[userId]) {
+        setUsername(cache.current[userId]);
+        return;
+      }
+      const { data } = await supabase.from('profiles').select('username').eq('user_id', userId).single();
+      const name = data?.username || "Unknown";
+      cache.current[userId] = name;
+      setUsername(name);
+    }
+    fetchUsername();
+  }, [userId]);
+  return username;
 }
 
 export function LabOverviewTab({
@@ -36,36 +58,149 @@ export function LabOverviewTab({
   const [bulletins, setBulletins] = useState<any[]>([])
   const [isAddingBulletin, setIsAddingBulletin] = useState(false)
   const [newBulletinText, setNewBulletinText] = useState("")
+  const [newBulletinImage, setNewBulletinImage] = useState<File | null>(null)
+  const [newBulletinImageUrl, setNewBulletinImageUrl] = useState<string>("")
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
   const [editingBulletinId, setEditingBulletinId] = useState<number | null>(null)
   const [editingText, setEditingText] = useState("")
+  const { user } = useAuth();
+  const [usernames, setUsernames] = useState<{ [userId: string]: string }>({})
 
   useEffect(() => {
     async function fetchBulletins() {
       if (!labId) return
-      const { data, error } = await supabase
-        .from("labBulletins")
+      const response = await supabase
+        .from("bulletin_posts")
         .select("*")
-        .eq("lab_id", labId)
+        .eq("labFrom", labId)
         .order("created_at", { ascending: false })
+      const { data, error, status, statusText } = response;
       if (error) {
+        console.error("Error fetching bulletins:", error);
+        console.error("Full Supabase response:", response);
+        alert(`Error fetching bulletins: ${error.message || JSON.stringify(error)} | status: ${status} ${statusText}`);
         setBulletins([])
         return
       }
       setBulletins(data || [])
+      // Fetch usernames for all unique userFrom values
+      const uniqueUserIds = Array.from(new Set((data || []).map((b: any) => b.userFrom).filter(Boolean)))
+      if (uniqueUserIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id,username')
+          .in('user_id', uniqueUserIds)
+        const usernameMap: { [userId: string]: string } = {}
+        profiles?.forEach((profile: any) => {
+          usernameMap[profile.user_id] = profile.username || "Unknown"
+        })
+        setUsernames(usernameMap)
+      }
     }
     fetchBulletins()
   }, [labId])
 
-  const handleAddBulletin = () => {
-    if (newBulletinText.trim()) {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      alert("Only image files are allowed.")
+      return
+    }
+    setIsUploadingImage(true)
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Date.now()}.${fileExt}`
+      const filePath = `${labId}/${fileName}`
+      const { error: uploadError } = await supabase.storage.from("bulletin-media").upload(filePath, file)
+      if (uploadError) throw uploadError
+      const { data } = supabase.storage.from("bulletin-media").getPublicUrl(filePath)
+      setNewBulletinImage(file)
+      setNewBulletinImageUrl(data.publicUrl)
+    } catch (err: any) {
+      alert("Failed to upload image: " + (err.message || err))
+      setNewBulletinImage(null)
+      setNewBulletinImageUrl("")
+    } finally {
+      setIsUploadingImage(false)
+    }
+  }
+
+  const handleAddBulletin = async () => {
+    if (!newBulletinText.trim()) return;
+    if (!labId) {
+      alert("Lab ID is missing.");
+      return;
+    }
+    if (!user?.id) {
+      alert("You must be logged in to post a bulletin.");
+      return;
+    }
+
+    // Log the data we're about to send
+    const bulletinData = {
+      postText: newBulletinText,
+      media: newBulletinImageUrl || null,
+      labFrom: labId,
+      userFrom: user.id,
+      created_at: new Date().toISOString(),
+    };
+    console.log("Attempting to post bulletin with data:", bulletinData);
+
+    try {
+      const { data, error } = await supabase
+        .from("bulletin_posts")
+        .insert([bulletinData])
+        .select()
+
+      if (error) {
+        console.error("Failed to post bulletin:", error);
+        console.error("Error details:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        alert("Failed to post bulletin: " + (error.message || JSON.stringify(error)));
+        return;
+      }
+
+      console.log("Successfully posted bulletin:", data);
+      
+      // Update local state with the new bulletin
       const newBulletin = {
-        id: Date.now(),
+        id: data[0].id,
         text: newBulletinText,
         date: new Date(),
-      }
-      setBulletins([newBulletin, ...bulletins])
-      setNewBulletinText("")
-      setIsAddingBulletin(false)
+        media: newBulletinImageUrl,
+        created_at: data[0].created_at,
+        postText: newBulletinText,
+        labFrom: labId,
+        userFrom: user.id
+      };
+      
+      setBulletins([newBulletin, ...bulletins]);
+      setNewBulletinText("");
+      setNewBulletinImage(null);
+      setNewBulletinImageUrl("");
+      setIsAddingBulletin(false);
+
+      // Activity logging for bulletin post
+      const activityData = {
+        activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+        activity_name: `Bulletin Posted: ${newBulletinText.substring(0, 50)}`,
+        activity_type: "bulletposted",
+        performed_by: user.id,
+        lab_from: labId
+      };
+      await supabase.from("activity").insert([activityData]);
+    } catch (err: any) {
+      console.error("Failed to post bulletin (catch):", err);
+      console.error("Error details:", {
+        message: err.message,
+        stack: err.stack
+      });
+      alert("Failed to post bulletin: " + (err.message || JSON.stringify(err)));
     }
   }
 
@@ -73,19 +208,61 @@ export function LabOverviewTab({
     const bulletin = bulletins.find((b) => b.id === id)
     if (bulletin) {
       setEditingBulletinId(id)
-      setEditingText(bulletin.text)
+      setEditingText(bulletin.text || bulletin.postText || "")
     }
   }
 
-  const handleSaveEdit = (id: number) => {
+  const handleSaveEdit = async (id: number) => {
     if (editingText.trim()) {
-      setBulletins(bulletins.map((bulletin) => (bulletin.id === id ? { ...bulletin, text: editingText } : bulletin)))
+      // Update in Supabase
+      const { error } = await supabase
+        .from("bulletin_posts")
+        .update({ postText: editingText })
+        .eq("id", id)
+      if (error) {
+        alert("Failed to update bulletin: " + (error.message || JSON.stringify(error)));
+        return;
+      }
+      // Update local state
+      setBulletins(bulletins.map((bulletin) => (bulletin.id === id ? { ...bulletin, text: editingText, postText: editingText } : bulletin)))
       setEditingBulletinId(null)
+      // Log activity
+      if (user?.id && labId) {
+        const activityData = {
+          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          activity_name: `Bulletin Edited: ${editingText.substring(0, 50)}`,
+          activity_type: "bulletinedited",
+          performed_by: user.id,
+          lab_from: labId
+        };
+        await supabase.from("activity").insert([activityData]);
+      }
     }
   }
 
-  const handleDeleteBulletin = (id: number) => {
+  const handleDeleteBulletin = async (id: number) => {
+    // Delete from Supabase
+    const { error } = await supabase
+      .from("bulletin_posts")
+      .delete()
+      .eq("id", id)
+    if (error) {
+      alert("Failed to delete bulletin: " + (error.message || JSON.stringify(error)));
+      return;
+    }
+    // Update local state
     setBulletins(bulletins.filter((bulletin) => bulletin.id !== id))
+    // Log activity
+    if (user?.id && labId) {
+      const activityData = {
+        activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+        activity_name: `Bulletin Deleted: ID ${id}`,
+        activity_type: "bulletindeleted",
+        performed_by: user.id,
+        lab_from: labId
+      };
+      await supabase.from("activity").insert([activityData]);
+    }
   }
 
   return (
@@ -120,11 +297,36 @@ export function LabOverviewTab({
                 onChange={(e) => setNewBulletinText(e.target.value)}
                 className="min-h-[100px]"
               />
-              <div className="flex justify-end gap-2">
+              <div className="flex items-center gap-2">
+                <label htmlFor="bulletin-image-upload" className="cursor-pointer flex items-center gap-1">
+                  <ImageIcon className="h-5 w-5 text-accent" />
+                  <span className="text-xs text-muted-foreground">Attach Image</span>
+                  <input
+                    id="bulletin-image-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageChange}
+                    disabled={isUploadingImage}
+                  />
+                </label>
+                {newBulletinImage && newBulletinImageUrl && (
+                  <img 
+                    src={newBulletinImageUrl} 
+                    alt="Preview" 
+                    className="max-h-24 rounded border ml-2" 
+                    style={{ maxWidth: 120 }}
+                    onError={e => { console.error('[Preview] Image failed to load:', newBulletinImageUrl); e.currentTarget.alt = 'Image failed to load'; }}
+                  />
+                )}
+                {isUploadingImage && <span className="text-xs text-muted-foreground ml-2">Uploading...</span>}
+                <div className="flex-1" />
                 <Button variant="outline" onClick={() => setIsAddingBulletin(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleAddBulletin}>Post Update</Button>
+                <Button onClick={handleAddBulletin} disabled={isUploadingImage}>
+                  Post Update
+                </Button>
               </div>
             </div>
           )}
@@ -153,14 +355,24 @@ export function LabOverviewTab({
                     </div>
                   ) : (
                     <>
-                      <p className="text-sm whitespace-pre-wrap">{bulletin.text}</p>
+                      <p className="text-sm whitespace-pre-wrap">{bulletin.text || bulletin.postText}</p>
+                      {bulletin.media && (
+                        <img
+                          src={bulletin.media}
+                          alt="Bulletin"
+                          className="mt-3 max-h-64 w-auto rounded border"
+                          style={{ maxWidth: '100%', objectFit: 'contain' }}
+                          onError={e => { console.error('[Bulletin] Image failed to load:', bulletin.media); e.currentTarget.alt = 'Image failed to load'; }}
+                        />
+                      )}
                       <div className="flex justify-between items-center mt-2">
                         <span className="text-xs text-muted-foreground">
-                          {new Date(bulletin.created_at).toLocaleDateString("en-US", {
+                          {new Date(bulletin.created_at || bulletin.date).toLocaleDateString("en-US", {
                             year: "numeric",
                             month: "short",
                             day: "numeric",
                           })}
+                          {usernames[bulletin.userFrom] && ` • Posted by ${usernames[bulletin.userFrom]}`}
                         </span>
                         {isAdmin && (
                           <div className="flex gap-2">
