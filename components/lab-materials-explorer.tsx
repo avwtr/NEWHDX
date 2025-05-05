@@ -505,7 +505,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
           .eq("folder", sourceFolder)
           .eq("labID", labId)
         if (error) throw error
-        toast({
+      toast({
           title: "Folder Moved",
           description: `Folder '${sourceFolder}' moved into '${destFolder}'.`,
         })
@@ -666,41 +666,25 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   }
 
   // Handle file save
-  const handleFileSave = async (fileId: string, content: any) => {
-    if (!isAdmin) return;
+  const handleFileSave = async (fileId: string, content: string) => {
     try {
-      // Update UI optimistically
-      const updateFileInState = (files: any[]) => 
-        files.map(f => f.id === fileId ? { ...f, content } : f);
+      // Save to database
+      const { error } = await supabase
+        .from("files")
+        .update({ content })
+        .eq("id", fileId);
 
-      setRootFiles(prev => updateFileInState(prev));
-      setFolders(prev => prev.map(folder => ({
-        ...folder,
-        files: updateFileInState(folder.files)
-      })));
+      if (error) throw error;
 
-      // Activity log
-      const username = await fetchUsername(user?.id || "");
-      await supabase.from("activity").insert([
-        {
-          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          activity_name: "File Edited",
-          activity_type: "fileedited",
-          performed_by: user?.id,
-          lab_from: labId,
-          log: `File was edited by ${username}`,
-        }
-      ]);
-
-      toast({
+    toast({
         title: "File Saved",
         description: "Changes have been saved successfully.",
       });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    } catch (err) {
+      console.error("Error saving file:", err);
       toast({
         title: "Error",
-        description: `Failed to save changes: ${errorMessage}`,
+        description: "Failed to save changes. Please try again.",
         variant: "destructive",
       });
       // Refresh to ensure UI is in sync
@@ -836,52 +820,88 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     />
   );
 
+  // Utility to format file sizes
+  function formatFileSize(size: string | number): string {
+    let bytes = 0;
+    if (typeof size === 'number') {
+      bytes = size;
+    } else if (typeof size === 'string') {
+      const match = size.match(/([\d.]+)\s*(B|KB|MB|GB)?/i);
+      if (match) {
+        const value = parseFloat(match[1]);
+        const unit = (match[2] || 'B').toUpperCase();
+        if (unit === 'B') bytes = value;
+        else if (unit === 'KB') bytes = value * 1024;
+        else if (unit === 'MB') bytes = value * 1024 * 1024;
+        else if (unit === 'GB') bytes = value * 1024 * 1024 * 1024;
+      }
+    }
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  // Fetch username for lastUpdatedBy
+  function useUsername(userId: string | undefined) {
+    const [username, setUsername] = useState<string>("");
+    useEffect(() => {
+      async function fetchUsername() {
+        if (!userId) { setUsername(""); return; }
+        const { data } = await supabase.from('profiles').select('username').eq('user_id', userId).single();
+        setUsername(data?.username || userId || "Unknown");
+      }
+      fetchUsername();
+    }, [userId]);
+    return username;
+  }
+
   return (
     <DndContext sensors={sensors} onDragEnd={handleDndDrop} onDragStart={handleDndDragStart}>
-      <Card className={isExpanded ? "fixed inset-4 z-50 overflow-auto" : ""}>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle>LAB MATERIALS</CardTitle>
-          <div className="flex gap-2 items-center">
-            <Button variant="ghost" size="icon" onClick={() => setIsExpanded(!isExpanded)} className="h-8 w-8">
-              {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent
-          ref={containerRef}
+    <Card className={isExpanded ? "fixed inset-4 z-50 overflow-auto" : ""}>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle>LAB MATERIALS</CardTitle>
+        <div className="flex gap-2 items-center">
+          <Button variant="ghost" size="icon" onClick={() => setIsExpanded(!isExpanded)} className="h-8 w-8">
+            {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent
+        ref={containerRef}
           className={`space-y-4 ${isExpanded ? "min-h-[calc(100vh-200px)]" : ""} relative${isDraggingOver ? " bg-accent/10 border-2 border-dashed border-accent" : ""}`}
           onDragOver={isAdmin ? (e) => { handleContainerDragOver(e); console.log('[CardContent] Drag over'); } : undefined}
-          onDragLeave={isAdmin ? handleContainerDragLeave : undefined}
+        onDragLeave={isAdmin ? handleContainerDragLeave : undefined}
         >
-          <div className="flex justify-center mb-4">
+        <div className="flex justify-center mb-4">
             {isAdmin && (
-              <div className="flex gap-2">
+            <div className="flex gap-2">
                 <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsUploadDialogOpen(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  UPLOAD FILE
-                </Button>
+                <Upload className="h-4 w-4 mr-2" />
+                UPLOAD FILE
+              </Button>
                 <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFileDialogOpen(true)}>
-                  <FileIcon className="h-4 w-4 mr-2" />
-                  CREATE FILE
-                </Button>
+                <FileIcon className="h-4 w-4 mr-2" />
+                CREATE FILE
+              </Button>
                 <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFolderDialogOpen(true)}>
-                  <FolderPlus className="h-4 w-4 mr-2" />
-                  NEW FOLDER
-                </Button>
-              </div>
-            )}
-          </div>
-          <div className="space-y-4">
+                <FolderPlus className="h-4 w-4 mr-2" />
+                NEW FOLDER
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="space-y-4">
             {/* Render folders as droppables */}
             {folders.map(folder => (
               <DroppableFolder
-                key={folder.id}
-                id={folder.id}
+              key={folder.id}
+              id={folder.id}
                 folder={folder}
-                isOpen={openFolders.includes(folder.id)}
-                onToggle={toggleFolder}
-                onRenameFolder={handleRenameFolder}
-                onRenameFile={handleRenameFile}
+              isOpen={openFolders.includes(folder.id)}
+              onToggle={toggleFolder}
+              onRenameFolder={handleRenameFolder}
+              onRenameFile={handleRenameFile}
                 userRole={isAdmin ? "admin" : "user"}
                 renderFileItem={renderFileItem}
                 actions={isAdmin ? (
@@ -896,23 +916,23 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                   </Button>
                 ) : null}
-              />
-            ))}
+            />
+          ))}
             {/* Render root files as draggables */}
             {rootFiles.map((file: any) => (
               <DraggableFileItemDnd
                 key={file.id || `root-${file.filename}`}
-                id={file.id}
+              id={file.id}
                 file={file}
-                onRename={handleRenameFile}
+              onRename={handleRenameFile}
                 onDelete={handleFileDelete}
                 onDownload={handleFileDownload}
                 userRole={isAdmin ? "admin" : "user"}
-              />
-            ))}
+            />
+          ))}
             {/* Root drop zone as a droppable */}
             <DroppableRoot />
-          </div>
+        </div>
           {/* dnd-kit DragOverlay for file drag preview */}
           <DragOverlay>
             {activeDragFile ? (
@@ -925,6 +945,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
                   tag={activeDragFile.fileTag}
                   author={activeDragFile.author}
                   date={activeDragFile.date}
+                  file={activeDragFile}
                   userRole={isAdmin ? "admin" : "user"}
                   onRename={() => {}}
                   onDragStart={(e, id, name, type) => {}}
@@ -936,35 +957,35 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
               </div>
             ) : null}
           </DragOverlay>
-          {isExpanded && (
-            <div className="fixed bottom-8 right-8">
+        {isExpanded && (
+          <div className="fixed bottom-8 right-8">
               <Button onClick={() => setIsExpanded(false)} className="bg-accent text-primary-foreground hover:bg-accent/90">
-                <Minimize2 className="h-4 w-4 mr-2" />
-                Close Expanded View
-              </Button>
-            </div>
-          )}
-        </CardContent>
-        <CardFooter>
+              <Minimize2 className="h-4 w-4 mr-2" />
+              Close Expanded View
+            </Button>
+          </div>
+        )}
+      </CardContent>
+      <CardFooter>
          
         </CardFooter>
-        {/* Dialogs */}
-        {isUploadDialogOpen && (
-          <FileUploadDialog
+      {/* Dialogs */}
+      {isUploadDialogOpen && (
+        <FileUploadDialog
             labId={labId}
-            open={isUploadDialogOpen}
-            onOpenChange={setIsUploadDialogOpen}
-            onClose={() => setIsUploadDialogOpen(false)}
-            onUploadComplete={handleUploadComplete}
-          />
-        )}
-        {isCreateFolderDialogOpen && (
-          <CreateFolderDialog
+          open={isUploadDialogOpen}
+          onOpenChange={setIsUploadDialogOpen}
+          onClose={() => setIsUploadDialogOpen(false)}
+          onUploadComplete={handleUploadComplete}
+        />
+      )}
+      {isCreateFolderDialogOpen && (
+        <CreateFolderDialog
             onCreateFolder={(name, parent) => createFolder(name, parent)}
-            onClose={() => setIsCreateFolderDialogOpen(false)}
-            isOpen={isCreateFolderDialogOpen}
-          />
-        )}
+          onClose={() => setIsCreateFolderDialogOpen(false)}
+          isOpen={isCreateFolderDialogOpen}
+        />
+      )}
         {isCreateFileDialogOpen && <CreateFileDialog labId={labId} onClose={() => setIsCreateFileDialogOpen(false)} onFileCreated={fetchFilesAndFolders} />}
         {/* Folder Delete Confirmation Dialog */}
         <Dialog open={isDeleteFolderDialogOpen} onOpenChange={setIsDeleteFolderDialogOpen}>
@@ -993,7 +1014,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </Card>
+    </Card>
     </DndContext>
   )
 }
@@ -1011,6 +1032,7 @@ function DraggableFileItemDnd({ id, file, ...props }: any) {
         tag={file.fileTag}
         author={file.author}
         date={file.date}
+        file={file}
         {...props}
       />
     </div>

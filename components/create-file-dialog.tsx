@@ -151,7 +151,7 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
         {
           fileType: fileType,
           filename: fullFileName,
-          fileSize: fileSizeKB,
+          fileSize: `${blob.size} B`,
           labID: labId,
           folder: folder,
           initiallycreatedBy: user?.id || null,
@@ -343,10 +343,6 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
                 </Button>
               </div>
               <div>
-                <Button variant="outline" className="mr-2 border-accent text-accent hover:bg-secondary">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
-                </Button>
                 <Button onClick={handleSave} className="bg-accent text-primary-foreground hover:bg-accent/90" disabled={isSaving}>
                   <Save className="h-4 w-4 mr-2" />
                   {isSaving ? "Saving..." : "Save to HDX"}

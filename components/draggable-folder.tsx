@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ChevronDownIcon, ChevronRightIcon, FolderIcon, Edit2, Check, X, Trash2 } from "lucide-react"
+import { ChevronDownIcon, ChevronRightIcon, FolderIcon, Edit2, Check, X, Trash2, Download } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Dialog,
@@ -15,6 +15,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
+import JSZip from "jszip"
+import { supabase } from "@/lib/supabaseClient"
+import { firebaseStorage } from "@/lib/firebaseClient"
+import { getDownloadURL, ref as firebaseRef } from "firebase/storage"
 
 interface FileProps {
   id: string
@@ -39,6 +43,26 @@ interface DraggableFolderProps {
   userRole?: string
   onDeleteFolder?: (id: string) => void
   actions?: React.ReactNode
+}
+
+// Utility function to robustly download a file from Supabase or Firebase (for folder zipping)
+async function fetchFileBlob(file) {
+  if (file.url) {
+    const resp = await fetch(file.url)
+    return await resp.blob()
+  } else if (file.storageKey && file.fileSize && typeof file.fileSize === 'string' && file.fileSize.includes('MB') && parseFloat(file.fileSize) > 50) {
+    // Firebase for large files
+    const url = await getDownloadURL(firebaseRef(firebaseStorage, file.storageKey))
+    const resp = await fetch(url)
+    return await resp.blob()
+  } else if (file.storageKey || file.path) {
+    // Supabase Storage
+    const path = file.storageKey || file.path
+    const { data } = await supabase.storage.from("labmaterials").download(path)
+    if (!data) throw new Error("Failed to download file")
+    return data
+  }
+  throw new Error("No download URL available")
 }
 
 export function DraggableFolder({
@@ -150,6 +174,52 @@ export function DraggableFolder({
     setDeleteDialogOpen(false)
   }
 
+  // Folder download as zip
+  const handleDownloadFolder = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      // Fetch all files in this folder from DB
+      const { data: files, error } = await supabase.from("files").select("*", { count: "exact" }).eq("folder", id)
+      if (error) throw error
+      if (!files || files.length === 0) throw new Error("No files in folder")
+      const zip = new JSZip()
+      let added = 0;
+      for (const file of files) {
+        // Skip folders, .keep, or files with no storageKey/path/url
+        if (
+          file.filename === '.keep' ||
+          file.fileType === 'folder' ||
+          (!file.storageKey && !file.path && !file.url)
+        ) {
+          console.warn(`Skipping file ${file.filename || file.name}: not downloadable`)
+          continue;
+        }
+        try {
+          const blob = await fetchFileBlob(file)
+          zip.file(file.filename || file.name, blob)
+          added++;
+        } catch (err) {
+          console.warn(`Skipping file ${file.filename || file.name}: ${err.message}`)
+        }
+      }
+      if (added === 0) {
+        alert("No downloadable files in this folder.")
+        return;
+      }
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+      const url = URL.createObjectURL(zipBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${name}.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      alert("Failed to download folder as zip: " + (err.message || err))
+    }
+  }
+
   // Determine if the folder should be draggable
   const draggableProps = isAdmin
     ? {
@@ -231,6 +301,15 @@ export function DraggableFolder({
               <Trash2 className="h-4 w-4" />
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400 ml-2"
+            onClick={handleDownloadFolder}
+            title="Download folder as zip"
+          >
+            <Download className="h-5 w-5" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { DocumentEditor } from "@/components/editors/document-editor"
 import { CodeEditor } from "@/components/editors/code-editor"
 import { TabularDataEditor } from "@/components/editors/tabular-data-editor"
-import { Download, Save, Trash2, Edit2, X } from "lucide-react"
+import { Download, Save, Trash2, Edit2, X, Maximize2, Minimize2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import {
   AlertDialog,
@@ -21,6 +21,7 @@ import {
 import { supabase } from "@/lib/supabaseClient"
 import { firebaseStorage } from "@/lib/firebaseClient"
 import { getDownloadURL, ref as firebaseRef, uploadBytes, deleteObject } from "firebase/storage"
+import Papa from "papaparse"
 
 interface FileViewerDialogProps {
   file: {
@@ -34,12 +35,89 @@ interface FileViewerDialogProps {
     url?: string
     storageKey?: string
     path?: string
+    lastUpdatedBy?: string
+    lastUpdated?: string
   }
   isOpen: boolean
   onClose: () => void
   userRole?: string
   onDelete?: (fileId: string) => void
   onSave?: (fileId: string, content: any) => void
+}
+
+// Helper to determine if a file is stored in Firebase (over 50MB)
+function isFirebaseFile(file: any) {
+  if (file.fileSize && typeof file.fileSize === 'string' && file.fileSize.includes('MB')) {
+    return parseFloat(file.fileSize) > 50;
+  }
+  return false;
+}
+
+// Robust CSV parser using PapaParse
+function parseCSV(text: string): { columns: string[]; rows: string[][] } {
+  const result = Papa.parse<string[]>(text, { skipEmptyLines: true });
+  const data = result.data as string[][];
+  if (!data.length) return { columns: [], rows: [] };
+  const [columns, ...rows] = data;
+  return { columns, rows };
+}
+
+// Utility function to robustly download a file from Supabase or Firebase
+export async function downloadFile(file: any) {
+  let url;
+  if (file.url) {
+    url = file.url;
+  } else if (file.storageKey && file.fileSize && typeof file.fileSize === 'string' && file.fileSize.includes('MB') && parseFloat(file.fileSize) > 50) {
+    // Firebase for large files
+    url = await getDownloadURL(firebaseRef(firebaseStorage, file.storageKey));
+  } else if (file.storageKey || file.path) {
+    // Supabase Storage
+    const path = file.storageKey || file.path;
+    const { data } = await supabase.storage.from("labmaterials").download(path);
+    if (!data) throw new Error("Failed to download file");
+    url = URL.createObjectURL(data);
+  }
+  if (!url) throw new Error("No download URL available");
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = file.name || file.filename || 'download';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  // Clean up object URL if created
+  if ((file.storageKey || file.path) && url.startsWith('blob:')) {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Utility to format file sizes
+function formatFileSize(size: string | number): string {
+  let bytes = 0;
+  if (typeof size === 'number') {
+    bytes = size;
+  } else if (typeof size === 'string') {
+    // Try to parse from '123.4 KB', '0.1 MB', etc.
+    const match = size.match(/([\d.]+)\s*(B|KB|MB|GB)?/i);
+    if (match) {
+      const value = parseFloat(match[1]);
+      const unit = (match[2] || 'B').toUpperCase();
+      if (unit === 'B') bytes = value;
+      else if (unit === 'KB') bytes = value * 1024;
+      else if (unit === 'MB') bytes = value * 1024 * 1024;
+      else if (unit === 'GB') bytes = value * 1024 * 1024 * 1024;
+    }
+  }
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+// Optionally, fetch username for lastUpdatedBy
+async function fetchUsername(userId: string): Promise<string> {
+  if (!userId) return '';
+  const { data, error } = await supabase.from('profiles').select('username').eq('user_id', userId).single();
+  return data?.username || userId;
 }
 
 export function FileViewerDialog({
@@ -53,146 +131,169 @@ export function FileViewerDialog({
   const isAdmin = userRole === "admin"
   const [isEditing, setIsEditing] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-
-  // State for different content types
-  const [documentContent, setDocumentContent] = useState("")
-  const [documentFormat, setDocumentFormat] = useState("markdown")
-  const [codeContent, setCodeContent] = useState("")
-  const [codeLanguage, setCodeLanguage] = useState("python")
-  const [tabularData, setTabularData] = useState<{ columns: string[]; rows: string[][] }>({
-    columns: ["Column 1", "Column 2", "Column 3"],
-    rows: [
-      ["", "", ""],
-      ["", "", ""],
-    ],
-  })
+  const [content, setContent] = useState<string>("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string>("")
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
-  // Reset editing state when dialog opens/closes
+  // Editor states for editing
+  const [documentContent, setDocumentContent] = useState("");
+  const [documentFormat, setDocumentFormat] = useState("markdown");
+  const [codeContent, setCodeContent] = useState("");
+  const [codeLanguage, setCodeLanguage] = useState("python");
+  const [tabularData, setTabularData] = useState<{ columns: string[]; rows: string[][] }>({ columns: [], rows: [] });
+
+  const [lastUpdatedByName, setLastUpdatedByName] = useState<string>("");
+  useEffect(() => {
+    if (file.lastUpdatedBy) {
+      fetchUsername(file.lastUpdatedBy).then(setLastUpdatedByName);
+    } else {
+      setLastUpdatedByName("");
+    }
+  }, [file.lastUpdatedBy]);
+
+  // Fetch file content (refactored so it can be called after save)
+  const fetchFileContent = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      let content = null;
+      const fileType = file.type.toLowerCase();
+
+      if (isFirebaseFile(file)) {
+        // Fetch from Firebase Storage
+        if (!file.storageKey) throw new Error('No storageKey for Firebase file');
+        // Add cache-busting param
+        const url = await getDownloadURL(firebaseRef(firebaseStorage, file.storageKey)) + `?t=${Date.now()}`;
+        const response = await fetch(url);
+        content = await response.text();
+      } else {
+        // Fetch from Supabase Storage
+        const path = file.storageKey || file.path;
+        if (!path) throw new Error('No path for Supabase file');
+        // Add cache-busting param
+        const { data, error } = await supabase.storage.from('labmaterials').download(path + `?t=${Date.now()}`);
+        if (error || !data) throw new Error('Failed to download file from Supabase');
+        content = await data.text();
+      }
+
+      if (!content) throw new Error('No file content available');
+
+      // Parse content based on file type
+      if (["csv", "xlsx", "json"].includes(fileType)) {
+        try {
+          // Try parsing as JSON first
+          const jsonData = JSON.parse(content);
+          setContent(JSON.stringify(jsonData, null, 2));
+        } catch {
+          // If not JSON, treat as CSV
+          const rows = content.split("\n").map(row => row.split(","));
+          const formattedContent = rows.map(row => row.join("\t")).join("\n");
+          setContent(formattedContent);
+        }
+      } else {
+        setContent(content);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load file content');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // On dialog open, fetch file content
   useEffect(() => {
     if (isOpen) {
-      setIsEditing(false)
+      setIsEditing(false);
+      fetchFileContent();
     }
-  }, [isOpen, file])
+  }, [isOpen, file]);
 
-  // Fetch file content if not present
+  // When file or isEditing changes, initialize editor state
   useEffect(() => {
-    let ignore = false;
-    async function fetchContent() {
-      setLoading(true);
-      setError(null);
-      try {
-        let url = null;
-        const type = file.type?.toLowerCase();
-       
-        if (file.url) {
-          url = file.url;
-          if (["jpg","jpeg","png","gif","svg","pdf"].includes(type)) {
-            setPreviewUrl(url);
-            setLoading(false);
-            return;
+    if (!isEditing) return;
+    const fileType = file.type.toLowerCase();
+    if (["md", "txt"].includes(fileType)) {
+      setDocumentContent(content);
+      setDocumentFormat(fileType === "md" ? "markdown" : "plaintext");
+    } else if (["py", "js", "ts", "r"].includes(fileType)) {
+      setCodeContent(content);
+      setCodeLanguage(
+        fileType === "py" ? "python" :
+        fileType === "js" ? "javascript" :
+        fileType === "ts" ? "javascript" :
+        fileType === "r" ? "r" : "plaintext"
+      );
+    } else if (["csv", "xlsx", "json"].includes(fileType)) {
+      if (fileType === "csv") {
+        setTabularData(parseCSV(content));
+      } else {
+        // For JSON/XLSX: try to parse as {columns, rows}
+        try {
+          const json = JSON.parse(content);
+          if (json && Array.isArray(json.columns) && Array.isArray(json.rows)) {
+            setTabularData(json);
+          } else if (Array.isArray(json)) {
+            // If it's an array of objects, convert to columns/rows
+            const columns = Object.keys(json[0] || {});
+            const rows = json.map((row: any) => columns.map(col => row[col] ?? ""));
+            setTabularData({ columns, rows });
           } else {
-            // Fetch text content from url
-            const resp = await fetch(url);
-            const text = await resp.text();
-            if (["md", "txt"].includes(type)) setDocumentContent(text);
-            else if (["py", "js", "ts", "r"].includes(type)) setCodeContent(text);
-            else if (["csv", "xlsx", "json"].includes(type)) setTabularData({ columns: ["Data"], rows: text.split("\n").map(row => [row]) });
+            setTabularData({ columns: [], rows: [] });
           }
-        } else if (file.storageKey) {
-          // Firebase Storage
-          url = await getDownloadURL(firebaseRef(firebaseStorage, file.storageKey));
-          if (["jpg","jpeg","png","gif","svg","pdf"].includes(type)) {
-            setPreviewUrl(url);
-            setLoading(false);
-            return;
-          } else {
-            const resp = await fetch(url);
-            const text = await resp.text();
-            if (["md", "txt"].includes(type)) setDocumentContent(text);
-            else if (["py", "js", "ts", "r"].includes(type)) setCodeContent(text);
-            else if (["csv", "xlsx", "json"].includes(type)) setTabularData({ columns: ["Data"], rows: text.split("\n").map(row => [row]) });
-          }
-        } else if (file.path) {
-          // Supabase Storage
-          const { data, error } = await supabase.storage.from("labmaterials").download(file.path);
-          if (error) throw error;
-          if (["jpg","jpeg","png","gif","svg","pdf"].includes(type)) {
-            const blobUrl = URL.createObjectURL(data);
-            setPreviewUrl(blobUrl);
-            setLoading(false);
-            return;
-          } else {
-            const text = await data.text();
-            if (["md", "txt"].includes(type)) setDocumentContent(text);
-            else if (["py", "js", "ts", "r"].includes(type)) setCodeContent(text);
-            else if (["csv", "xlsx", "json"].includes(type)) setTabularData({ columns: ["Data"], rows: text.split("\n").map(row => [row]) });
-          }
+        } catch {
+          setTabularData({ columns: [], rows: [] });
         }
-      } catch (err: any) {
-        if (!ignore) setError("Failed to load file preview.");
-      } finally {
-        if (!ignore) setLoading(false);
       }
     }
-    if (isOpen) fetchContent();
-    return () => { ignore = true; };
-  }, [file, isOpen]);
+  }, [isEditing, content, file.type]);
 
   const handleSave = async () => {
+    if (!onSave) return;
     setLoading(true);
     try {
       const fileType = file.type.toLowerCase();
-      let content;
-      let blob;
-
-      // Prepare content based on file type
-      if (fileType === "md" || fileType === "txt") {
-        content = documentContent;
-        blob = new Blob([content], { type: 'text/plain' });
+      let saveContent = content;
+      if (["md", "txt"].includes(fileType)) {
+        saveContent = documentContent;
       } else if (["py", "js", "ts", "r"].includes(fileType)) {
-        content = codeContent;
-        blob = new Blob([content], { type: 'text/plain' });
-      } else if (["csv", "xlsx", "json"].includes(fileType)) {
-        content = JSON.stringify(tabularData);
-        blob = new Blob([content], { type: 'application/json' });
+        saveContent = codeContent;
+      } else if (["csv"].includes(fileType)) {
+        // Convert tabularData to CSV string
+        const csvRows = [tabularData.columns, ...tabularData.rows].map(row => row.map(cell => `${cell}`.replace(/"/g, '""')).join(",")).join("\n");
+        saveContent = csvRows;
+      } else if (["json", "xlsx"].includes(fileType)) {
+        // Save as JSON string
+        saveContent = JSON.stringify(tabularData);
       }
 
-      if (!content || !blob) {
-        throw new Error("No content to save");
-      }
-
-      // Save to appropriate storage
-      if (file.storageKey) {
+      // Save to storage
+      if (isFirebaseFile(file)) {
         // Firebase Storage
+        if (!file.storageKey) throw new Error('No storageKey for Firebase file');
         const fileRef = firebaseRef(firebaseStorage, file.storageKey);
+        const blob = new Blob([saveContent], { type: 'text/plain' });
         await uploadBytes(fileRef, blob);
         const url = await getDownloadURL(fileRef);
         // Update Supabase record with new URL
-        await supabase
-          .from("files")
-          .update({ url })
-          .eq("id", file.id);
-      } else if (file.path) {
+        await supabase.from("files").update({ url }).eq("id", file.id);
+      } else {
         // Supabase Storage
-        await supabase.storage
-          .from("labmaterials")
-          .upload(file.path, blob, { upsert: true });
+        const path = file.storageKey || file.path;
+        if (!path) throw new Error('No path for Supabase file');
+        const blob = new Blob([saveContent], { type: 'text/plain' });
+        await supabase.storage.from("labmaterials").upload(path, blob, { upsert: true });
       }
 
-      // Call the onSave callback
-      if (onSave) {
-        onSave(file.id, content);
-      }
-
+      // Update DB content (if you want to keep a content field in DB)
+      await onSave(file.id, saveContent);
+      setIsEditing(false);
       toast({
         title: "File Saved",
         description: `${file.name} has been saved successfully.`,
       });
-
-      setIsEditing(false);
+      // After saving, re-fetch the file content from storage to ensure UI is in sync
+      await fetchFileContent();
     } catch (err: any) {
       toast({
         title: "Error",
@@ -205,38 +306,15 @@ export function FileViewerDialog({
   };
 
   const handleDelete = async () => {
+    if (!onDelete) return;
     setLoading(true);
     try {
-      // Delete from storage
-      if (file.storageKey) {
-        // Firebase Storage
-        const fileRef = firebaseRef(firebaseStorage, file.storageKey);
-        await deleteObject(fileRef);
-      } else if (file.path) {
-        // Supabase Storage
-        await supabase.storage
-          .from("labmaterials")
-          .remove([file.path]);
-      }
-
-      // Delete from database
-      await supabase
-        .from("files")
-        .delete()
-        .eq("id", file.id);
-
-      // Call the onDelete callback
-      if (onDelete) {
-        onDelete(file.id);
-      }
-
+      await onDelete(file.id);
       setIsDeleteDialogOpen(false);
       onClose();
-
       toast({
         title: "File Deleted",
         description: `${file.name} has been deleted.`,
-        variant: "destructive",
       });
     } catch (err: any) {
       toast({
@@ -252,36 +330,7 @@ export function FileViewerDialog({
   const handleDownload = async () => {
     setLoading(true);
     try {
-      let url;
-      if (file.url) {
-        url = file.url;
-      } else if (file.storageKey) {
-        // Firebase Storage
-        url = await getDownloadURL(firebaseRef(firebaseStorage, file.storageKey));
-      } else if (file.path) {
-        // Supabase Storage
-        const { data } = await supabase.storage
-          .from("labmaterials")
-          .download(file.path);
-        if (!data) throw new Error("Failed to download file");
-        url = URL.createObjectURL(data);
-      }
-
-      if (!url) throw new Error("No download URL available");
-
-      // Create a temporary link and trigger download
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = file.name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // Clean up object URL if created
-      if (file.path && url.startsWith('blob:')) {
-        URL.revokeObjectURL(url);
-      }
-
+      await downloadFile(file);
       toast({
         title: "File Downloaded",
         description: `${file.name} has been downloaded.`,
@@ -297,101 +346,53 @@ export function FileViewerDialog({
     }
   };
 
-  const renderFileViewer = () => {
-    const fileType = file.type.toLowerCase()
-    if (loading) return <div className="p-8 text-center text-muted-foreground">Loading preview...</div>;
+  const renderContent = () => {
+    if (loading) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
     if (error) return <div className="p-8 text-center text-destructive">{error}</div>;
-    // Document files
-    if (fileType === "md" || fileType === "txt") {
-      return (
-        <div className="max-h-[60vh] overflow-auto">
-          <DocumentEditor
-            content={documentContent}
-            format={documentFormat}
-            onContentChange={setDocumentContent}
-            onFormatChange={setDocumentFormat}
-            readOnly={!isEditing}
-          />
-        </div>
-      )
-    }
-    // Code files
-    else if (["py", "js", "ts", "r"].includes(fileType)) {
-      return (
-        <div className="max-h-[60vh] overflow-auto">
-          <CodeEditor
-            content={codeContent}
-            language={codeLanguage}
-            onContentChange={setCodeContent}
-            onLanguageChange={setCodeLanguage}
-            readOnly={!isEditing}
-          />
-        </div>
-      )
-    }
-    // Tabular data files
-    else if (["csv", "xlsx", "json"].includes(fileType)) {
-      return (
-        <div className="max-h-[60vh] overflow-auto">
-          <TabularDataEditor data={tabularData} onChange={setTabularData} readOnly={!isEditing} />
-        </div>
-      )
-    }
-    // Images and PDFs
-    else if (["jpg", "jpeg", "png", "gif", "svg"].includes(fileType)) {
+
+    const fileType = file.type.toLowerCase();
+
+    // For images and PDFs, show preview
+    if (["jpg", "jpeg", "png", "gif", "svg"].includes(fileType)) {
       return (
         <div className="flex justify-center p-4 bg-gray-50 rounded-md">
-          <img src={previewUrl || "/placeholder.svg?height=300&width=400"} alt={file.name} className="max-h-[500px] object-contain" />
+          <img 
+            src={file.url || file.storageKey || file.path} 
+            alt={file.name} 
+            className="max-h-[500px] object-contain" 
+          />
         </div>
-      )
-    } else if (fileType === "pdf") {
+      );
+    }
+
+    if (fileType === "pdf") {
       return (
         <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-md">
-          <iframe src={previewUrl || undefined} title="PDF Preview" className="w-full max-w-2xl h-[500px] rounded-md border" />
-          <p className="text-lg font-medium mb-2">{file.name}</p>
-          <p className="text-sm text-muted-foreground mb-4">PDF Document</p>
-          <Button asChild variant="outline" size="sm" className="gap-2">
-            <a href={previewUrl || "#"} target="_blank" rel="noopener noreferrer"><Download className="h-4 w-4" /> Download PDF</a>
-          </Button>
+          <iframe 
+            src={file.url || file.storageKey || file.path} 
+            title="PDF Preview" 
+            className="w-full max-w-2xl h-[500px] rounded-md border" 
+          />
         </div>
-      )
+      );
     }
-    // Other file types
-    else {
-      return (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="bg-secondary/50 p-8 rounded-lg mb-4">
-            <div className="text-6xl mb-4">📄</div>
-            <h3 className="text-xl font-bold mb-2">{file.name}</h3>
-            <p className="text-muted-foreground mb-4">
-              {file.size} • Added by {file.author}, {file.date}
-            </p>
-          </div>
-          <p className="text-muted-foreground mb-6">
-            This file type cannot be previewed. Please download the file to view its contents.
-          </p>
-          <Button onClick={handleDownload}>
-            <Download className="h-4 w-4 mr-2" />
-            Download File
-          </Button>
-        </div>
-      )
-    }
-  }
+
+    // For all other files, show content in a pre tag
+    return (
+      <pre className="p-4 bg-secondary/30 rounded-md overflow-auto max-h-[60vh] whitespace-pre-wrap">
+        {content}
+      </pre>
+    );
+  };
 
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className={`max-w-4xl max-h-[90vh] overflow-hidden flex flex-col${isFullScreen ? ' fixed inset-0 z-50 max-w-full max-h-full bg-background' : ''}`} style={isFullScreen ? {padding: 0, borderRadius: 0} : {}}>
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle className="text-xl">{file.name}</DialogTitle>
               <div className="flex items-center gap-2">
-                {isAdmin && isEditing && (
-                  <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
-                    <X className="h-4 w-4 mr-1" /> Cancel
-                  </Button>
-                )}
                 {isAdmin && !isEditing && (
                   <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                     <Edit2 className="h-4 w-4 mr-1" /> Edit
@@ -407,17 +408,67 @@ export function FileViewerDialog({
                     <Trash2 className="h-4 w-4 mr-1" /> Delete
                   </Button>
                 )}
-                <Button variant="outline" size="sm" onClick={onClose}>
-                  Close
-                </Button>
               </div>
             </div>
             <div className="text-sm text-muted-foreground">
-              {file.size} • Added by {file.author}, {file.date}
+              {formatFileSize(file.size)} • Last updated by {lastUpdatedByName || file.lastUpdatedBy || "Unknown"}
+              {file.lastUpdated ? `, ${new Date(file.lastUpdated).toLocaleString()}` : ""}
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-hidden">{renderFileViewer()}</div>
+          <div className={`flex-1 overflow-hidden${isFullScreen ? ' p-0' : ''}`} style={isFullScreen ? {height: '100%', minHeight: 0} : {}}>
+            {isEditing ? (
+              (() => {
+                const fileType = file.type.toLowerCase();
+                if (["md", "txt"].includes(fileType)) {
+                  return (
+                    <div className={isFullScreen ? "h-full" : ""}>
+                      <DocumentEditor
+                        content={documentContent}
+                        format={documentFormat}
+                        onContentChange={setDocumentContent}
+                        onFormatChange={setDocumentFormat}
+                        readOnly={false}
+                      />
+                    </div>
+                  );
+                } else if (["py", "js", "ts", "r"].includes(fileType)) {
+                  return (
+                    <div className={isFullScreen ? "h-full" : ""}>
+                      <CodeEditor
+                        content={codeContent}
+                        language={codeLanguage}
+                        onContentChange={setCodeContent}
+                        onLanguageChange={setCodeLanguage}
+                        readOnly={false}
+                      />
+                    </div>
+                  );
+                } else if (["csv", "xlsx", "json"].includes(fileType)) {
+                  return (
+                    <div className={isFullScreen ? "h-full" : ""}>
+                      <TabularDataEditor
+                        data={tabularData}
+                        onChange={setTabularData}
+                        readOnly={false}
+                      />
+                    </div>
+                  );
+                } else {
+                  return (
+                    <textarea
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      className="w-full h-full p-4 bg-secondary/30 rounded-md resize-none"
+                      style={{ minHeight: "300px" }}
+                    />
+                  );
+                }
+              })()
+            ) : (
+              renderContent()
+            )}
+          </div>
 
           <DialogFooter className="mt-4">
             <div className="flex justify-between w-full">

@@ -181,9 +181,6 @@ export function TabularDataEditor({ data, onChange, readOnly = false }: TabularD
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={saveColumnEdit}>
                           <Check className="h-3 w-3 text-green-500" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={cancelColumnEdit}>
-                          <X className="h-3 w-3 text-red-500" />
-                        </Button>
                       </div>
                     ) : (
                       <>
@@ -235,9 +232,6 @@ export function TabularDataEditor({ data, onChange, readOnly = false }: TabularD
                         />
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={saveCellEdit}>
                           <Check className="h-3 w-3 text-green-500" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={cancelCellEdit}>
-                          <X className="h-3 w-3 text-red-500" />
                         </Button>
                       </div>
                     ) : (

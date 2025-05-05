@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -18,6 +18,7 @@ import {
   Eye,
   Tag,
   Trash2,
+  Download,
 } from "lucide-react"
 import {
   Dialog,
@@ -30,6 +31,8 @@ import {
 import { toast } from "@/hooks/use-toast"
 import { FileViewerDialog } from "@/components/file-viewer-dialog"
 import { Badge } from "@/components/ui/badge"
+import { downloadFile } from "./file-viewer-dialog" // adjust path if moved to utils
+import { supabase } from "@/lib/supabaseClient"
 
 interface FileItemProps {
   id: string
@@ -39,6 +42,20 @@ interface FileItemProps {
   author: string
   date: string
   tag?: string
+  file?: {
+    id: string
+    filename: string
+    fileType: string
+    fileSize: string
+    author: string
+    date: string
+    url?: string
+    storageKey?: string
+    path?: string
+    content?: string
+    lastUpdatedBy?: string
+    lastUpdated?: string
+  }
   onRename: (id: string, newName: string) => void
   onDragStart: (e: React.DragEvent, id: string, name: string, type: string) => void
   onDragOver: (e: React.DragEvent) => void
@@ -51,6 +68,42 @@ interface FileItemProps {
   onClick?: () => void
 }
 
+// Utility to format file sizes
+function formatFileSize(size: string | number): string {
+  let bytes = 0;
+  if (typeof size === 'number') {
+    bytes = size;
+  } else if (typeof size === 'string') {
+    const match = size.match(/([\d.]+)\s*(B|KB|MB|GB)?/i);
+    if (match) {
+      const value = parseFloat(match[1]);
+      const unit = (match[2] || 'B').toUpperCase();
+      if (unit === 'B') bytes = value;
+      else if (unit === 'KB') bytes = value * 1024;
+      else if (unit === 'MB') bytes = value * 1024 * 1024;
+      else if (unit === 'GB') bytes = value * 1024 * 1024 * 1024;
+    }
+  }
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+// Hook to fetch username from userId
+function useUsername(userId: string | undefined) {
+  const [username, setUsername] = useState<string>("");
+  useEffect(() => {
+    async function fetchUsername() {
+      if (!userId) { setUsername(""); return; }
+      const { data } = await supabase.from('profiles').select('username').eq('user_id', userId).single();
+      setUsername(data?.username || "Unknown");
+    }
+    fetchUsername();
+  }, [userId]);
+  return username;
+}
+
 export function DraggableFileItem({
   id,
   name,
@@ -59,6 +112,7 @@ export function DraggableFileItem({
   author,
   date,
   tag,
+  file,
   onRename = () => {},
   onDragStart = () => {},
   onDragOver = () => {},
@@ -79,6 +133,10 @@ export function DraggableFileItem({
   const [fileViewerOpen, setFileViewerOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const fileRef = useRef<HTMLDivElement>(null)
+
+  const lastUpdatedBy = file?.lastUpdatedBy;
+  const lastUpdated = file?.lastUpdated || date;
+  const lastUpdatedByName = useUsername(lastUpdatedBy);
 
   // Determine file tag if not provided
   const fileTag = tag || getAutoTag(type)
@@ -309,7 +367,7 @@ export function DraggableFileItem({
             </div>
           )}
           <p className="text-xs text-muted-foreground">
-            {size} • Added by {author}, {date}
+            {formatFileSize(size || file?.fileSize || 0)} • Last updated by {lastUpdatedByName || lastUpdatedBy || "Unknown"}{lastUpdated ? `, ${new Date(lastUpdated).toLocaleString()}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -331,8 +389,14 @@ export function DraggableFileItem({
           >
             <PlusCircle className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="sm" className="text-accent hover:bg-secondary/80" onClick={() => onDownload({ id, name, type, size, author, date })}>
-            DOWNLOAD
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400"
+            onClick={async () => { try { await downloadFile(file); } catch (e) { alert('Download failed'); } }}
+            title="Download file"
+          >
+            <Download className="h-5 w-5" />
           </Button>
           {isAdmin && (
             <Button
@@ -366,7 +430,7 @@ export function DraggableFileItem({
                 </div>
               )}
               <p className="text-sm text-muted-foreground">
-                {size} • Added by {author}
+                {formatFileSize(size || file?.fileSize || 0)} • Last updated by {lastUpdatedByName || lastUpdatedBy || "Unknown"}{lastUpdated ? `, ${new Date(lastUpdated).toLocaleString()}` : ""}
               </p>
             </div>
           </div>
@@ -411,7 +475,10 @@ export function DraggableFileItem({
             size,
             author,
             date,
-            tag: fileTag,
+            url: file?.url,
+            storageKey: file?.storageKey,
+            path: file?.path,
+            content: file?.content
           }}
           isOpen={fileViewerOpen}
           onClose={() => setFileViewerOpen(false)}
