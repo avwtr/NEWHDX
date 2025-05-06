@@ -55,13 +55,15 @@ export type Contribution = {
 }
 
 interface ContributionDetailModalProps {
-  contribution: Contribution | null
-  isOpen: boolean
-  onClose: () => void
-  onReject: (id: string, reason: string) => void
+  labId: string;
+  contribution: Contribution | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onReject: (id: string, reason: string) => void;
 }
 
 export function ContributionDetailModal({
+  labId,
   contribution,
   isOpen,
   onClose,
@@ -92,42 +94,106 @@ export function ContributionDetailModal({
 
   const handleApprove = async () => {
     if (!contribution) return;
-    console.log('[MODAL APPROVE] Approving contribution with id:', contribution.id);
     try {
+      const labId = (contribution as any).labFrom;
+      if (!labId || typeof labId !== 'string' || labId.length < 8) {
+        console.error('Missing or invalid labId for file insert:', labId);
+        toast({
+          title: 'Lab ID Error',
+          description: 'Cannot approve contribution: missing or invalid lab ID. Please check the contribution data.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (!user?.id || typeof user.id !== 'string' || user.id.length < 8) {
+        console.error('Missing or invalid user.id for file insert:', user?.id);
+        toast({
+          title: 'User ID Error',
+          description: 'Cannot approve contribution: missing or invalid user ID. Please check your authentication.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      for (const file of contribution.files) {
+        // Check for missing or undefined storage_key
+        if (!(file as any).storage_key) {
+          console.error('File is missing storage_key. File object:', file);
+          toast({
+            title: 'File Error',
+            description: `A file in this contribution is missing a storage_key. See console for details.`,
+            variant: 'destructive',
+          });
+          continue;
+        }
+        // Debug: Log the file path before download
+        console.log("Trying to download from cont-requests:", (file as any).storage_key);
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from('cont-requests')
+          .download((file as any).storage_key);
+        if (downloadError) {
+          console.error("Download error details:", downloadError);
+          console.error("Full download error object:", JSON.stringify(downloadError, null, 2));
+          throw downloadError;
+        }
+        console.log('Downloaded file:', (file as any).storage_key);
+        // Convert to arrayBuffer for upload
+        const fileBuffer = await fileData.arrayBuffer();
+        // Upload to labmaterials (root)
+        const newStorageKey = `${labId}/root/${file.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from('labmaterials')
+          .upload(newStorageKey, fileBuffer, { upsert: true });
+        if (uploadError) throw uploadError;
+        console.log('Uploaded file to:', newStorageKey);
+        // Insert into files table
+        const { error: insertError } = await supabase.from('files').insert({
+          filename: file.name,
+          fileType: file.type,
+          fileSize: (file as any).size,
+          labID: labId,
+          initiallycreatedBy: user.id,
+          lastUpdatedBy: user.id,
+          lastUpdated: new Date().toISOString(),
+          folder: 'root',
+          storageKey: newStorageKey,
+        });
+        if (insertError) throw insertError;
+        console.log('Inserted file record for:', file.name);
+        // Delete from cont-requests
+        const { error: deleteError } = await supabase.storage
+          .from('cont-requests')
+          .remove([(file as any).storage_key]);
+        if (deleteError) throw deleteError;
+        console.log('Deleted from cont-requests:', (file as any).storage_key);
+      }
+      // Update contribution request
       const updatePayload = {
         status: 'accepted',
-        reviewed_by: user?.id,
-        reviewed_at: new Date().toISOString()
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+        files: [],
       };
-      console.log('[MODAL APPROVE] Update payload:', updatePayload);
-
-      let data, error;
-      try {
-        const result = await supabase
-          .from('contribution_requests')
-          .update(updatePayload)
-          .eq('id', Number(contribution.id));
-        data = result.data;
-        error = result.error;
-        console.log('[MODAL APPROVE] Supabase update result:', result);
-      } catch (supabaseError) {
-        console.error('[MODAL APPROVE] Supabase threw:', supabaseError, typeof supabaseError, supabaseError?.stack);
-        throw supabaseError;
-      }
-
-      if (error) {
-        console.error('[MODAL APPROVE] Supabase update error:', error, typeof error, error?.message, error?.stack);
-        throw error;
-      }
-
-      console.log('[MODAL APPROVE] Update result:', data);
+      const { error: updateError } = await supabase
+        .from('contribution_requests')
+        .update(updatePayload)
+        .eq('id', Number(contribution.id));
+      if (updateError) throw updateError;
       toast({
         title: 'Contribution Approved',
-        description: `You have approved "${contribution.title}"`,
+        description: `You have approved "${contribution.title}" and files have been moved to lab materials.`,
       });
       onClose();
     } catch (error) {
-      console.error('[MODAL APPROVE] Error approving contribution:', error, typeof error, error?.message, error?.stack);
+      console.error('[MODAL APPROVE] Error:', error);
+      try {
+        console.error('Stringified error:', JSON.stringify(error, null, 2));
+      } catch (e) {
+        console.error('Error could not be stringified:', e);
+      }
+      if (error instanceof Error) {
+        console.error('Error.message:', error.message);
+        console.error('Error.stack:', error.stack);
+      }
       toast({
         title: 'Error',
         description: 'Failed to approve contribution',
@@ -136,20 +202,40 @@ export function ContributionDetailModal({
     }
   };
 
-  const handleReject = () => {
-    if (showRejectForm) {
-      onReject(contribution.id, rejectReason)
+  const handleReject = async () => {
+    if (!contribution) return;
+    try {
+      for (const file of contribution.files) {
+        const { error: deleteError } = await supabase.storage
+          .from('cont-requests')
+          .remove([(file as any).storage_key]);
+        if (deleteError) throw deleteError;
+      }
+      const updatePayload = {
+        status: 'rejected',
+        reviewed_by: user?.id,
+        reviewed_at: new Date().toISOString(),
+        files: [],
+      };
+      const { error: updateError } = await supabase
+        .from('contribution_requests')
+        .update(updatePayload)
+        .eq('id', Number(contribution.id));
+      if (updateError) throw updateError;
       toast({
-        title: "Contribution Rejected",
-        description: `You have rejected "${contribution.title}"`,
-      })
-      onClose()
-      setRejectReason("")
-      setShowRejectForm(false)
-    } else {
-      setShowRejectForm(true)
+        title: 'Contribution Rejected',
+        description: `You have rejected "${contribution.title}" and files have been deleted.`,
+      });
+      onClose();
+    } catch (error) {
+      console.error('[MODAL REJECT] Error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to reject contribution',
+        variant: 'destructive',
+      });
     }
-  }
+  };
 
   const handleCancelReject = () => {
     setShowRejectForm(false)
@@ -292,7 +378,7 @@ export function ContributionDetailModal({
                               author: '',
                               date: '',
                               bucket: 'cont-requests',
-                              storageKey: (file as any).storage_key,
+                              storageKey: (file as any).storageKey,
                             })
                           }}>
                             <Download className="h-4 w-4 mr-1" />
@@ -308,7 +394,7 @@ export function ContributionDetailModal({
                               author: '',
                               date: '',
                               bucket: 'cont-requests',
-                              storageKey: (file as any).storage_key,
+                              storageKey: (file as any).storageKey,
                             });
                             setFilePreviewOpen(true);
                           }}>
@@ -364,7 +450,7 @@ export function ContributionDetailModal({
           file={filePreview}
           isOpen={filePreviewOpen}
           onClose={() => setFilePreviewOpen(false)}
-          labId={''}
+          labId={labId}
           userRole={"guest"}
         />
       )}

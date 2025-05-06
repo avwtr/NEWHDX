@@ -33,7 +33,15 @@ export function ContributionDialog({ open, onOpenChange, experimentId, experimen
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleFileChange = (files: File[]) => {
-    setSelectedFiles(files)
+    // Filter out files that are already in selectedFiles (by name and size)
+    const newFiles = files.filter(
+      (newFile) =>
+        !selectedFiles.some(
+          (existingFile) =>
+            existingFile.name === newFile.name && existingFile.size === newFile.size
+        )
+    );
+    setSelectedFiles([...selectedFiles, ...newFiles]);
   }
 
   const handleSubmit = async () => {
