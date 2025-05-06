@@ -25,6 +25,7 @@ import { downloadFile } from "./file-viewer-dialog"
 import { supabase } from "@/lib/supabase"
 import dayjs from "dayjs"
 import relativeTime from "dayjs/plugin/relativeTime"
+import { useAuth } from '@/components/auth-provider'
 dayjs.extend(relativeTime)
 
 export type ContributionFile = {
@@ -57,7 +58,6 @@ interface ContributionDetailModalProps {
   contribution: Contribution | null
   isOpen: boolean
   onClose: () => void
-  onApprove: (id: string) => void
   onReject: (id: string, reason: string) => void
 }
 
@@ -65,16 +65,17 @@ export function ContributionDetailModal({
   contribution,
   isOpen,
   onClose,
-  onApprove,
   onReject,
 }: ContributionDetailModalProps) {
-  // All hooks at the top
+  if (!contribution) return null;
+  // All hooks below this line
   const [activeTab, setActiveTab] = useState("details")
   const [rejectReason, setRejectReason] = useState("")
   const [showRejectForm, setShowRejectForm] = useState(false)
   const [filePreview, setFilePreview] = useState<any | null>(null)
   const [filePreviewOpen, setFilePreviewOpen] = useState(false)
   const [submitterUsername, setSubmitterUsername] = useState<string | null>(null)
+  const { user } = useAuth();
 
   useEffect(() => {
     async function fetchSubmitterUsername() {
@@ -89,16 +90,36 @@ export function ContributionDetailModal({
     fetchSubmitterUsername()
   }, [contribution?.submittedBy])
 
-  if (!contribution) return null
-
-  const handleApprove = () => {
-    onApprove(contribution.id)
-    toast({
-      title: "Contribution Approved",
-      description: `You have approved "${contribution.title}"`,
-    })
-    onClose()
-  }
+  const handleApprove = async () => {
+    if (!contribution) return;
+    console.log('[MODAL APPROVE] Approving contribution with id:', contribution.id);
+    try {
+      const updatePayload = {
+        status: 'accepted',
+        reviewedBy: user?.id,
+        reviewed_at: new Date().toISOString()
+      };
+      console.log('[MODAL APPROVE] Update payload:', updatePayload);
+      const { data, error } = await supabase
+        .from('contribution_requests')
+        .update(updatePayload)
+        .eq('id', Number(contribution.id));
+      console.log('[MODAL APPROVE] Update result:', data, error);
+      if (error) throw error;
+      toast({
+        title: 'Contribution Approved',
+        description: `You have approved "${contribution.title}"`,
+      });
+      onClose();
+    } catch (error) {
+      console.error('[MODAL APPROVE] Error approving contribution:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to approve contribution',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const handleReject = () => {
     if (showRejectForm) {

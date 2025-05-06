@@ -93,16 +93,18 @@ export function LabDialogs({
             />
           )}
 
-          <ContributionDetailModal
-            contribution={selectedContribution}
-            isOpen={contributionDetailOpen}
-            onClose={() => {
-              setContributionDetailOpen(false)
-              setSelectedContribution(null)
-            }}
-            onApprove={handleApproveContribution}
-            onReject={handleRejectContribution}
-          />
+          {contributionDetailOpen && selectedContribution && (
+            <ContributionDetailModal
+              contribution={selectedContribution}
+              isOpen={contributionDetailOpen}
+              onClose={() => {
+                setContributionDetailOpen(false)
+                setSelectedContribution(null)
+              }}
+              onApprove={handleApproveContribution}
+              onReject={handleRejectContribution}
+            />
+          )}
 
           <LogEventDialog open={logEventDialogOpen} onOpenChange={setLogEventDialogOpen} />
 
