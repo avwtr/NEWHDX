@@ -615,6 +615,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
               filteredContributions={filteredContributions}
               handleViewContribution={handleViewContribution}
               SettingsDialogComponent={<SettingsDialog lab={labState} onLabUpdated={setLabState} />}
+              labId={lab.labId}
             />
           )}
         </div>

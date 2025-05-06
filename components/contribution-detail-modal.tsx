@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,13 @@ import { toast } from "@/components/ui/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { FileViewerDialog } from "./file-viewer-dialog"
+import path from "path"
+import { downloadFile } from "./file-viewer-dialog"
+import { supabase } from "@/lib/supabase"
+import dayjs from "dayjs"
+import relativeTime from "dayjs/plugin/relativeTime"
+dayjs.extend(relativeTime)
 
 export type ContributionFile = {
   id: string
@@ -26,6 +33,7 @@ export type ContributionFile = {
   type: "code" | "data" | "document" | "other"
   url: string
   preview?: string
+  bucket?: string
 }
 
 export type Contribution = {
@@ -41,6 +49,8 @@ export type Contribution = {
   status: "pending" | "approved" | "rejected"
   files: ContributionFile[]
   rejectReason?: string
+  submittedBy?: string
+  created_at?: string
 }
 
 interface ContributionDetailModalProps {
@@ -58,9 +68,26 @@ export function ContributionDetailModal({
   onApprove,
   onReject,
 }: ContributionDetailModalProps) {
+  // All hooks at the top
   const [activeTab, setActiveTab] = useState("details")
   const [rejectReason, setRejectReason] = useState("")
   const [showRejectForm, setShowRejectForm] = useState(false)
+  const [filePreview, setFilePreview] = useState<any | null>(null)
+  const [filePreviewOpen, setFilePreviewOpen] = useState(false)
+  const [submitterUsername, setSubmitterUsername] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchSubmitterUsername() {
+      if (!contribution?.submittedBy) return
+      const { data } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("user_id", contribution.submittedBy)
+        .single()
+      setSubmitterUsername(data?.username || null)
+    }
+    fetchSubmitterUsername()
+  }, [contribution?.submittedBy])
 
   if (!contribution) return null
 
@@ -157,15 +184,15 @@ export function ContributionDetailModal({
             </Badge>
           </DialogTitle>
           <DialogDescription className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <span className="flex items-center gap-2">
               <Avatar className="h-6 w-6">
-                <AvatarImage src={contribution.contributor.avatar} alt={contribution.contributor.name} />
-                <AvatarFallback>{contribution.contributor.name.charAt(0)}</AvatarFallback>
+                <AvatarImage src={contribution.contributor?.avatar || undefined} alt={contribution.contributor?.name || 'Unknown User'} />
+                <AvatarFallback>{contribution.contributor?.name ? contribution.contributor.name.charAt(0) : (submitterUsername ? submitterUsername.charAt(0) : '?')}</AvatarFallback>
               </Avatar>
-              <span>{contribution.contributor.name}</span>
+              <span>{submitterUsername || 'Unknown User'}</span>
               <span className="text-muted-foreground">•</span>
-              <span className="text-muted-foreground">{contribution.date}</span>
-            </div>
+              <span className="text-muted-foreground">{contribution.created_at ? dayjs(contribution.created_at).fromNow() : ''}</span>
+            </span>
           </DialogDescription>
         </DialogHeader>
 
@@ -184,37 +211,6 @@ export function ContributionDetailModal({
                     <p className="whitespace-pre-line">{contribution.description}</p>
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="relatedExperiment">
-                    CONTRIBUTION TO AN ONGOING EXPERIMENT?{" "}
-                    <span className="text-muted-foreground text-xs">(optional)</span>
-                  </Label>
-                  <Select>
-                    <SelectTrigger id="relatedExperiment">
-                      <SelectValue placeholder="Select an experiment" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      <SelectItem value="neural-network">
-                        Neural Network Optimization <Badge className="ml-2 bg-green-500 text-xs">LIVE</Badge>
-                      </SelectItem>
-                      <SelectItem value="fmri-data">
-                        fMRI Data Analysis <Badge className="ml-2 bg-green-500 text-xs">LIVE</Badge>
-                      </SelectItem>
-                      <SelectItem value="cognitive-function">
-                        Cognitive Function Assessment <Badge className="ml-2 bg-green-500 text-xs">LIVE</Badge>
-                      </SelectItem>
-                      <SelectItem value="bci-testing">
-                        Brain-Computer Interface Testing <Badge className="ml-2 bg-green-500 text-xs">LIVE</Badge>
-                      </SelectItem>
-                      <SelectItem value="memory-formation">
-                        Memory Formation Study <Badge className="ml-2 bg-green-500 text-xs">LIVE</Badge>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 {contribution.status === "rejected" && contribution.rejectReason && (
                   <div>
                     <h3 className="text-sm font-medium mb-2 flex items-center text-red-400">
@@ -233,34 +229,60 @@ export function ContributionDetailModal({
           <TabsContent value="files" className="flex-1 overflow-hidden flex flex-col">
             <ScrollArea className="flex-1">
               <div className="space-y-6 p-1">
-                {contribution.files.map((file) => (
-                  <div key={file.id} className="border border-secondary rounded-md overflow-hidden">
-                    <div className="bg-secondary/50 p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {getFileIcon(file.type)}
-                        <span className="font-medium">{file.name}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {file.type.toUpperCase()}
-                        </Badge>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" asChild>
-                          <a href={file.url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4 mr-1" />
-                            View
-                          </a>
-                        </Button>
-                        <Button variant="outline" size="sm" asChild>
-                          <a href={file.url} download={file.name}>
+                {contribution.files.map((file, idx) => {
+                  let ext = ''
+                  if (file.name && file.name.includes('.')) {
+                    ext = file.name.split('.').pop()?.toLowerCase() || ''
+                  }
+                  const fileType = ext || file.type
+                  return (
+                    <div key={file.id || file.name + '-' + idx} className="border border-secondary rounded-md overflow-hidden mb-6">
+                      <div className="bg-secondary/50 p-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {getFileIcon(file.type)}
+                          <span className="font-medium">{file.name}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {fileType.toUpperCase()}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={async () => {
+                            await downloadFile({
+                              id: file.id || file.name,
+                              name: file.name,
+                              type: fileType,
+                              url: file.url,
+                              size: '',
+                              author: '',
+                              date: '',
+                              bucket: 'cont-requests',
+                              storageKey: (file as any).storage_key,
+                            })
+                          }}>
                             <Download className="h-4 w-4 mr-1" />
                             Download
-                          </a>
-                        </Button>
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setFilePreview({
+                              id: file.id || file.name,
+                              name: file.name,
+                              type: fileType,
+                              url: file.url,
+                              size: '',
+                              author: '',
+                              date: '',
+                              bucket: 'cont-requests',
+                              storageKey: (file as any).storage_key,
+                            });
+                            setFilePreviewOpen(true);
+                          }}>
+                            Preview
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                    <div className="p-4">{renderFilePreview(file)}</div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </ScrollArea>
           </TabsContent>
@@ -300,6 +322,16 @@ export function ContributionDetailModal({
           </DialogFooter>
         )}
       </DialogContent>
+      {/* File preview dialog for contribution files */}
+      {filePreview && (
+        <FileViewerDialog
+          file={filePreview}
+          isOpen={filePreviewOpen}
+          onClose={() => setFilePreviewOpen(false)}
+          labId={''}
+          userRole={"guest"}
+        />
+      )}
     </Dialog>
   )
 }

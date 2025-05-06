@@ -38,6 +38,7 @@ interface FileViewerDialogProps {
     path?: string
     lastUpdatedBy?: string
     lastUpdated?: string
+    bucket?: string
   }
   isOpen: boolean
   onClose: () => void
@@ -75,7 +76,8 @@ export async function downloadFile(file: any) {
   } else if (file.storageKey || file.path) {
     // Supabase Storage
     const path = file.storageKey || file.path;
-    const { data } = await supabase.storage.from("labmaterials").download(path);
+    const bucket = file.bucket || 'labmaterials';
+    const { data } = await supabase.storage.from(bucket).download(path);
     if (!data) throw new Error("Failed to download file");
     url = URL.createObjectURL(data);
   }
@@ -177,9 +179,10 @@ export function FileViewerDialog({
       } else {
         // Fetch from Supabase Storage
         const path = file.storageKey || file.path;
+        const bucket = file.bucket || 'labmaterials';
         if (!path) throw new Error('No path for Supabase file');
         // Add cache-busting param
-        const { data, error } = await supabase.storage.from('labmaterials').download(path + `?t=${Date.now()}`);
+        const { data, error } = await supabase.storage.from(bucket).download(path + `?t=${Date.now()}`);
         if (error || !data) throw new Error('Failed to download file from Supabase');
         content = await data.text();
       }
@@ -267,7 +270,8 @@ export function FileViewerDialog({
         } else if (file.storageKey) {
           // Supabase Storage (always use storageKey)
           try {
-            const { data } = await supabase.storage.from("labmaterials").getPublicUrl(file.storageKey);
+            const bucket = file.bucket || 'labmaterials';
+            const { data } = await supabase.storage.from(bucket).getPublicUrl(file.storageKey);
             console.log("[FileViewerDialog] Supabase public URL:", data.publicUrl);
             setPreviewUrl(data.publicUrl);
           } catch (err) {
