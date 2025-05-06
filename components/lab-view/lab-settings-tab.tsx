@@ -43,6 +43,7 @@ export function LabSettingsTab({
 }: LabSettingsTabProps & { labId?: string }) {
   const [contributions, setContributions] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [usernames, setUsernames] = useState<{ [userId: string]: string }>({})
   const labId = props.labId
 
   useEffect(() => {
@@ -53,8 +54,21 @@ export function LabSettingsTab({
       .select("*")
       .eq("labFrom", labId)
       .order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (!error && data) setContributions(data)
+      .then(async ({ data, error }) => {
+        if (!error && data) {
+          setContributions(data)
+          // Fetch usernames for all unique submittedBy
+          const userIds = Array.from(new Set(data.map((c: any) => c.submittedBy)))
+          if (userIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from("profiles")
+              .select("user_id, username")
+              .in("user_id", userIds)
+            const map: { [userId: string]: string } = {}
+            profiles?.forEach((p: any) => { map[p.user_id] = p.username })
+            setUsernames(map)
+          }
+        }
         setLoading(false)
       })
   }, [labId])
@@ -157,8 +171,7 @@ export function LabSettingsTab({
                               <div>
                                 <h3 className="font-medium">{contribution.title}</h3>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                  {/* You may want to fetch and display user info here if needed */}
-                                  <span>{contribution.submittedBy}</span>
+                                  <span>{usernames[contribution.submittedBy] || contribution.submittedBy}</span>
                                   <span>•</span>
                                   <span>{new Date(contribution.created_at).toLocaleString()}</span>
                                 </div>
@@ -168,22 +181,26 @@ export function LabSettingsTab({
                             <div className="flex items-center gap-2 mt-2">
                               <Badge
                                 className={
-                                  contribution.status === "pending"
+                                  ["pending"].includes(contribution.status)
                                     ? "bg-amber-500"
-                                    : contribution.status === "approved"
-                                      ? "bg-green-500"
-                                      : "bg-red-500"
+                                    : ["approved", "accepted"].includes(contribution.status)
+                                      ? "bg-green-600 text-white"
+                                      : "bg-red-600 text-white"
                                 }
                               >
-                                {contribution.status.toUpperCase()}
+                                {["approved", "accepted"].includes(contribution.status) ? "APPROVED" : contribution.status.toUpperCase()}
                               </Badge>
+                              {contribution.type && (
+                                <Badge variant="outline" className="text-xs">
+                                  {contribution.type.toUpperCase()}
+                                </Badge>
+                              )}
                               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <FileText className="h-3.5 w-3.5" />
                                 <span>
                                   {contribution.num_files} file{contribution.num_files !== 1 && "s"}
                                 </span>
                               </div>
-                              {/* Optionally show file types if needed */}
                             </div>
                           </div>
                         ))

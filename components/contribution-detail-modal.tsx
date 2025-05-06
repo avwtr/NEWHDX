@@ -35,6 +35,8 @@ export type ContributionFile = {
   url: string
   preview?: string
   bucket?: string
+  storageKey?: string
+  storage_key?: string
 }
 
 export type Contribution = {
@@ -48,6 +50,7 @@ export type Contribution = {
   }
   date: string
   status: "pending" | "approved" | "rejected"
+  type?: string
   files: ContributionFile[]
   rejectReason?: string
   submittedBy?: string
@@ -82,7 +85,7 @@ export function ContributionDetailModal({
   useEffect(() => {
     async function fetchSubmitterUsername() {
       if (!contribution?.submittedBy) return
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("username")
         .eq("user_id", contribution.submittedBy)
@@ -167,17 +170,37 @@ export function ContributionDetailModal({
         console.log('Deleted from cont-requests:', (file as any).storage_key);
       }
       // Update contribution request
+      const fileSummaries = contribution.files.map(f => ({
+        name: f.name,
+        type: f.type,
+        size: (f as any).size || '',
+      }));
       const updatePayload = {
         status: 'accepted',
         reviewed_by: user.id,
         reviewed_at: new Date().toISOString(),
-        files: [],
+        files: fileSummaries,
       };
       const { error: updateError } = await supabase
         .from('contribution_requests')
         .update(updatePayload)
         .eq('id', Number(contribution.id));
       if (updateError) throw updateError;
+
+      // Activity logging for contribution acceptance
+      const acceptedFileNames = contribution.files.map(f => f.name).join(', ');
+      const activityId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+      const activityName = `Contribution Accepted: ${contribution.title} (Files: ${acceptedFileNames})`;
+      const { error: activityError } = await supabase.from('activity').insert({
+        activity_id: activityId,
+        activity_name: activityName,
+        activity_type: 'contribution_accepted',
+        performed_by: user.id,
+        lab_from: labId,
+        created_at: new Date().toISOString(),
+      });
+      if (activityError) console.error('Activity log error:', activityError);
+
       toast({
         title: 'Contribution Approved',
         description: `You have approved "${contribution.title}" and files have been moved to lab materials.`,
@@ -211,11 +234,16 @@ export function ContributionDetailModal({
           .remove([(file as any).storage_key]);
         if (deleteError) throw deleteError;
       }
+      const rejectFileSummaries = contribution.files.map(f => ({
+        name: f.name,
+        type: f.type,
+        size: (f as any).size || '',
+      }));
       const updatePayload = {
         status: 'rejected',
         reviewed_by: user?.id,
         reviewed_at: new Date().toISOString(),
-        files: [],
+        files: rejectFileSummaries,
       };
       const { error: updateError } = await supabase
         .from('contribution_requests')
@@ -293,23 +321,28 @@ export function ContributionDetailModal({
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center justify-between">
             <span>Contribution: {contribution.title}</span>
-            <Badge
-              className={
-                contribution.status === "pending"
-                  ? "bg-amber-500"
-                  : contribution.status === "approved"
-                    ? "bg-green-500"
-                    : "bg-red-500"
-              }
-            >
-              {contribution.status.toUpperCase()}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge
+                className={
+                  ["pending"].includes(contribution.status)
+                    ? "bg-amber-500 text-white"
+                    : ["approved", "accepted"].includes(contribution.status)
+                      ? "bg-green-600 text-white"
+                      : "bg-red-600 text-white"
+                }
+              >
+                {["approved", "accepted"].includes(contribution.status) ? "APPROVED" : contribution.status.toUpperCase()}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {contribution.type ? contribution.type.toUpperCase() : "UNKNOWN"}
+              </Badge>
+            </div>
           </DialogTitle>
           <DialogDescription className="flex items-center justify-between">
             <span className="flex items-center gap-2">
               <Avatar className="h-6 w-6">
-                <AvatarImage src={contribution.contributor?.avatar || undefined} alt={contribution.contributor?.name || 'Unknown User'} />
-                <AvatarFallback>{contribution.contributor?.name ? contribution.contributor.name.charAt(0) : (submitterUsername ? submitterUsername.charAt(0) : '?')}</AvatarFallback>
+                <AvatarImage src={contribution.contributor?.avatar || undefined} alt={submitterUsername || 'Unknown User'} />
+                <AvatarFallback>{submitterUsername ? submitterUsername.charAt(0) : '?'}</AvatarFallback>
               </Avatar>
               <span>{submitterUsername || 'Unknown User'}</span>
               <span className="text-muted-foreground">•</span>
@@ -351,60 +384,76 @@ export function ContributionDetailModal({
           <TabsContent value="files" className="flex-1 overflow-hidden flex flex-col">
             <ScrollArea className="flex-1">
               <div className="space-y-6 p-1">
-                {contribution.files.map((file, idx) => {
-                  let ext = ''
-                  if (file.name && file.name.includes('.')) {
-                    ext = file.name.split('.').pop()?.toLowerCase() || ''
-                  }
-                  const fileType = ext || file.type
-                  return (
-                    <div key={file.id || file.name + '-' + idx} className="border border-secondary rounded-md overflow-hidden mb-6">
-                      <div className="bg-secondary/50 p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {getFileIcon(file.type)}
-                          <span className="font-medium">{file.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {fileType.toUpperCase()}
-                          </Badge>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={async () => {
-                            await downloadFile({
-                              id: file.id || file.name,
-                              name: file.name,
-                              type: fileType,
-                              url: file.url,
-                              size: '',
-                              author: '',
-                              date: '',
-                              bucket: 'cont-requests',
-                              storageKey: (file as any).storageKey,
-                            })
-                          }}>
-                            <Download className="h-4 w-4 mr-1" />
-                            Download
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => {
-                            setFilePreview({
-                              id: file.id || file.name,
-                              name: file.name,
-                              type: fileType,
-                              url: file.url,
-                              size: '',
-                              author: '',
-                              date: '',
-                              bucket: 'cont-requests',
-                              storageKey: (file as any).storageKey,
-                            });
-                            setFilePreviewOpen(true);
-                          }}>
-                            Preview
-                          </Button>
+                {['approved', 'accepted'].includes(contribution.status) ? (
+                  <div className="bg-green-900/20 border border-green-900/30 rounded p-4 mb-4">
+                    <div className="font-semibold mb-2 text-green-200">
+                      The following {contribution.files.length} file{contribution.files.length !== 1 ? 's' : ''} were approved and have been added to the lab materials:
+                    </div>
+                    <ul className="list-disc pl-6 mb-3 text-green-100">
+                      {contribution.files.map((file, idx) => (
+                        <li key={file.name + '-' + idx}>{file.name}</li>
+                      ))}
+                    </ul>
+                    <div className="mt-4 text-green-300 text-sm font-medium">
+                      All files have been contributed to the Lab Materials tab.
+                    </div>
+                  </div>
+                ) : (
+                  contribution.files.map((file, idx) => {
+                    let ext = ''
+                    if (file.name && file.name.includes('.')) {
+                      ext = file.name.split('.').pop()?.toLowerCase() || ''
+                    }
+                    const fileType = ext || file.type
+                    return (
+                      <div key={file.id || file.name + '-' + idx} className="border border-secondary rounded-md overflow-hidden mb-6">
+                        <div className="bg-secondary/50 p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {getFileIcon(file.type)}
+                            <span className="font-medium">{file.name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {fileType.toUpperCase()}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={async () => {
+                              await downloadFile({
+                                id: file.id || file.name,
+                                name: file.name,
+                                type: fileType,
+                                url: file.url,
+                                size: '',
+                                author: '',
+                                date: '',
+                                bucket: 'cont-requests',
+                                storageKey: file.storageKey || file.storage_key,
+                              })
+                            }}>
+                              <Download className="h-4 w-4 mr-1" />
+                              Download
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => {
+                              setFilePreview({
+                                id: file.id || file.name,
+                                name: file.name,
+                                type: fileType,
+                                url: file.url,
+                                size: '',
+                                author: '',
+                                date: '',
+                                bucket: 'cont-requests',
+                                storageKey: file.storageKey || file.storage_key,
+                              });
+                              setFilePreviewOpen(true);
+                            }}>
+                              Preview
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                )}
               </div>
             </ScrollArea>
           </TabsContent>

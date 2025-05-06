@@ -35,6 +35,7 @@ interface FileViewerDialogProps {
     content?: string
     url?: string
     storageKey?: string
+    storage_key?: string
     path?: string
     lastUpdatedBy?: string
     lastUpdated?: string
@@ -263,17 +264,18 @@ export function FileViewerDialog({
     async function getPreviewUrl() {
       setPreviewUrl(null);
       const fileType = file.type.toLowerCase();
-      console.log("[FileViewerDialog] Preview file:", file);
+      // Normalize bucket and key
+      const bucket = file.bucket || (file.storageKey ? "labmaterials" : file.storage_key ? "cont-requests" : "labmaterials");
+      const key = file.storageKey || file.storage_key || file.path;
       if (["jpg", "jpeg", "png", "gif", "svg", "pdf"].includes(fileType)) {
         if (file.url) {
           setPreviewUrl(file.url);
-        } else if (file.storageKey) {
-          // Supabase Storage (always use storageKey)
+        } else if (key) {
           try {
-            const bucket = file.bucket || 'labmaterials';
-            const { data } = await supabase.storage.from(bucket).getPublicUrl(file.storageKey);
-            console.log("[FileViewerDialog] Supabase public URL:", data.publicUrl);
-            setPreviewUrl(data.publicUrl);
+            // Use signed URL for private buckets
+            const { data, error } = await supabase.storage.from(bucket).createSignedUrl(key, 60 * 10); // 10 min
+            if (error || !data?.signedUrl) throw error || new Error("No signed URL");
+            setPreviewUrl(data.signedUrl);
           } catch (err) {
             setPreviewUrl(null);
           }

@@ -16,19 +16,25 @@ import { formatDistanceToNow } from "date-fns"
 import { AlertCircle, CheckCircle, X } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
+import { ContributionFile } from "./contribution-detail-modal"
 
 export type Contribution = {
   id: string
   title: string
-  amount: number
-  date: Date
-  type: "one-time" | "membership"
-  status: "active" | "inactive"
+  description: string
   contributor: {
+    id: string
     name: string
-    avatar?: string
-    email: string
+    avatar: string
+    username: string
   }
+  date: string
+  status: "pending" | "approved" | "rejected"
+  type: "file" | "experiment" | "funding" | "other"
+  files: ContributionFile[]
+  rejectReason?: string
+  submittedBy?: string
+  created_at?: string
 }
 
 interface ContributionListProps {
@@ -75,44 +81,50 @@ export function ContributionList({ contributions, onStatusChange, isAdmin = fals
         <div className="text-center p-8 text-muted-foreground">No contributions found.</div>
       ) : (
         contributions.map((contribution) => (
-          <Card key={contribution.id} className={`${contribution.status === "inactive" ? "opacity-60" : ""}`}>
+          <Card key={contribution.id}>
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-lg">{contribution.title}</CardTitle>
-                  <Badge variant={contribution.type === "membership" ? "default" : "outline"}>
-                    {contribution.type === "membership" ? "Membership" : "One-time"}
+                  <Badge variant="outline" className="text-xs">
+                    {contribution.type.toUpperCase()}
                   </Badge>
-                  <Badge variant={contribution.status === "active" ? "success" : "destructive"} className="ml-2">
-                    {contribution.status === "active" ? (
+                  <Badge 
+                    variant={contribution.status === "approved" ? "default" : contribution.status === "pending" ? "secondary" : "destructive"} 
+                    className={`ml-2 ${contribution.status === "approved" ? "bg-green-600 text-white" : ""}`}
+                  >
+                    {contribution.status === "approved" ? (
                       <>
-                        <CheckCircle className="h-3 w-3 mr-1" /> Active
+                        <CheckCircle className="h-3 w-3 mr-1" /> APPROVED
+                      </>
+                    ) : contribution.status === "pending" ? (
+                      <>
+                        <AlertCircle className="h-3 w-3 mr-1" /> PENDING
                       </>
                     ) : (
                       <>
-                        <X className="h-3 w-3 mr-1" /> Inactive
+                        <X className="h-3 w-3 mr-1" /> REJECTED
                       </>
                     )}
                   </Badge>
                 </div>
-                <div className="text-xl font-bold">${contribution.amount.toLocaleString()}</div>
               </div>
-              <CardDescription>{formatDistanceToNow(contribution.date, { addSuffix: true })}</CardDescription>
+              <CardDescription>{formatDistanceToNow(new Date(contribution.date), { addSuffix: true })}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-3">
                 <Avatar>
                   <AvatarImage src={contribution.contributor.avatar} />
                   <AvatarFallback>
-                    {contribution.contributor.name
+                    {contribution.contributor.username
                       .split(" ")
                       .map((n) => n[0])
                       .join("")}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <div className="font-medium">{contribution.contributor.name}</div>
-                  <div className="text-sm text-muted-foreground">{contribution.contributor.email}</div>
+                  <div className="font-medium">{contribution.contributor.username}</div>
+                  <div className="text-sm text-muted-foreground">{contribution.description}</div>
                 </div>
               </div>
             </CardContent>
@@ -121,16 +133,16 @@ export function ContributionList({ contributions, onStatusChange, isAdmin = fals
                 <Button
                   variant="outline"
                   size="sm"
-                  className={`ml-auto ${contribution.status === "active" ? "text-destructive" : "text-primary"}`}
+                  className="ml-auto"
                   onClick={() =>
                     openConfirmDialog(
                       contribution.id,
                       contribution.title,
-                      contribution.status === "active" ? "deactivate" : "activate",
+                      contribution.status === "approved" ? "deactivate" : "activate",
                     )
                   }
                 >
-                  {contribution.status === "active" ? "Deactivate" : "Reactivate"}
+                  {contribution.status === "approved" ? "Deactivate" : "Reactivate"}
                 </Button>
               </CardFooter>
             )}

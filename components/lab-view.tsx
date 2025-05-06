@@ -330,6 +330,8 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         contribution.id === id ? { ...contribution, status: "approved" } : contribution,
       ),
     )
+    // Switch to lab materials tab when contribution is approved
+    setLocalActiveTab("lab-materials")
   }
 
   const handleRejectContribution = (id: string, reason: string) => {
