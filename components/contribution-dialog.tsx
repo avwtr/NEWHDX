@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FileUploader } from "@/components/file-uploader"
-import { FileIcon } from "lucide-react"
+import { FileIcon, X } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { v4 as uuidv4 } from 'uuid'
@@ -138,9 +138,22 @@ export function ContributionDialog({ open, onOpenChange, experimentId, experimen
                 <p className="text-sm font-medium mb-1">Selected Files:</p>
                 <ul className="text-sm space-y-1">
                   {selectedFiles.map((file, index) => (
-                    <li key={index} className="flex items-center">
-                      <FileIcon className="h-4 w-4 mr-2 text-blue-500" />
-                      {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                    <li key={index} className="flex items-center justify-between">
+                      <span className="flex items-center">
+                        <FileIcon className="h-4 w-4 mr-2 text-blue-500" />
+                        {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          setSelectedFiles(selectedFiles.filter((_, i) => i !== index))
+                        }}
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <X className="h-4 w-4 text-red-500" />
+                      </Button>
                     </li>
                   ))}
                 </ul>

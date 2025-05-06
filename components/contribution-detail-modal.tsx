@@ -96,23 +96,38 @@ export function ContributionDetailModal({
     try {
       const updatePayload = {
         status: 'accepted',
-        reviewedBy: user?.id,
+        reviewed_by: user?.id,
         reviewed_at: new Date().toISOString()
       };
       console.log('[MODAL APPROVE] Update payload:', updatePayload);
-      const { data, error } = await supabase
-        .from('contribution_requests')
-        .update(updatePayload)
-        .eq('id', Number(contribution.id));
-      console.log('[MODAL APPROVE] Update result:', data, error);
-      if (error) throw error;
+
+      let data, error;
+      try {
+        const result = await supabase
+          .from('contribution_requests')
+          .update(updatePayload)
+          .eq('id', Number(contribution.id));
+        data = result.data;
+        error = result.error;
+        console.log('[MODAL APPROVE] Supabase update result:', result);
+      } catch (supabaseError) {
+        console.error('[MODAL APPROVE] Supabase threw:', supabaseError, typeof supabaseError, supabaseError?.stack);
+        throw supabaseError;
+      }
+
+      if (error) {
+        console.error('[MODAL APPROVE] Supabase update error:', error, typeof error, error?.message, error?.stack);
+        throw error;
+      }
+
+      console.log('[MODAL APPROVE] Update result:', data);
       toast({
         title: 'Contribution Approved',
         description: `You have approved "${contribution.title}"`,
       });
       onClose();
     } catch (error) {
-      console.error('[MODAL APPROVE] Error approving contribution:', error);
+      console.error('[MODAL APPROVE] Error approving contribution:', error, typeof error, error?.message, error?.stack);
       toast({
         title: 'Error',
         description: 'Failed to approve contribution',
