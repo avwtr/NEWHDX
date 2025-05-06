@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SettingsDialog } from "@/components/settings-dialog"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 
 interface LabSettingsTabProps {
   activeSettingsTab: string
@@ -37,7 +39,40 @@ export function LabSettingsTab({
   filteredContributions,
   handleViewContribution,
   SettingsDialogComponent,
-}: LabSettingsTabProps) {
+  ...props
+}: LabSettingsTabProps & { labId?: string }) {
+  const [contributions, setContributions] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const labId = props.labId
+
+  useEffect(() => {
+    if (!labId) return
+    setLoading(true)
+    supabase
+      .from("contribution_requests")
+      .select("*")
+      .eq("labFrom", labId)
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (!error && data) setContributions(data)
+        setLoading(false)
+      })
+  }, [labId])
+
+  // Filtering and searching
+  const filtered = contributions
+    .filter((contribution) => {
+      if (contributionFilter === "all") return true
+      return contribution.status === contributionFilter
+    })
+    .filter(
+      (contribution) =>
+        contribution.title.toLowerCase().includes(contributionSearch.toLowerCase()) ||
+        (contribution.description && contribution.description.toLowerCase().includes(contributionSearch.toLowerCase()))
+    )
+
+  const pendingCountLocal = contributions.filter((c) => c.status === "pending").length
+
   return (
     <div className="mt-4">
       <Card>
@@ -103,14 +138,16 @@ export function LabSettingsTab({
                   <div className="bg-secondary/50 p-3 flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-amber-500" />
                     <span className="text-sm font-medium">
-                      {pendingCount} pending contribution{pendingCount !== 1 && "s"} require
-                      {pendingCount === 1 && "s"} review
+                      {pendingCountLocal} pending contribution{pendingCountLocal !== 1 && "s"} require
+                      {pendingCountLocal === 1 && "s"} review
                     </span>
                   </div>
                   <ScrollArea className="h-[400px]">
                     <div className="divide-y divide-secondary">
-                      {filteredContributions.length > 0 ? (
-                        filteredContributions.map((contribution) => (
+                      {loading ? (
+                        <div className="py-8 text-center text-muted-foreground">Loading...</div>
+                      ) : filtered.length > 0 ? (
+                        filtered.map((contribution) => (
                           <div
                             key={contribution.id}
                             className="p-4 hover:bg-secondary/20 transition-colors cursor-pointer"
@@ -120,16 +157,10 @@ export function LabSettingsTab({
                               <div>
                                 <h3 className="font-medium">{contribution.title}</h3>
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                  <Avatar className="h-5 w-5">
-                                    <AvatarImage
-                                      src={contribution.contributor.avatar}
-                                      alt={contribution.contributor.name}
-                                    />
-                                    <AvatarFallback>{contribution.contributor.name.charAt(0)}</AvatarFallback>
-                                  </Avatar>
-                                  <span>{contribution.contributor.name}</span>
+                                  {/* You may want to fetch and display user info here if needed */}
+                                  <span>{contribution.submittedBy}</span>
                                   <span>•</span>
-                                  <span>{contribution.date}</span>
+                                  <span>{new Date(contribution.created_at).toLocaleString()}</span>
                                 </div>
                               </div>
                             </div>
@@ -149,21 +180,10 @@ export function LabSettingsTab({
                               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <FileText className="h-3.5 w-3.5" />
                                 <span>
-                                  {contribution.files.length} file{contribution.files.length !== 1 && "s"}
+                                  {contribution.num_files} file{contribution.num_files !== 1 && "s"}
                                 </span>
                               </div>
-                              {contribution.files.some((f: any) => f.type === "code") && (
-                                <div className="flex items-center gap-1 text-xs text-blue-400">
-                                  <Code className="h-3.5 w-3.5" />
-                                  <span>Code</span>
-                                </div>
-                              )}
-                              {contribution.files.some((f: any) => f.type === "data") && (
-                                <div className="flex items-center gap-1 text-xs text-green-400">
-                                  <Database className="h-3.5 w-3.5" />
-                                  <span>Data</span>
-                                </div>
-                              )}
+                              {/* Optionally show file types if needed */}
                             </div>
                           </div>
                         ))
