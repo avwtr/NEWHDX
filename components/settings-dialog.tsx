@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -30,17 +30,15 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedTags, setSelectedTags] = useState(["neuroscience", "brain-mapping", "cognitive-science"])
 
-  // Sample admins data
-  const admins = [
-    {
-      id: 1,
-      name: "Dr. Sarah Johnson",
-      role: "Founder",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "SJ",
-    },
-    { id: 2, name: "Alex Kim", role: "Lab Manager", avatar: "/placeholder.svg?height=40&width=40", initials: "AK" },
-  ]
+  // Admins state
+  const [admins, setAdmins] = useState<any[]>([])
+  const [adminsLoading, setAdminsLoading] = useState(true)
+  const [adminError, setAdminError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [addLoading, setAddLoading] = useState<string | null>(null)
+  const [removeLoading, setRemoveLoading] = useState<string | null>(null)
 
   // Sample notification settings
   const [notificationSettings, setNotificationSettings] = useState({
@@ -114,6 +112,99 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
       toast({ title: "Error updating lab", description: err.message || String(err), variant: "destructive" })
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // Fetch current admins
+  useEffect(() => {
+    async function fetchAdmins() {
+      setAdminsLoading(true)
+      setAdminError(null)
+      try {
+        const { data: adminRows, error } = await supabase
+          .from("labAdmins")
+          .select("user")
+          .eq("lab_id", lab.labId)
+        if (error) throw error
+        if (!adminRows || adminRows.length === 0) {
+          setAdmins([])
+          setAdminsLoading(false)
+          return
+        }
+        // Get user info from profiles
+        const userIds = adminRows.map((row: any) => row.user)
+        const { data: profiles, error: profileError } = await supabase
+          .from("profiles")
+          .select("user_id, username")
+          .in("user_id", userIds)
+        if (profileError) throw profileError
+        setAdmins(profiles || [])
+      } catch (err: any) {
+        setAdminError(err.message || String(err))
+      } finally {
+        setAdminsLoading(false)
+      }
+    }
+    if (lab.labId) fetchAdmins()
+  }, [lab.labId])
+
+  // Search for users
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query)
+    if (!query || query.length < 2) {
+      setSearchResults([])
+      return
+    }
+    setSearchLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, username")
+        .ilike("username", `%${query}%`)
+        .limit(10)
+      if (error) throw error
+      setSearchResults(data || [])
+    } catch (err) {
+      setSearchResults([])
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  // Add admin
+  const handleAddAdmin = async (user: any) => {
+    setAddLoading(user.user_id)
+    try {
+      const { error } = await supabase
+        .from("labAdmins")
+        .insert([{ lab_id: lab.labId, user: user.user_id }])
+      if (error) throw error
+      setAdmins((prev) => [...prev, user])
+      setSearchResults((prev) => prev.filter((u) => u.user_id !== user.user_id))
+      toast({ title: "Admin added", description: `${user.username} is now an admin.` })
+    } catch (err: any) {
+      toast({ title: "Error adding admin", description: err.message || String(err), variant: "destructive" })
+    } finally {
+      setAddLoading(null)
+    }
+  }
+
+  // Remove admin
+  const handleRemoveAdmin = async (user: any) => {
+    setRemoveLoading(user.user_id)
+    try {
+      const { error } = await supabase
+        .from("labAdmins")
+        .delete()
+        .eq("lab_id", lab.labId)
+        .eq("user", user.user_id)
+      if (error) throw error
+      setAdmins((prev) => prev.filter((a) => a.user_id !== user.user_id))
+      toast({ title: "Admin removed", description: `${user.username} is no longer an admin.` })
+    } catch (err: any) {
+      toast({ title: "Error removing admin", description: err.message || String(err), variant: "destructive" })
+    } finally {
+      setRemoveLoading(null)
     }
   }
 
@@ -191,32 +282,71 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
           <TabsContent value="admins" className="space-y-6">
             <div className="space-y-4">
               <Label>Lab Administrators</Label>
-              {admins.map((admin) => (
-                <div
-                  key={admin.id}
-                  className="flex items-center justify-between p-3 border border-secondary rounded-md"
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={admin.avatar} alt={admin.name} />
-                      <AvatarFallback>{admin.initials}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{admin.name}</p>
-                      <p className="text-sm text-muted-foreground">{admin.role}</p>
+              {adminsLoading ? (
+                <div>Loading admins...</div>
+              ) : adminError ? (
+                <div className="text-destructive">{adminError}</div>
+              ) : admins.length === 0 ? (
+                <div>No admins found for this lab.</div>
+              ) : (
+                admins.map((admin) => (
+                  <div
+                    key={admin.user_id}
+                    className="flex items-center justify-between p-3 border border-secondary rounded-md"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10">
+                        {/* Optionally add avatar if available in profiles */}
+                        <AvatarFallback>{admin.username?.charAt(0) || "A"}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{admin.username}</p>
+                        <p className="text-sm text-muted-foreground">{admin.user_id}</p>
+                      </div>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleRemoveAdmin(admin)}
+                      disabled={removeLoading === admin.user_id || admins.length === 1}
+                    >
+                      {removeLoading === admin.user_id ? "Removing..." : "Remove"}
+                    </Button>
                   </div>
-                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
-                    Remove
-                  </Button>
-                </div>
-              ))}
+                ))
+              )}
 
               <div className="pt-4">
-                <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90">
-                  <Plus className="h-4 w-4 mr-2" />
-                  ADD ADMINISTRATOR
-                </Button>
+                <Label>Add Administrator</Label>
+                <Input
+                  placeholder="Search for users..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="mb-2"
+                />
+                {searchLoading && <div>Searching...</div>}
+                {searchResults.length > 0 && (
+                  <div className="border rounded-md divide-y bg-background">
+                    {searchResults.map((user) => (
+                      <div key={user.user_id} className="flex items-center justify-between p-2">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback>{user.username?.charAt(0) || "U"}</AvatarFallback>
+                          </Avatar>
+                          <span>{user.username}</span>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAddAdmin(user)}
+                          disabled={addLoading === user.user_id || admins.some((a) => a.user_id === user.user_id)}
+                        >
+                          {addLoading === user.user_id ? "Adding..." : <><Plus className="h-4 w-4 mr-1" /> Add</>}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>

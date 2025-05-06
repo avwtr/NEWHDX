@@ -17,6 +17,7 @@ import { LabMaterialsExplorer } from "@/components/lab-materials-explorer"
 import type { Contribution } from "@/components/contribution-detail-modal"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
+import { isFollowingLab, followLab, unfollowLab } from "@/lib/followLab"
 
 // Sub-components
 import LabProfile from "@/components/lab-view/lab-profile"
@@ -27,6 +28,7 @@ import { NotificationsSidebar } from "@/components/lab-view/notifications-sideba
 import { LoginPrompt } from "@/components/lab-view/login-prompt"
 import { LabDialogs } from "@/components/lab-view/lab-dialogs"
 import { SettingsDialog } from "@/components/settings-dialog"
+import { ContributionDialog } from "@/components/contribution-dialog"
 
 // Data imports
 import {
@@ -43,8 +45,6 @@ interface LabViewProps {
   lab: any;
   categories: any;
   isGuest: any;
-  isFollowing: any;
-  setIsFollowing: any;
   notifications: any;
   notificationsSidebarOpen: any;
   setNotificationsSidebarOpen: any;
@@ -53,7 +53,7 @@ interface LabViewProps {
   router: any;
 }
 
-export default function LabView({ lab, categories, isGuest, isFollowing, setIsFollowing, notifications, notificationsSidebarOpen, setNotificationsSidebarOpen, handleGuestAction, setActiveTab, router }: LabViewProps) {
+export default function LabView({ lab, categories, isGuest, notifications, notificationsSidebarOpen, setNotificationsSidebarOpen, handleGuestAction, setActiveTab, router }: LabViewProps) {
   const { user } = useAuth()
 
   const { currentRole } = useRole()
@@ -120,6 +120,9 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
   const [isAdmin, setIsAdmin] = useState(false)
 
   const [labState, setLabState] = useState(lab)
+
+  // Contribution dialog state
+  const [contributionDialogOpen, setContributionDialogOpen] = useState(false)
 
   useEffect(() => {
     const fetchLabData = async () => {
@@ -224,6 +227,12 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
     }
     checkLabAdmin()
   }, [user?.id, lab?.labId])
+
+  useEffect(() => {
+    if (user && lab?.labId) {
+      isFollowingLab(lab.labId, user.id).then(setLocalIsFollowing)
+    }
+  }, [user, lab?.labId])
 
   const handleTabChange = (value: string) => {
     setLocalActiveTab(value)
@@ -362,8 +371,26 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
     setEditMembershipDialogOpen(true)
   }
 
+  const handleFollowToggle = async () => {
+    if (!user || !lab?.labId) return
+    if (localIsFollowing) {
+      const success = await unfollowLab(lab.labId, user.id)
+      if (success) setLocalIsFollowing(false)
+    } else {
+      const success = await followLab(lab.labId, user.id)
+      if (success) setLocalIsFollowing(true)
+    }
+  }
+
   return (
     <div className="container mx-auto pt-4 pb-8">
+      {/* Contribution Dialog for non-admin users */}
+      <ContributionDialog
+        open={contributionDialogOpen}
+        onOpenChange={setContributionDialogOpen}
+        experimentId={lab.labId}
+        experimentName={lab.labName}
+      />
       {/* Role indicator banner */}
       <div
         className={`p-2 text-center text-sm font-medium rounded-md mb-4 ${
@@ -410,7 +437,7 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
           isAdmin={isAdmin}
           isGuest={isGuest}
           isFollowing={localIsFollowing}
-          setIsFollowing={setLocalIsFollowing}
+          setIsFollowing={handleFollowToggle}
           notificationsSidebarOpen={localNotificationsSidebarOpen}
           setNotificationsSidebarOpen={setLocalNotificationsSidebarOpen}
           handleGuestAction={localHandleGuestAction}
@@ -420,6 +447,7 @@ export default function LabView({ lab, categories, isGuest, isFollowing, setIsFo
           filesCount={files.length}
           fundingTotal={fundingTotal}
           membersCount={members.length}
+          onOpenContributeDialog={() => setContributionDialogOpen(true)}
         />
       </div>
 

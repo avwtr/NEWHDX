@@ -149,6 +149,8 @@ export function FileViewerDialog({
   const [lastUpdatedByName, setLastUpdatedByName] = useState<string>("");
   const { user } = useAuth();
 
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   useEffect(() => {
     if (file.lastUpdatedBy) {
       fetchUsername(file.lastUpdatedBy).then(setLastUpdatedByName);
@@ -252,6 +254,34 @@ export function FileViewerDialog({
       }
     }
   }, [isEditing, content, file.type]);
+
+  // Generate preview URL for images and PDFs
+  useEffect(() => {
+    async function getPreviewUrl() {
+      setPreviewUrl(null);
+      const fileType = file.type.toLowerCase();
+      console.log("[FileViewerDialog] Preview file:", file);
+      if (["jpg", "jpeg", "png", "gif", "svg", "pdf"].includes(fileType)) {
+        if (file.url) {
+          setPreviewUrl(file.url);
+        } else if (file.storageKey) {
+          // Supabase Storage (always use storageKey)
+          try {
+            const { data } = await supabase.storage.from("labmaterials").getPublicUrl(file.storageKey);
+            console.log("[FileViewerDialog] Supabase public URL:", data.publicUrl);
+            setPreviewUrl(data.publicUrl);
+          } catch (err) {
+            setPreviewUrl(null);
+          }
+        } else {
+          setPreviewUrl(null);
+        }
+      } else {
+        setPreviewUrl(null);
+      }
+    }
+    if (isOpen) getPreviewUrl();
+  }, [file, isOpen]);
 
   const handleSave = async () => {
     if (!onSave) return;
@@ -367,15 +397,28 @@ export function FileViewerDialog({
 
     const fileType = file.type.toLowerCase();
 
-    // For images and PDFs, show preview
+    // For images and PDFs, show preview in overlay
     if (["jpg", "jpeg", "png", "gif", "svg"].includes(fileType)) {
       return (
-        <div className="flex justify-center p-4 bg-gray-50 rounded-md">
-          <img 
-            src={file.url || file.storageKey || file.path} 
-            alt={file.name} 
-            className="max-h-[500px] object-contain" 
-          />
+        <div className="flex flex-col items-center p-4 bg-gray-50 rounded-md">
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt={file.name}
+              className="max-h-[500px] object-contain"
+              style={{ maxWidth: "100%", borderRadius: 8 }}
+            />
+          ) : (
+            <div className="text-muted-foreground">
+              Image preview not available.<br />
+              {file.storageKey && (
+                <>
+                  <span className="text-xs">Try this link: </span>
+                  <a href={`https://YOUR_PROJECT_ID.supabase.co/storage/v1/object/public/labmaterials/${file.storageKey}`} target="_blank" rel="noopener noreferrer" className="underline text-blue-600">Open in new tab</a>
+                </>
+              )}
+            </div>
+          )}
         </div>
       );
     }
@@ -383,11 +426,23 @@ export function FileViewerDialog({
     if (fileType === "pdf") {
       return (
         <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-md">
-          <iframe 
-            src={file.url || file.storageKey || file.path} 
-            title="PDF Preview" 
-            className="w-full max-w-2xl h-[500px] rounded-md border" 
-          />
+          {previewUrl ? (
+            <iframe
+              src={previewUrl}
+              title="PDF Preview"
+              className="w-full max-w-2xl h-[500px] rounded-md border"
+            />
+          ) : (
+            <div className="text-muted-foreground">
+              PDF preview not available.<br />
+              {file.storageKey && (
+                <>
+                  <span className="text-xs">Try this link: </span>
+                  <a href={`https://YOUR_PROJECT_ID.supabase.co/storage/v1/object/public/labmaterials/${file.storageKey}`} target="_blank" rel="noopener noreferrer" className="underline text-blue-600">Open in new tab</a>
+                </>
+              )}
+            </div>
+          )}
         </div>
       );
     }

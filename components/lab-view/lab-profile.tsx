@@ -10,7 +10,7 @@ interface LabProfileProps {
   isAdmin: boolean
   isGuest: boolean
   isFollowing: boolean
-  setIsFollowing: (value: boolean) => void
+  setIsFollowing: () => void
   notifications: any[]
   notificationsSidebarOpen: boolean
   setNotificationsSidebarOpen: (value: boolean) => void
@@ -23,6 +23,7 @@ interface LabProfileProps {
   filesCount?: number
   fundingTotal?: number
   membersCount?: number
+  onOpenContributeDialog?: () => void
 }
 
 export default function LabProfile({
@@ -42,6 +43,7 @@ export default function LabProfile({
   filesCount = 0,
   fundingTotal = 0,
   membersCount = 0,
+  onOpenContributeDialog,
 }: LabProfileProps) {
   return (
     <Card className="border-accent">
@@ -70,47 +72,62 @@ export default function LabProfile({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end md:self-auto">
-            {isAdmin ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
-                onClick={() => setActiveTab("settings")}
-              >
-                EDIT LAB
-              </Button>
-            ) : (
-              <Button
-                variant={isFollowing ? "default" : "outline"}
-                size="sm"
-                className={
-                  isFollowing
-                    ? "bg-background text-foreground hover:bg-background/90"
-                    : "bg-accent text-background hover:bg-accent/90"
-                }
-                onClick={isGuest ? handleGuestAction : () => setIsFollowing(!isFollowing)}
-              >
-                {isFollowing ? "FOLLOWING" : "FOLLOW"}
-              </Button>
-            )}
-
-            {isAdmin && (
-              <Button
-                variant="outline"
-                size="icon"
-                className={`border-accent ${
-                  notificationsSidebarOpen ? "bg-accent text-accent-foreground" : "text-accent hover:bg-accent/20"
-                }`}
-                onClick={() => setNotificationsSidebarOpen(!notificationsSidebarOpen)}
-              >
-                <Bell className="h-4 w-4" />
-                {notifications.length > 0 && (
-                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center">
-                    {notifications.length}
-                  </span>
+          <div className="flex flex-col items-end gap-2 self-end md:self-auto">
+            {/* Button group for non-admin users */}
+            {!isAdmin && (
+              <div className="flex flex-row gap-3 mt-4 md:mt-0 items-center">
+                {onOpenContributeDialog && (
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="font-bold px-6 py-2 text-base"
+                    onClick={onOpenContributeDialog}
+                    data-testid="contribute-button"
+                  >
+                    CONTRIBUTE +
+                  </Button>
                 )}
-              </Button>
+                <Button
+                  variant={isFollowing ? "default" : "outline"}
+                  size="sm"
+                  className={
+                    isFollowing
+                      ? "bg-background text-foreground hover:bg-background/90"
+                      : "bg-accent text-background hover:bg-accent/90"
+                  }
+                  onClick={isGuest ? handleGuestAction : setIsFollowing}
+                >
+                  {isFollowing ? "FOLLOWING" : "FOLLOW"}
+                </Button>
+              </div>
+            )}
+            {/* Admin button group remains unchanged */}
+            {isAdmin && (
+              <div className="flex items-center gap-2 self-end md:self-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => setActiveTab("settings")}
+                >
+                  EDIT LAB
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className={`border-accent ${
+                    notificationsSidebarOpen ? "bg-accent text-accent-foreground" : "text-accent hover:bg-accent/20"
+                  }`}
+                  onClick={() => setNotificationsSidebarOpen(!notificationsSidebarOpen)}
+                >
+                  <Bell className="h-4 w-4" />
+                  {notifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center">
+                      {notifications.length}
+                    </span>
+                  )}
+                </Button>
+              </div>
             )}
           </div>
         </div>
