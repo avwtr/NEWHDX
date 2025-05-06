@@ -15,10 +15,62 @@ import { Switch } from "@/components/ui/switch"
 import { Users, Bell, Tag, Info, X, Plus } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "@/hooks/use-toast"
+import { researchAreas } from "@/lib/research-areas"
+import { v4 as uuidv4 } from 'uuid'
+import { useAuth } from "@/components/auth-provider"
 
 interface SettingsDialogProps {
   lab: any
   onLabUpdated?: (lab: any) => void
+}
+
+// Category to badge class mapping (from app/explore/page.tsx and globals.css)
+const scienceCategoryBadgeClass: Record<string, string> = {
+  neuroscience: "badge-neuroscience",
+  ai: "badge-ai",
+  biology: "badge-biology",
+  chemistry: "badge-chemistry",
+  physics: "badge-physics",
+  medicine: "badge-medicine",
+  psychology: "badge-psychology",
+  engineering: "badge-engineering",
+  mathematics: "badge-mathematics",
+  environmental: "badge-environmental",
+  astronomy: "badge-astronomy",
+  geology: "badge-geology",
+  "brain-mapping": "badge-neuroscience",
+  "cognitive-science": "badge-psychology",
+  "quantum-mechanics": "badge-physics",
+  "particle-physics": "badge-physics",
+  genomics: "badge-biology",
+  bioinformatics: "badge-biology",
+  ethics: "badge-psychology",
+  "computer-science": "badge-ai",
+  "climate-science": "badge-environmental",
+  "data-analysis": "badge-mathematics",
+  "molecular-biology": "badge-biology",
+  biochemistry: "badge-chemistry",
+  astrophysics: "badge-astronomy",
+  cosmology: "badge-astronomy",
+  "clinical-research": "badge-medicine",
+  biotechnology: "badge-biology",
+  "medical-imaging": "badge-medicine",
+  meteorology: "badge-environmental",
+  "machine-learning": "badge-ai",
+  optimization: "badge-mathematics",
+  "data-processing": "badge-mathematics",
+  "data-visualization": "badge-mathematics",
+  methodology: "badge-default",
+  computing: "badge-ai",
+  evaluation: "badge-default",
+  innovation: "badge-default",
+  "research-funding": "badge-default",
+  governance: "badge-default",
+  mitigation: "badge-environmental",
+  "diversity-studies": "badge-default",
+  "public-perception": "badge-psychology",
+  "citizen-science": "badge-default",
+  "bias-studies": "badge-ai",
 }
 
 export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
@@ -40,14 +92,14 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
   const [addLoading, setAddLoading] = useState<string | null>(null)
   const [removeLoading, setRemoveLoading] = useState<string | null>(null)
 
-  // Sample notification settings
-  const [notificationSettings, setNotificationSettings] = useState({
-    newContributions: true,
-    fileUploads: true,
-    mentions: true,
-    experimentUpdates: true,
-    publicationCitations: true,
-  })
+  // Tags (categories) state
+  const [labCategories, setLabCategories] = useState<string[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
+  const [categoriesError, setCategoriesError] = useState<string | null>(null)
+  const [addCategoryLoading, setAddCategoryLoading] = useState(false)
+  const [removeCategoryLoading, setRemoveCategoryLoading] = useState<string | null>(null)
+
+  const { user } = useAuth();
 
   const handleTagRemove = (tagToRemove: string) => {
     setSelectedTags(selectedTags.filter((tag) => tag !== tagToRemove))
@@ -57,13 +109,6 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
     if (!selectedTags.includes(newTag)) {
       setSelectedTags([...selectedTags, newTag])
     }
-  }
-
-  const toggleNotification = (key: keyof typeof notificationSettings) => {
-    setNotificationSettings({
-      ...notificationSettings,
-      [key]: !notificationSettings[key],
-    })
   }
 
   const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,36 +160,48 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
     }
   }
 
-  // Fetch current admins
-  useEffect(() => {
-    async function fetchAdmins() {
-      setAdminsLoading(true)
-      setAdminError(null)
-      try {
-        const { data: adminRows, error } = await supabase
-          .from("labAdmins")
-          .select("user")
-          .eq("lab_id", lab.labId)
-        if (error) throw error
-        if (!adminRows || adminRows.length === 0) {
-          setAdmins([])
-          setAdminsLoading(false)
-          return
-        }
-        // Get user info from profiles
-        const userIds = adminRows.map((row: any) => row.user)
-        const { data: profiles, error: profileError } = await supabase
-          .from("profiles")
-          .select("user_id, username")
-          .in("user_id", userIds)
-        if (profileError) throw profileError
-        setAdmins(profiles || [])
-      } catch (err: any) {
-        setAdminError(err.message || String(err))
-      } finally {
+  // Fetch current admins (refactored for reuse)
+  const fetchAdmins = async () => {
+    setAdminsLoading(true)
+    setAdminError(null)
+    try {
+      const { data: adminRows, error } = await supabase
+        .from("labAdmins")
+        .select("user, created_at")
+        .eq("lab_id", lab.labId)
+      if (error) throw error
+      if (!adminRows || adminRows.length === 0) {
+        setAdmins([])
         setAdminsLoading(false)
+        return
       }
+      // Get user info from profiles
+      const userIds = adminRows.map((row: any) => row.user)
+      const { data: profiles, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_id, username")
+        .in("user_id", userIds)
+      if (profileError) throw profileError
+      
+      // Combine admin data with profile data
+      const combinedAdmins = profiles?.map(profile => {
+        const adminRow = adminRows.find((row: any) => row.user === profile.user_id)
+        return {
+          ...profile,
+          created_at: adminRow?.created_at
+        }
+      }) || []
+      
+      setAdmins(combinedAdmins)
+    } catch (err: any) {
+      setAdminError(err.message || String(err))
+    } finally {
+      setAdminsLoading(false)
     }
+  }
+
+  // Fetch current admins on mount/labId change
+  useEffect(() => {
     if (lab.labId) fetchAdmins()
   }, [lab.labId])
 
@@ -171,17 +228,29 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
     }
   }
 
-  // Add admin
-  const handleAddAdmin = async (user: any) => {
-    setAddLoading(user.user_id)
+  // Add admin (refactored)
+  const handleAddAdmin = async (userToAdd: any) => {
+    setAddLoading(userToAdd.user_id)
     try {
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from("labAdmins")
-        .insert([{ lab_id: lab.labId, user: user.user_id }])
-      if (error) throw error
-      setAdmins((prev) => [...prev, user])
-      setSearchResults((prev) => prev.filter((u) => u.user_id !== user.user_id))
-      toast({ title: "Admin added", description: `${user.username} is now an admin.` })
+        .insert([{ lab_id: lab.labId, user: userToAdd.user_id }])
+      if (error) {
+        console.error("[AddAdmin] Supabase error:", error)
+        throw error
+      }
+      // Log activity
+      await supabase.from("activity").insert({
+        activity_id: uuidv4(),
+        created_at: new Date().toISOString(),
+        activity_name: `Admin Added: ${userToAdd.username}`,
+        activity_type: "adminadded",
+        performed_by: user?.id || null,
+        lab_from: lab.labId
+      })
+      await fetchAdmins()
+      setSearchResults((prev) => prev.filter((u) => u.user_id !== userToAdd.user_id))
+      toast({ title: "Admin added", description: `${userToAdd.username} is now an admin.` })
     } catch (err: any) {
       toast({ title: "Error adding admin", description: err.message || String(err), variant: "destructive" })
     } finally {
@@ -189,22 +258,83 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
     }
   }
 
-  // Remove admin
+  // Remove admin (refactored)
   const handleRemoveAdmin = async (user: any) => {
     setRemoveLoading(user.user_id)
     try {
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from("labAdmins")
         .delete()
         .eq("lab_id", lab.labId)
         .eq("user", user.user_id)
-      if (error) throw error
-      setAdmins((prev) => prev.filter((a) => a.user_id !== user.user_id))
+      if (error) {
+        console.error("[RemoveAdmin] Supabase error:", error)
+        throw error
+      }
+      await fetchAdmins()
       toast({ title: "Admin removed", description: `${user.username} is no longer an admin.` })
     } catch (err: any) {
       toast({ title: "Error removing admin", description: err.message || String(err), variant: "destructive" })
     } finally {
       setRemoveLoading(null)
+    }
+  }
+
+  // Fetch current lab categories from Supabase
+  const fetchLabCategories = async () => {
+    setCategoriesLoading(true)
+    setCategoriesError(null)
+    try {
+      const { data, error } = await supabase
+        .from("labCategories")
+        .select("category")
+        .eq("lab_id", lab.labId)
+      if (error) throw error
+      setLabCategories((data || []).map((row: any) => row.category))
+    } catch (err: any) {
+      setCategoriesError(err.message || String(err))
+    } finally {
+      setCategoriesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (lab.labId) fetchLabCategories()
+  }, [lab.labId])
+
+  // Add a category
+  const handleAddCategory = async (newCategory: string) => {
+    if (!newCategory || labCategories.includes(newCategory)) return
+    setAddCategoryLoading(true)
+    try {
+      const { error } = await supabase
+        .from("labCategories")
+        .insert([{ lab_id: lab.labId, category: newCategory }])
+      if (error) throw error
+      setLabCategories((prev) => [...prev, newCategory])
+    } catch (err: any) {
+      toast({ title: "Error adding category", description: err.message || String(err), variant: "destructive" })
+    } finally {
+      setAddCategoryLoading(false)
+    }
+  }
+
+  // Remove a category (only if more than one remains)
+  const handleRemoveCategory = async (categoryToRemove: string) => {
+    if (labCategories.length <= 1) return
+    setRemoveCategoryLoading(categoryToRemove)
+    try {
+      const { error } = await supabase
+        .from("labCategories")
+        .delete()
+        .eq("lab_id", lab.labId)
+        .eq("category", categoryToRemove)
+      if (error) throw error
+      setLabCategories((prev) => prev.filter((cat) => cat !== categoryToRemove))
+    } catch (err: any) {
+      toast({ title: "Error removing category", description: err.message || String(err), variant: "destructive" })
+    } finally {
+      setRemoveCategoryLoading(null)
     }
   }
 
@@ -228,10 +358,6 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
             <TabsTrigger value="tags" className="text-xs">
               <Tag className="h-4 w-4 mr-2" />
               TAGS
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="text-xs">
-              <Bell className="h-4 w-4 mr-2" />
-              NOTIFICATIONS
             </TabsTrigger>
           </TabsList>
 
@@ -301,7 +427,15 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
                       </Avatar>
                       <div>
                         <p className="font-medium">{admin.username}</p>
-                        <p className="text-sm text-muted-foreground">{admin.user_id}</p>
+                        <p className="text-sm text-muted-foreground">
+                          LAB ADMIN: {new Date(admin.created_at).toLocaleString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
                       </div>
                     </div>
                     <Button
@@ -355,114 +489,52 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
             <div className="space-y-2">
               <Label>Category Tags</Label>
               <div className="flex flex-wrap gap-2 p-3 border border-secondary rounded-md min-h-[100px]">
-                {selectedTags.map((tag) => (
-                  <Badge key={tag} className="flex items-center gap-1 px-3 py-1">
-                    {tag.toUpperCase()}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4 rounded-full hover:bg-background/20 ml-1"
-                      onClick={() => handleTagRemove(tag)}
-                    >
-                      <X className="h-3 w-3" />
-                      <span className="sr-only">Remove</span>
-                    </Button>
-                  </Badge>
-                ))}
+                {categoriesLoading ? (
+                  <span>Loading...</span>
+                ) : categoriesError ? (
+                  <span className="text-destructive">{categoriesError}</span>
+                ) : labCategories.length === 0 ? (
+                  <span>No categories found.</span>
+                ) : (
+                  labCategories.map((cat) => {
+                    const area = researchAreas.find((a) => a.value === cat)
+                    const badgeClass = scienceCategoryBadgeClass[cat] || "badge-default"
+                    return (
+                      <Badge key={cat} className={badgeClass + " flex items-center gap-1 px-3 py-1"}>
+                        {area?.label || cat}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-4 w-4 rounded-full hover:bg-background/20 ml-1"
+                          onClick={() => handleRemoveCategory(cat)}
+                          disabled={labCategories.length === 1 || removeCategoryLoading === cat}
+                        >
+                          <X className="h-3 w-3" />
+                          <span className="sr-only">Remove</span>
+                        </Button>
+                      </Badge>
+                    )
+                  })
+                )}
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="add-tag">Add Tag</Label>
+              <Label htmlFor="add-tag">Add Category</Label>
               <div className="flex gap-2">
-                <Select onValueChange={handleTagAdd}>
+                <Select onValueChange={handleAddCategory}>
                   <SelectTrigger id="add-tag" className="flex-1">
                     <SelectValue placeholder="Select a category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="neuroscience">NEUROSCIENCE</SelectItem>
-                    <SelectItem value="ai">ARTIFICIAL INTELLIGENCE</SelectItem>
-                    <SelectItem value="biology">BIOLOGY</SelectItem>
-                    <SelectItem value="chemistry">CHEMISTRY</SelectItem>
-                    <SelectItem value="physics">PHYSICS</SelectItem>
-                    <SelectItem value="medicine">MEDICINE</SelectItem>
-                    <SelectItem value="psychology">PSYCHOLOGY</SelectItem>
-                    <SelectItem value="brain-mapping">BRAIN MAPPING</SelectItem>
-                    <SelectItem value="cognitive-science">COGNITIVE SCIENCE</SelectItem>
-                    <SelectItem value="machine-learning">MACHINE LEARNING</SelectItem>
+                    {researchAreas.filter((area) => !labCategories.includes(area.value)).map((area) => (
+                      <SelectItem key={area.value} value={area.value}>{area.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-                <Button className="bg-accent text-primary-foreground hover:bg-accent/90">ADD</Button>
+                <Button className="bg-accent text-primary-foreground hover:bg-accent/90" disabled>ADD</Button>
               </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="notifications" className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>New Contributions</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications when new contributions are submitted
-                  </p>
-                </div>
-                <Switch
-                  checked={notificationSettings.newContributions}
-                  onCheckedChange={() => toggleNotification("newContributions")}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>File Uploads</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications when files are uploaded to the lab
-                  </p>
-                </div>
-                <Switch
-                  checked={notificationSettings.fileUploads}
-                  onCheckedChange={() => toggleNotification("fileUploads")}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Mentions</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications when you are mentioned in comments
-                  </p>
-                </div>
-                <Switch
-                  checked={notificationSettings.mentions}
-                  onCheckedChange={() => toggleNotification("mentions")}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Experiment Updates</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications about experiment progress and updates
-                  </p>
-                </div>
-                <Switch
-                  checked={notificationSettings.experimentUpdates}
-                  onCheckedChange={() => toggleNotification("experimentUpdates")}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Publication Citations</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications when your publications are cited
-                  </p>
-                </div>
-                <Switch
-                  checked={notificationSettings.publicationCitations}
-                  onCheckedChange={() => toggleNotification("publicationCitations")}
-                />
-              </div>
+              <p className="text-xs text-muted-foreground mt-1">At least one category is required.</p>
             </div>
           </TabsContent>
         </Tabs>

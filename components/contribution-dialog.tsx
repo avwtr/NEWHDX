@@ -12,6 +12,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FileUploader } from "@/components/file-uploader"
 import { FileIcon } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
+import { v4 as uuidv4 } from 'uuid'
+import { toast } from "@/components/ui/use-toast"
 
 interface ContributionDialogProps {
   open: boolean
@@ -21,31 +25,61 @@ interface ContributionDialogProps {
 }
 
 export function ContributionDialog({ open, onOpenChange, experimentId, experimentName }: ContributionDialogProps) {
+  const { user } = useAuth();
   const [contributionType, setContributionType] = useState("general")
   const [contributionTitle, setContributionTitle] = useState("")
   const [contributionDescription, setContributionDescription] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleFileChange = (files: File[]) => {
     setSelectedFiles(files)
   }
 
-  const handleSubmit = () => {
-    // In a real app, this would submit the contribution to an API
-    console.log("Submitting contribution:", {
-      type: contributionType,
-      title: contributionTitle,
-      description: contributionDescription,
-      experimentId: experimentId,
-      files: selectedFiles.map((file) => file.name),
-    })
-
-    // Close the dialog and reset form
-    onOpenChange(false)
-    setContributionType("general")
-    setContributionTitle("")
-    setContributionDescription("")
-    setSelectedFiles([])
+  const handleSubmit = async () => {
+    if (!contributionTitle.trim() || !contributionDescription.trim() || !user) return
+    setIsSubmitting(true)
+    try {
+      // 1. Generate a unique request ID
+      const requestId = uuidv4()
+      // 2. Upload files to cont-requests bucket
+      let filesMeta: any[] = []
+      for (const file of selectedFiles) {
+        const storageKey = `${requestId}/${file.name}`
+        const { error: uploadError } = await supabase.storage.from("cont-requests").upload(storageKey, file)
+        if (uploadError) throw uploadError
+        filesMeta.push({
+          name: file.name,
+          storage_key: storageKey,
+          size: file.size,
+          type: file.type
+        })
+      }
+      // 3. Insert into contribution_requests
+      const { error: dbError } = await supabase.from("contribution_requests").insert({
+        created_at: new Date().toISOString(),
+        submittedBy: user.id,
+        labFrom: experimentId, // assuming experimentId is labId, adjust if needed
+        type: contributionType,
+        title: contributionTitle,
+        description: contributionDescription,
+        num_files: filesMeta.length,
+        status: 'pending',
+        files: filesMeta
+      })
+      if (dbError) throw dbError
+      toast && toast({ title: "Contribution submitted", description: "Your contribution request has been submitted for review." })
+      // Reset form
+      onOpenChange(false)
+      setContributionType("general")
+      setContributionTitle("")
+      setContributionDescription("")
+      setSelectedFiles([])
+    } catch (err: any) {
+      toast && toast({ title: "Error submitting contribution", description: err.message || String(err), variant: "destructive" })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -119,8 +153,8 @@ export function ContributionDialog({ open, onOpenChange, experimentId, experimen
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit}>
-            Submit for Review
+          <Button type="button" onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? "Submitting..." : "Submit for Review"}
           </Button>
         </DialogFooter>
       </DialogContent>

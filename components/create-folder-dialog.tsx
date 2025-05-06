@@ -70,36 +70,6 @@ export function CreateFolderDialog({ isOpen, onClose, onCreateFolder }: CreateFo
               className="min-h-[80px]"
             />
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="parent">Parent Folder</Label>
-            <Select value={parentFolder} onValueChange={setParentFolder}>
-              <SelectTrigger id="parent">
-                <SelectValue placeholder="Select parent folder" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="root">Root (Lab Repository)</SelectItem>
-                <SelectItem value="datasets">DATASETS</SelectItem>
-                <SelectItem value="models">MODELS</SelectItem>
-                <SelectItem value="protocols">PROTOCOLS</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="access">Access Permissions</Label>
-            <Select defaultValue="lab-members">
-              <SelectTrigger id="access">
-                <SelectValue placeholder="Select access level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="lab-members">Lab Members Only</SelectItem>
-                <SelectItem value="contributors">Contributors</SelectItem>
-                <SelectItem value="public">Public</SelectItem>
-                <SelectItem value="custom">Custom...</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
