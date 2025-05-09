@@ -46,6 +46,7 @@ export function EditDonationDialog({
   const [newAmount, setNewAmount] = useState("")
   const [allowCustomAmount, setAllowCustomAmount] = useState(true)
   const [minAmount, setMinAmount] = useState("1")
+  const [isActive, setIsActive] = useState(true)
 
   const handleSave = () => {
     // Here you would typically save the changes to your backend
@@ -99,45 +100,16 @@ export function EditDonationDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-start gap-4">
-            <Label className="text-right pt-2">Benefits</Label>
-            <div className="col-span-3 space-y-3">
-              {benefits.map((benefit) => (
-                <div key={benefit.id} className="flex items-center gap-2">
-                  <Input
-                    value={benefit.text}
-                    onChange={(e) => updateBenefit(benefit.id, e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8 text-red-500 hover:text-red-600"
-                    onClick={() => removeBenefit(benefit.id)}
-                  >
-                    <span className="sr-only">Remove</span>×
-                  </Button>
-                </div>
-              ))}
-
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Add new benefit..."
-                  value={newBenefit}
-                  onChange={(e) => setNewBenefit(e.target.value)}
-                  className="flex-1"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      addBenefit()
-                    }
-                  }}
-                />
-                <Button variant="outline" className="h-8" onClick={addBenefit}>
-                  Add
-                </Button>
-              </div>
-            </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="description" className="text-right">
+              Description
+            </Label>
+            <Textarea
+              id="description"
+              placeholder="Describe the donation options..."
+              className="col-span-3"
+              defaultValue="Make a one-time donation to support our research initiatives and help us reach our funding goals."
+            />
           </div>
 
           <div className="grid grid-cols-4 items-start gap-4">
@@ -206,15 +178,13 @@ export function EditDonationDialog({
           </div>
 
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="description" className="text-right">
-              Description
+            <Label htmlFor="isActive" className="text-right">
+              Active
             </Label>
-            <Textarea
-              id="description"
-              placeholder="Describe the donation options..."
-              className="col-span-3"
-              defaultValue="Make a one-time donation to support our research initiatives and help us reach our funding goals."
-            />
+            <div className="col-span-3 flex items-center space-x-2">
+              <Switch id="isActive" checked={isActive} onCheckedChange={setIsActive} />
+              <Label htmlFor="isActive">Active</Label>
+            </div>
           </div>
         </div>
 

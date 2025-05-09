@@ -201,6 +201,41 @@ export function ContributionDetailModal({
       });
       if (activityError) console.error('Activity log error:', activityError);
 
+      // Upsert/increment labContributors
+      if (contribution.submittedBy) {
+        // Try to update first
+        const { data: existingRows, error: fetchError } = await supabase
+          .from('labContributors')
+          .select('id, numContributions')
+          .eq('labId', labId)
+          .eq('userId', contribution.submittedBy)
+        if (fetchError) {
+          console.error('Error fetching labContributors:', fetchError)
+        } else if (existingRows && existingRows.length > 0) {
+          // Row exists, increment
+          const row = existingRows[0]
+          const { error: updateError } = await supabase
+            .from('labContributors')
+            .update({
+              numContributions: (row.numContributions || 0) + 1,
+              lastContributed: new Date().toISOString(),
+            })
+            .eq('id', row.id)
+          if (updateError) console.error('Error updating labContributors:', updateError)
+        } else {
+          // Insert new
+          const { error: insertError } = await supabase
+            .from('labContributors')
+            .insert({
+              labId: labId,
+              userId: contribution.submittedBy,
+              numContributions: 1,
+              lastContributed: new Date().toISOString(),
+            })
+          if (insertError) console.error('Error inserting into labContributors:', insertError)
+        }
+      }
+
       toast({
         title: 'Contribution Approved',
         description: `You have approved "${contribution.title}" and files have been moved to lab materials.`,

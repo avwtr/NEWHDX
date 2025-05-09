@@ -31,6 +31,7 @@ export function ContributionDialog({ open, onOpenChange, experimentId, experimen
   const [contributionDescription, setContributionDescription] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const MAX_FILE_SIZE_MB = 50;
 
   const handleFileChange = (files: File[]) => {
     // Filter out files that are already in selectedFiles (by name and size)
@@ -41,7 +42,17 @@ export function ContributionDialog({ open, onOpenChange, experimentId, experimen
             existingFile.name === newFile.name && existingFile.size === newFile.size
         )
     );
-    setSelectedFiles([...selectedFiles, ...newFiles]);
+    // Filter out files over 50MB
+    const tooLarge = newFiles.filter(f => f.size > MAX_FILE_SIZE_MB * 1024 * 1024);
+    if (tooLarge.length > 0) {
+      toast && toast({
+        title: "File too large",
+        description: `Each file must be 50MB or less. The following file(s) were not added: ${tooLarge.map(f => f.name).join(", ")}`,
+        variant: "destructive"
+      });
+    }
+    const allowedFiles = newFiles.filter(f => f.size <= MAX_FILE_SIZE_MB * 1024 * 1024);
+    setSelectedFiles([...selectedFiles, ...allowedFiles]);
   }
 
   const handleSubmit = async () => {
@@ -140,6 +151,7 @@ export function ContributionDialog({ open, onOpenChange, experimentId, experimen
           <div className="space-y-2">
             <Label>Files (Optional)</Label>
             <FileUploader onChange={handleFileChange} />
+            <p className="text-xs text-muted-foreground mt-1">Max file size: 50MB per file</p>
 
             {selectedFiles.length > 0 && (
               <div className="mt-2">

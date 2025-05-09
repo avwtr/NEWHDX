@@ -160,38 +160,38 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
     }
   }
 
-  // Fetch current admins (refactored for reuse)
+  // Fetch current admins (founders and admins) from labMembers
   const fetchAdmins = async () => {
     setAdminsLoading(true)
     setAdminError(null)
     try {
-      const { data: adminRows, error } = await supabase
-        .from("labAdmins")
-        .select("user, created_at")
+      const { data: memberRows, error } = await supabase
+        .from("labMembers")
+        .select("user, role, created_at")
         .eq("lab_id", lab.labId)
+        .in("role", ["founder", "admin"])
       if (error) throw error
-      if (!adminRows || adminRows.length === 0) {
+      if (!memberRows || memberRows.length === 0) {
         setAdmins([])
         setAdminsLoading(false)
         return
       }
       // Get user info from profiles
-      const userIds = adminRows.map((row: any) => row.user)
+      const userIds = memberRows.map((row: any) => row.user)
       const { data: profiles, error: profileError } = await supabase
         .from("profiles")
         .select("user_id, username")
         .in("user_id", userIds)
       if (profileError) throw profileError
-      
-      // Combine admin data with profile data
-      const combinedAdmins = profiles?.map(profile => {
-        const adminRow = adminRows.find((row: any) => row.user === profile.user_id)
+      // Combine member data with profile data
+      const combinedAdmins = memberRows.map((row: any) => {
+        const profile = profiles.find((p: any) => p.user_id === row.user)
         return {
           ...profile,
-          created_at: adminRow?.created_at
+          role: row.role,
+          created_at: row.created_at
         }
-      }) || []
-      
+      })
       setAdmins(combinedAdmins)
     } catch (err: any) {
       setAdminError(err.message || String(err))
@@ -232,13 +232,6 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
   const handleAddAdmin = async (userToAdd: any) => {
     setAddLoading(userToAdd.user_id)
     try {
-      const { error, data } = await supabase
-        .from("labAdmins")
-        .insert([{ lab_id: lab.labId, user: userToAdd.user_id }])
-      if (error) {
-        console.error("[AddAdmin] Supabase error:", error)
-        throw error
-      }
       // Log activity
       await supabase.from("activity").insert({
         activity_id: uuidv4(),
@@ -248,6 +241,44 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
         performed_by: user?.id || null,
         lab_from: lab.labId
       })
+      // Manual upsert for labMembers
+      // 1. Check if user is already a member
+      const { data: existingMember, error: fetchMemberError } = await supabase
+        .from("labMembers")
+        .select("id, role")
+        .eq("lab_id", lab.labId)
+        .eq("user", userToAdd.user_id)
+      if (fetchMemberError) {
+        console.error("[AddAdmin] labMembers fetch error:", fetchMemberError)
+        throw fetchMemberError
+      }
+      if (existingMember && existingMember.length > 0) {
+        // If already founder, do not update
+        if (existingMember[0].role !== "founder") {
+          const { error: updateMemberError } = await supabase
+            .from("labMembers")
+            .update({ role: "admin" })
+            .eq("id", existingMember[0].id)
+          if (updateMemberError) {
+            console.error("[AddAdmin] labMembers update error:", updateMemberError)
+            throw updateMemberError
+          }
+        }
+      } else {
+        // Insert new admin member
+        const { error: insertMemberError } = await supabase
+          .from("labMembers")
+          .insert({
+            lab_id: lab.labId,
+            user: userToAdd.user_id,
+            role: "admin",
+            created_at: new Date().toISOString()
+          })
+        if (insertMemberError) {
+          console.error("[AddAdmin] labMembers insert error:", insertMemberError)
+          throw insertMemberError
+        }
+      }
       await fetchAdmins()
       setSearchResults((prev) => prev.filter((u) => u.user_id !== userToAdd.user_id))
       toast({ title: "Admin added", description: `${userToAdd.username} is now an admin.` })
@@ -263,7 +294,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
     setRemoveLoading(user.user_id)
     try {
       const { error, data } = await supabase
-        .from("labAdmins")
+        .from("labMembers")
         .delete()
         .eq("lab_id", lab.labId)
         .eq("user", user.user_id)
@@ -346,7 +377,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid grid-cols-4 w-full mb-6">
+          <TabsList className="flex justify-center w-full mb-6 gap-4">
             <TabsTrigger value="profile" className="text-xs">
               <Info className="h-4 w-4 mr-2" />
               PROFILE
@@ -428,7 +459,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
                       <div>
                         <p className="font-medium">{admin.username}</p>
                         <p className="text-sm text-muted-foreground">
-                          LAB ADMIN: {new Date(admin.created_at).toLocaleString('en-US', {
+                          {admin.role.toUpperCase()} • {new Date(admin.created_at).toLocaleString('en-US', {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',
@@ -441,9 +472,11 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-destructive hover:text-destructive"
+                      className={
+                        `text-destructive hover:text-destructive${admin.role === "founder" ? " opacity-50 cursor-not-allowed" : ""}`
+                      }
                       onClick={() => handleRemoveAdmin(admin)}
-                      disabled={removeLoading === admin.user_id || admins.length === 1}
+                      disabled={removeLoading === admin.user_id || admins.length === 1 || admin.role === "founder"}
                     >
                       {removeLoading === admin.user_id ? "Removing..." : "Remove"}
                     </Button>

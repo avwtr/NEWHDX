@@ -34,9 +34,6 @@ import { ContributionDialog } from "@/components/contribution-dialog"
 import {
   liveExperimentsData,
   notificationsData,
-  fundingData,
-  membershipBenefits,
-  donationBenefits,
   contributionsData,
 } from "@/components/lab-view/lab-data"
 
@@ -75,7 +72,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   const [localNotificationsSidebarOpen, setLocalNotificationsSidebarOpen] = useState(false)
 
   // Funding state
-  const [funds, setFunds] = useState(fundingData)
+  const [funds, setFunds] = useState<any[]>([])
   const [isDonationsActive, setIsDonationsActive] = useState(true)
 
   // Experiments state
@@ -108,7 +105,6 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
 
   const [experiments, setExperiments] = useState<any[]>([])
   const [files, setFiles] = useState<any[]>([])
-  const [funding, setFunding] = useState<any[]>([])
   const [members, setMembers] = useState<any[]>([])
   const [bulletins, setBulletins] = useState<any[]>([])
 
@@ -123,6 +119,11 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
 
   // Contribution dialog state
   const [contributionDialogOpen, setContributionDialogOpen] = useState(false)
+
+  const [oneTimeDonation, setOneTimeDonation] = useState(null)
+
+  const [membership, setMembership] = useState(null)
+  const [labsMembershipOption, setLabsMembershipOption] = useState(false)
 
   useEffect(() => {
     const fetchLabData = async () => {
@@ -147,7 +148,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .from("funding")
         .select("*")
         .eq("lab_id", lab.labId)
-      setFunding(fundingData || [])
+      setFunds(fundingData || [])
 
       // Fetch members
       const { data: memberData } = await supabase
@@ -169,6 +170,24 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .select("*")
         .eq("lab_id", lab.labId)
       setBulletins(bulletinData || [])
+
+      // Fetch lab membership option
+      const { data: labData } = await supabase
+        .from("labs")
+        .select("membership_option")
+        .eq("labId", lab.labId)
+        .single()
+      console.log("Fetched lab membership option:", labData)
+      setLabsMembershipOption(labData?.membership_option || false)
+
+      // Fetch membership data
+      const { data: membershipData, error } = await supabase
+        .from("recurring_funding")
+        .select("*")
+        .eq("labId", lab.labId)
+        .single();
+      console.log("Fetched membership data:", membershipData, error);
+      setMembership(membershipData);
     }
     fetchLabData()
   }, [lab])
@@ -208,10 +227,11 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
       }
       console.log("Admin check: checking for user", user.id, "in lab", lab.labId)
       const { data, error } = await supabase
-        .from("labAdmins")
-        .select("user")
+        .from("labMembers")
+        .select("user, role")
         .eq("lab_id", lab.labId)
         .eq("user", user.id)
+        .in("role", ["admin", "founder"])
         .limit(1)
       console.log("Admin check result:", { data, error })
       if (error || !data) {
@@ -233,6 +253,40 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
       isFollowingLab(lab.labId, user.id).then(setLocalIsFollowing)
     }
   }, [user, lab?.labId])
+
+  useEffect(() => {
+    async function fetchOneTimeDonation() {
+      if (!lab?.labId) return
+      const { data, error } = await supabase
+        .from("donation_funding")
+        .select("*")
+        .eq("labId", lab.labId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      console.log("Fetched oneTimeDonation:", { data, error })
+      if (!error && data) setOneTimeDonation(data)
+      else setOneTimeDonation(null)
+    }
+    fetchOneTimeDonation()
+  }, [lab?.labId])
+
+  useEffect(() => {
+    async function fetchMembership() {
+      if (!lab?.labId) return;
+      console.log('Fetching membership for labId:', lab.labId);
+      const { data, error } = await supabase
+        .from("recurring_funding")
+        .select("*")
+        .eq("labId", String(lab.labId).trim())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      console.log("Fetched membership data:", data, error);
+      setMembership(data);
+    }
+    fetchMembership();
+  }, [lab?.labId]);
 
   const handleTabChange = (value: string) => {
     setLocalActiveTab(value)
@@ -308,12 +362,12 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
     setTimeout(() => setLoginPromptOpen(false), 3000)
   }
 
-  const handleEditFund = (fund: (typeof funds)[0]) => {
+  const handleEditFund = (fund: any) => {
     setCurrentEditFund(fund)
     setEditFundDialogOpen(true)
   }
 
-  const handleSaveFund = (updatedFund: (typeof funds)[0]) => {
+  const handleSaveFund = (updatedFund: any) => {
     setFunds(funds.map((fund) => (fund.id === updatedFund.id ? updatedFund : fund)))
     setEditFundDialogOpen(false)
     setCurrentEditFund(null)
@@ -594,13 +648,15 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
               toggleExpand={toggleExpand}
               funds={funds}
               setFunds={setFunds}
-              membershipBenefits={membershipBenefits}
-              donationBenefits={donationBenefits}
               isDonationsActive={isDonationsActive}
               toggleDonations={toggleDonations}
               handleGuestAction={localHandleGuestAction}
               handleEditFund={handleEditFund}
               handleManageMembership={handleManageMembership}
+              labId={lab.labId}
+              membership={membership}
+              oneTimeDonation={oneTimeDonation}
+              labsMembershipOption={labsMembershipOption}
             />
           )}
 
