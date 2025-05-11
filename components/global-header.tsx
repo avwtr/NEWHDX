@@ -15,6 +15,9 @@ import {
   Twitter,
   Youtube,
   CreditCard,
+  Building2,
+  Award,
+  Settings,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -117,7 +120,20 @@ export function GlobalHeader() {
               <DropdownMenuSeparator />
               <DropdownMenuItem>
                 <Link href="/create-lab" className="flex w-full items-center">
+                  <FileText className="h-4 w-4 mr-2" />
                   Lab
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Link href="/create-organization" className="flex w-full items-center">
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Organization
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Link href="/create-grant" className="flex w-full items-center">
+                  <Award className="h-4 w-4 mr-2" />
+                  Grant
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -143,6 +159,12 @@ export function GlobalHeader() {
                   <Link href="/profile" className="gap-2 flex items-center">
                     <User className="h-4 w-4" />
                     <span>Profile</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" className="gap-2 flex items-center">
+                    <Settings className="h-4 w-4" />
+                    <span>Settings</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>

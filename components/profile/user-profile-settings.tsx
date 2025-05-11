@@ -88,9 +88,9 @@ export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps)
     },
   ]
 
-  const toggleInterest = (interest: string) => {
+  const toggleInterest = (interest: any) => {
     if (selectedInterests.includes(interest)) {
-      setSelectedInterests(selectedInterests.filter((i) => i !== interest))
+      setSelectedInterests(selectedInterests.filter((i: any) => i !== interest))
     } else {
       setSelectedInterests([...selectedInterests, interest])
     }
@@ -137,11 +137,12 @@ export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps)
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="profile">Profile Information</TabsTrigger>
           <TabsTrigger value="interests">Research Interests</TabsTrigger>
           <TabsTrigger value="contributions">My Contributions</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="bank">Bank Account</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="mt-6">
@@ -411,6 +412,51 @@ export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps)
                 Cancel
               </Button>
               <Button>Save Changes</Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="bank" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Bank Account for Payouts</CardTitle>
+              <CardDescription>Connect your bank account to receive payouts from lab memberships, donations, and grants.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {(() => {
+                const [isBankConnected, setIsBankConnected] = useState(false)
+                const [accountInfo, setAccountInfo] = useState<any>(null)
+                const handleConnect = () => {
+                  setIsBankConnected(true)
+                  setAccountInfo({ bankName: "Chase", last4: "6789", status: "verified" })
+                }
+                const handleChange = () => {
+                  setIsBankConnected(false)
+                  setAccountInfo(null)
+                }
+                return (
+                  <div className="space-y-4">
+                    {isBankConnected && accountInfo ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-green-100 text-green-800">Connected</Badge>
+                          <span className="text-sm text-muted-foreground">{accountInfo.bankName} ••••{accountInfo.last4}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">Status: {accountInfo.status}</div>
+                        <Button variant="outline" onClick={handleChange}>Change Bank Account</Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="text-sm text-muted-foreground">No bank account connected.</div>
+                        <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleConnect}>Connect Bank Account</Button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </CardContent>
+            <CardFooter>
+              <div className="text-xs text-muted-foreground">You must connect a bank account to receive payouts from HDX.</div>
             </CardFooter>
           </Card>
         </TabsContent>

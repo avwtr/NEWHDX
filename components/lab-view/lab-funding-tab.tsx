@@ -19,6 +19,8 @@ import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
 import { EditFundDialog } from "@/components/edit-fund-dialog"
+import { Dialog as OverlayDialog, DialogContent as OverlayDialogContent, DialogTitle as OverlayDialogTitle } from "@/components/ui/dialog"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 interface LabFundingTabProps {
   isAdmin: boolean
@@ -37,6 +39,7 @@ interface LabFundingTabProps {
   labsMembershipOption: boolean
   refetchMembership: () => Promise<void>
   refetchOneTimeDonation: () => Promise<void>
+  lab: any
 }
 
 export function LabFundingTab({
@@ -56,6 +59,7 @@ export function LabFundingTab({
   labsMembershipOption,
   refetchMembership,
   refetchOneTimeDonation,
+  lab,
 }: LabFundingTabProps) {
   console.log("LabFundingTab props:", {
     membership,
@@ -85,12 +89,17 @@ export function LabFundingTab({
   const [editMembershipAmount, setEditMembershipAmount] = useState("")
   const [editFundDialogOpen, setEditFundDialogOpen] = useState(false)
   const [currentEditFund, setCurrentEditFund] = useState<any>(null)
+  const [showFundingActivity, setShowFundingActivity] = useState(false)
+  const [showCreateFundDialog, setShowCreateFundDialog] = useState(false)
 
   // Helper to determine if membership is set up and active
   const isMembershipSetUp = !!membership
   const isMembershipActive = !!membership && labsMembershipOption
   const isDonationSetUp = !!oneTimeDonation
   const isDonationActive = isDonationsActive
+
+  // Add funding_setup from lab prop
+  const fundingSetup = lab?.funding_setup
 
   // Fetch and ensure General Fund
   useEffect(() => {
@@ -224,13 +233,100 @@ export function LabFundingTab({
     percentFunded: fund.goal_amount ? Math.round((fund.amount_contributed ?? 0) / fund.goal_amount * 100) : 0,
   }))
 
+  if (!fundingSetup) {
+    if (!isAdmin) {
+      return null // Or: return <div className="text-center text-muted-foreground py-12">Lab funding is not yet set up.</div>
+    }
+    return (
+      <Card className="max-w-2xl mx-auto mt-8 shadow-lg border-accent/40">
+        <CardHeader className="bg-accent/10 rounded-t-lg p-6 flex flex-col items-center">
+          <CardTitle className="text-2xl font-bold text-accent mb-2 text-center">Get Started with Lab Funding</CardTitle>
+          <CardDescription className="text-center text-base mb-4 max-w-xl">
+            Set up recurring lab memberships and/or receive donations from your science community. Unlock new ways to support your research, track funding goals, and engage your supporters.
+          </CardDescription>
+          <Button className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2">
+            Get Started
+          </Button>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+          {/* Example Funding Goals */}
+          <div>
+            <div className="font-semibold mb-2 text-accent">Example Funding Goals</div>
+            <div className="space-y-4">
+              <div className="border border-secondary rounded-lg p-4 bg-accent/5">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-medium">GENERAL FUND</span>
+                  <Badge className="bg-accent text-primary-foreground">GENERAL</Badge>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden mb-2">
+                  <div className="h-full bg-accent" style={{ width: '0%' }} />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>$0 raised</span>
+                  <span>No deadline</span>
+                </div>
+              </div>
+              <div className="border border-secondary rounded-lg p-4">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="font-medium">NEW EQUIPMENT FUND</span>
+                  <Badge className="bg-accent/60 text-primary-foreground">0% FUNDED</Badge>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden mb-2">
+                  <div className="h-full bg-accent/60" style={{ width: '0%' }} />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>$0 raised</span>
+                  <span>Goal: $5,000</span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">30 days remaining</div>
+              </div>
+            </div>
+          </div>
+          {/* Example Funding Activity & Metrics */}
+          <div>
+            <div className="font-semibold mb-2 text-accent">Example Funding Activity</div>
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
+                <Avatar className="h-7 w-7"><AvatarFallback>AW</AvatarFallback></Avatar>
+                <span className="font-medium">Alex Wong</span>
+                <span className="text-muted-foreground">donated $50 to GENERAL FUND</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
+                <Avatar className="h-7 w-7"><AvatarFallback>MR</AvatarFallback></Avatar>
+                <span className="font-medium">Maria Rodriguez</span>
+                <span className="text-muted-foreground">subscribed $25/mo to NEW EQUIPMENT FUND</span>
+              </div>
+            </div>
+            <div className="font-semibold mb-2 text-accent">Example Metrics</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-secondary/50 rounded-lg p-3 text-center">
+                <div className="text-xs text-muted-foreground">Total Raised</div>
+                <div className="text-lg font-bold text-accent">$0</div>
+              </div>
+              <div className="bg-secondary/50 rounded-lg p-3 text-center">
+                <div className="text-xs text-muted-foreground">Active Donors</div>
+                <div className="text-lg font-bold text-accent">0</div>
+              </div>
+              <div className="bg-secondary/50 rounded-lg p-3 text-center">
+                <div className="text-xs text-muted-foreground">Active Members</div>
+                <div className="text-lg font-bold text-accent">0</div>
+              </div>
+              <div className="bg-secondary/50 rounded-lg p-3 text-center">
+                <div className="text-xs text-muted-foreground">Funding Goals</div>
+                <div className="text-lg font-bold text-accent">2</div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>SUPPORT OUR RESEARCH</CardTitle>
         <div className="flex items-center gap-2">
-          {/* Create fund button only for admins */}
-          {isAdmin && <CreateFundDialog labId={labId} onFundCreated={handleFundCreated} />}
           <Button variant="ghost" size="icon" onClick={() => toggleExpand("funding")} className="h-8 w-8">
             {expandedTab === "funding" ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
@@ -598,7 +694,23 @@ export function LabFundingTab({
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-lg">CURRENT FUNDING GOALS</CardTitle>
-              {isAdmin && <CreateFundDialog labId={labId} onFundCreated={handleFundCreated} />}
+              {isAdmin && (
+                <div className="flex flex-col items-end gap-1">
+                  <Button
+                    className="bg-accent text-primary-foreground hover:bg-accent/90 font-semibold px-4 py-2 rounded"
+                    onClick={() => setShowCreateFundDialog(true)}
+                  >
+                    CREATE FUNDING GOAL +
+                  </Button>
+                  <button
+                    className="text-xs text-accent underline hover:text-accent/80 mt-1"
+                    onClick={() => setShowFundingActivity(true)}
+                    style={{ alignSelf: 'flex-end' }}
+                  >
+                    VIEW FUNDING ACTIVITY
+                  </button>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
@@ -649,9 +761,6 @@ export function LabFundingTab({
             </CardContent>
           </Card>
         )}
-        <div className="mt-4">
-          <FundingActivityDialog />
-        </div>
       </CardContent>
       {/* Edit Fund Dialog */}
       {currentEditFund && (
@@ -662,6 +771,28 @@ export function LabFundingTab({
           onOpenChange={setEditFundDialogOpen}
         />
       )}
+      {/* Create Funding Goal Dialog */}
+      <OverlayDialog open={showCreateFundDialog} onOpenChange={setShowCreateFundDialog}>
+        <OverlayDialogContent className="sm:max-w-[525px]">
+          <OverlayDialogTitle>Create New Funding Goal</OverlayDialogTitle>
+          <CreateFundDialog
+            labId={labId}
+            onFundCreated={() => {
+              handleFundCreated()
+              setShowCreateFundDialog(false)
+            }}
+            isOpen={true}
+            onOpenChange={setShowCreateFundDialog}
+          />
+        </OverlayDialogContent>
+      </OverlayDialog>
+      {/* Funding Activity Dialog */}
+      <OverlayDialog open={showFundingActivity} onOpenChange={setShowFundingActivity}>
+        <OverlayDialogContent className="max-w-3xl">
+          <OverlayDialogTitle>Funding Activity</OverlayDialogTitle>
+          <FundingActivityDialog isOpen={showFundingActivity} onOpenChange={setShowFundingActivity} />
+        </OverlayDialogContent>
+      </OverlayDialog>
     </Card>
   )
 }

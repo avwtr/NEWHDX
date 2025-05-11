@@ -142,8 +142,14 @@ const fundingActivityData = [
   },
 ]
 
-export function FundingActivityDialog() {
-  const [isOpen, setIsOpen] = useState(false)
+interface FundingActivityDialogProps {
+  isOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+}
+
+export function FundingActivityDialog({ isOpen, onOpenChange }: FundingActivityDialogProps) {
+  // Local state for uncontrolled mode
+  const [localOpen, setLocalOpen] = useState(false)
 
   // Format date to a more readable format
   const formatDate = (dateString: string) => {
@@ -158,59 +164,65 @@ export function FundingActivityDialog() {
     }).format(date)
   }
 
+  const content = (
+    <>
+      <DialogHeader>
+        <DialogTitle>FUNDING ACTIVITY</DialogTitle>
+        <DialogDescription>Recent donations and subscriptions supporting our research</DialogDescription>
+      </DialogHeader>
+
+      <ScrollArea className="h-[60vh] pr-4">
+        <div className="space-y-4 py-2">
+          {fundingActivityData.map((activity) => (
+            <div
+              key={activity.id}
+              className="flex items-start gap-3 p-3 rounded-md border border-secondary hover:bg-secondary/20 transition-colors"
+            >
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={activity.user.avatar} alt={activity.user.name} />
+                <AvatarFallback>{activity.user.initials}</AvatarFallback>
+              </Avatar>
+
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{activity.user.name}</div>
+                  <Badge className={activity.type === "subscription" ? "bg-blue-600" : "bg-accent"}>
+                    {activity.type === "subscription" ? "SUBSCRIPTION" : "DONATION"}
+                  </Badge>
+                </div>
+
+                <p className="text-sm">
+                  {activity.type === "subscription"
+                    ? `Paid monthly membership of $${activity.amount} towards ${activity.fund}`
+                    : `Donated $${activity.amount} to ${activity.fund}`}
+                </p>
+                {activity.message && <p className="text-sm text-muted-foreground">{activity.message}</p>}
+                <p className="text-xs text-muted-foreground">{formatDate(activity.date)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+    </>
+  )
+
+  if (typeof isOpen === "boolean" && onOpenChange) {
+    return content
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={localOpen} onOpenChange={setLocalOpen}>
       <DialogTrigger asChild>
         <Button
           variant="outline"
           className="w-full border-accent text-accent hover:bg-secondary"
-          onClick={() => setIsOpen(true)}
+          onClick={() => setLocalOpen(true)}
         >
           VIEW FUNDING ACTIVITY
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
-        <DialogHeader>
-          <DialogTitle>FUNDING ACTIVITY</DialogTitle>
-          <DialogDescription>Recent donations and subscriptions supporting our research</DialogDescription>
-        </DialogHeader>
-
-        <ScrollArea className="h-[60vh] pr-4">
-          <div className="space-y-4 py-2">
-            {fundingActivityData.map((activity) => (
-              <div
-                key={activity.id}
-                className="flex items-start gap-3 p-3 rounded-md border border-secondary hover:bg-secondary/20 transition-colors"
-              >
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={activity.user.avatar} alt={activity.user.name} />
-                  <AvatarFallback>{activity.user.initials}</AvatarFallback>
-                </Avatar>
-
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium">{activity.user.name}</div>
-                    <Badge className={activity.type === "subscription" ? "bg-blue-600" : "bg-accent"}>
-                      {activity.type === "subscription" ? "SUBSCRIPTION" : "DONATION"}
-                    </Badge>
-                  </div>
-
-                  <p className="text-sm">
-                    {activity.type === "subscription"
-                      ? `Paid monthly membership of $${activity.amount} towards ${activity.fund}`
-                      : `Donated $${activity.amount} to ${activity.fund}`}
-                  </p>
-
-                  {activity.message && (
-                    <p className="text-sm italic text-muted-foreground mt-1">"{activity.message}"</p>
-                  )}
-
-                  <p className="text-xs text-muted-foreground mt-1">{formatDate(activity.date)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
+        {content}
       </DialogContent>
     </Dialog>
   )

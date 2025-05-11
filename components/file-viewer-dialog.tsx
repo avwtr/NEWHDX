@@ -125,6 +125,13 @@ async function fetchUsername(userId: string): Promise<string> {
   return data?.username || userId;
 }
 
+// Helper to determine if file is editable
+function isEditableFileType(fileType: string) {
+  const t = fileType.toLowerCase();
+  // Only allow editing for text, code, and tabular files
+  return ["md", "txt", "py", "js", "ts", "r", "csv", "xlsx", "json"].includes(t);
+}
+
 export function FileViewerDialog({
   file,
   isOpen,
@@ -469,7 +476,7 @@ export function FileViewerDialog({
             <div className="flex items-center justify-between">
               <DialogTitle className="text-xl">{file.name}</DialogTitle>
               <div className="flex items-center gap-2">
-                {isAdmin && !isEditing && (
+                {isAdmin && !isEditing && isEditableFileType(file.type) && (
                   <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                     <Edit2 className="h-4 w-4 mr-1" /> Edit
                   </Button>
@@ -553,7 +560,7 @@ export function FileViewerDialog({
                 Download
               </Button>
 
-              {isAdmin && isEditing && (
+              {isAdmin && isEditing && isEditableFileType(file.type) && (
                 <Button onClick={handleSave} className="bg-accent text-primary-foreground hover:bg-accent/90">
                   <Save className="h-4 w-4 mr-2" />
                   Save Changes

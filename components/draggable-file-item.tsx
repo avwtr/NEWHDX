@@ -473,14 +473,14 @@ export function DraggableFileItem({
           file={{
             id,
             name,
-            type: (file.filename && file.filename.includes('.') ? file.filename.split('.').pop()?.toLowerCase() : type) || type,
+            type: (file && file.filename && file.filename.includes('.') ? file.filename.split('.').pop()?.toLowerCase() : type) || type,
             size,
             author,
             date,
-            url: file?.url,
-            storageKey: file?.storageKey,
-            path: file?.storageKey || file?.path,
-            content: file?.content
+            url: file?.url || '',
+            storageKey: file?.storageKey || '',
+            path: (file?.storageKey || file?.path) || '',
+            content: file?.content || ''
           }}
           isOpen={fileViewerOpen}
           onClose={() => setFileViewerOpen(false)}
