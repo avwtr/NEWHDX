@@ -426,16 +426,57 @@ export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps)
               {(() => {
                 const [isBankConnected, setIsBankConnected] = useState(false)
                 const [accountInfo, setAccountInfo] = useState<any>(null)
-                const handleConnect = () => {
-                  setIsBankConnected(true)
-                  setAccountInfo({ bankName: "Chase", last4: "6789", status: "verified" })
+                const [loading, setLoading] = useState(false)
+                const [success, setSuccess] = useState(false)
+                const [businessType, setBusinessType] = useState<'individual' | 'company'>('individual')
+                // Check for Stripe return
+                useState(() => {
+                  if (typeof window !== 'undefined' && window.location.search.includes('stripe=success')) {
+                    setSuccess(true)
+                  }
+                })
+                const handleStripeConnect = async () => {
+                  setLoading(true)
+                  try {
+                    const res = await fetch('/api/stripe/create-connect-link', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ businessType }),
+                    })
+                    const data = await res.json()
+                    if (data.url) {
+                      window.location.href = data.url
+                    } else {
+                      setLoading(false)
+                      alert('Failed to get Stripe onboarding link.')
+                    }
+                  } catch (err) {
+                    setLoading(false)
+                    alert('Error connecting to Stripe.')
+                  }
                 }
-                const handleChange = () => {
-                  setIsBankConnected(false)
-                  setAccountInfo(null)
+                if (success) {
+                  return <div className="text-green-600 font-semibold">Bank account connected successfully!</div>
                 }
                 return (
                   <div className="space-y-4">
+                    <div className="flex gap-4 items-center">
+                      <label className="font-medium">Account Type:</label>
+                      <Button
+                        variant={businessType === 'individual' ? 'default' : 'outline'}
+                        onClick={() => setBusinessType('individual')}
+                        className={businessType === 'individual' ? 'bg-accent text-primary-foreground' : ''}
+                      >
+                        Individual
+                      </Button>
+                      <Button
+                        variant={businessType === 'company' ? 'default' : 'outline'}
+                        onClick={() => setBusinessType('company')}
+                        className={businessType === 'company' ? 'bg-accent text-primary-foreground' : ''}
+                      >
+                        Business
+                      </Button>
+                    </div>
                     {isBankConnected && accountInfo ? (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
@@ -443,12 +484,14 @@ export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps)
                           <span className="text-sm text-muted-foreground">{accountInfo.bankName} ••••{accountInfo.last4}</span>
                         </div>
                         <div className="text-xs text-muted-foreground">Status: {accountInfo.status}</div>
-                        <Button variant="outline" onClick={handleChange}>Change Bank Account</Button>
+                        <Button variant="outline" onClick={() => setIsBankConnected(false)}>Change Bank Account</Button>
                       </div>
                     ) : (
                       <div className="space-y-2">
                         <div className="text-sm text-muted-foreground">No bank account connected.</div>
-                        <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleConnect}>Connect Bank Account</Button>
+                        <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleStripeConnect} disabled={loading}>
+                          {loading ? 'Redirecting to Stripe...' : 'Connect Bank Account'}
+                        </Button>
                       </div>
                     )}
                   </div>
