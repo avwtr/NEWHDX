@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -41,11 +41,22 @@ interface EditFundDialogProps {
 export function EditFundDialog({ fund, onSave, isOpen, onOpenChange }: EditFundDialogProps) {
   const [name, setName] = useState(fund.name)
   const [description, setDescription] = useState(fund.description)
-  const [currentAmount, setCurrentAmount] = useState(fund.currentAmount.toString())
-  const [goalAmount, setGoalAmount] = useState(fund.goalAmount.toString())
+  const [currentAmount, setCurrentAmount] = useState((fund.currentAmount ?? 0).toString())
+  const [goalAmount, setGoalAmount] = useState((fund.goalAmount ?? 0).toString())
   const [endDate, setEndDate] = useState<Date | undefined>(
     fund.endDate || (fund.daysRemaining ? new Date(Date.now() + fund.daysRemaining * 24 * 60 * 60 * 1000) : undefined),
   )
+
+  useEffect(() => {
+    setName(fund.name)
+    setDescription(fund.description)
+    setCurrentAmount((fund.currentAmount ?? 0).toString())
+    setGoalAmount((fund.goalAmount ?? 0).toString())
+    setEndDate(
+      fund.endDate ||
+      (fund.daysRemaining ? new Date(Date.now() + fund.daysRemaining * 24 * 60 * 60 * 1000) : undefined)
+    )
+  }, [fund])
 
   const handleSave = () => {
     // Calculate days remaining based on end date

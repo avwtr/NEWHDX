@@ -141,17 +141,47 @@ export function ContributionDetailModal({
         console.log('Downloaded file:', (file as any).storage_key);
         // Convert to arrayBuffer for upload
         const fileBuffer = await fileData.arrayBuffer();
-        // Upload to labmaterials (root)
-        const newStorageKey = `${labId}/root/${file.name}`;
+        // Infer MIME type from file.type or filename
+        function inferMimeType(filename: string): string {
+          const ext = filename.split('.').pop()?.toLowerCase();
+          if (!ext) return 'application/octet-stream';
+          if (["png"].includes(ext)) return 'image/png';
+          if (["jpg", "jpeg"].includes(ext)) return 'image/jpeg';
+          if (["gif"].includes(ext)) return 'image/gif';
+          if (["svg"].includes(ext)) return 'image/svg+xml';
+          if (["pdf"].includes(ext)) return 'application/pdf';
+          if (["csv"].includes(ext)) return 'text/csv';
+          if (["md"].includes(ext)) return 'text/markdown';
+          if (["txt"].includes(ext)) return 'text/plain';
+          if (["json"].includes(ext)) return 'application/json';
+          if (["js"].includes(ext)) return 'application/javascript';
+          if (["py"].includes(ext)) return 'text/x-python';
+          return 'application/octet-stream';
+        }
+        const mimeType = file.type || inferMimeType(file.name);
+        const blob = new Blob([fileBuffer], { type: mimeType });
+        // Upload to labmaterials (no root subfolder)
+        const newStorageKey = `${labId}/${file.name}`;
         const { error: uploadError } = await supabase.storage
           .from('labmaterials')
-          .upload(newStorageKey, fileBuffer, { upsert: true });
+          .upload(newStorageKey, blob, { upsert: true, contentType: mimeType });
         if (uploadError) throw uploadError;
         console.log('Uploaded file to:', newStorageKey);
+        // Infer frontend type from extension
+        function inferFrontendType(filename: string): string {
+          const ext = filename.split('.').pop()?.toLowerCase();
+          if (!ext) return "other";
+          if (["png", "jpg", "jpeg", "gif", "bmp", "svg", "webp"].includes(ext)) return "image";
+          if (["pdf", "doc", "docx", "txt", "rtf", "odt"].includes(ext)) return "document";
+          if (["csv", "tsv", "xls", "xlsx", "json"].includes(ext)) return "data";
+          if (["py", "js", "ts", "java", "cpp", "c", "ipynb", "r"].includes(ext)) return "code";
+          return "other";
+        }
         // Insert into files table
         const { error: insertError } = await supabase.from('files').insert({
           filename: file.name,
-          fileType: file.type,
+          fileType: file.type, // MIME type from upload (may be empty for some browsers, but best effort)
+          fileTag: inferFrontendType(file.name), // frontend type (was 'type', now 'fileTag')
           fileSize: (file as any).size,
           labID: labId,
           initiallycreatedBy: user.id,

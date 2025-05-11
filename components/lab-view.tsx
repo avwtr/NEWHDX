@@ -171,14 +171,15 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .eq("lab_id", lab.labId)
       setBulletins(bulletinData || [])
 
-      // Fetch lab membership option
+      // Fetch lab membership and donation options
       const { data: labData } = await supabase
         .from("labs")
-        .select("membership_option")
+        .select("membership_option, one_time_donation_option")
         .eq("labId", lab.labId)
         .single()
-      console.log("Fetched lab membership option:", labData)
+      console.log("Fetched lab membership and donation options:", labData)
       setLabsMembershipOption(labData?.membership_option || false)
+      setIsDonationsActive(labData?.one_time_donation_option ?? false)
 
       // Fetch membership data
       const { data: membershipData, error } = await supabase
@@ -438,6 +439,44 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
     }
   }
 
+  // Refetch functions for membership and one-time donation
+  const refetchMembership = async () => {
+    if (!lab?.labId) return;
+    const { data, error } = await supabase
+      .from("recurring_funding")
+      .select("*")
+      .eq("labId", String(lab.labId).trim())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    setMembership(data);
+    // Also refetch labsMembershipOption in case status changed
+    const { data: labData } = await supabase
+      .from("labs")
+      .select("membership_option")
+      .eq("labId", lab.labId)
+      .single();
+    setLabsMembershipOption(labData?.membership_option || false);
+  };
+  const refetchOneTimeDonation = async () => {
+    if (!lab?.labId) return;
+    const { data, error } = await supabase
+      .from("donation_funding")
+      .select("*")
+      .eq("labId", lab.labId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setOneTimeDonation(data);
+    // Also refetch isDonationsActive in case status changed
+    const { data: labData } = await supabase
+      .from("labs")
+      .select("one_time_donation_option")
+      .eq("labId", lab.labId)
+      .single();
+    setIsDonationsActive(labData?.one_time_donation_option ?? false);
+  };
+
   return (
     <div className="container mx-auto pt-4 pb-8">
       {/* Contribution Dialog for non-admin users */}
@@ -657,6 +696,8 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
               membership={membership}
               oneTimeDonation={oneTimeDonation}
               labsMembershipOption={labsMembershipOption}
+              refetchMembership={refetchMembership}
+              refetchOneTimeDonation={refetchOneTimeDonation}
             />
           )}
 

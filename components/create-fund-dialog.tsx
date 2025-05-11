@@ -19,29 +19,44 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon, Plus } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
 
-export function CreateFundDialog() {
+interface CreateFundDialogProps {
+  labId: string
+  onFundCreated: () => void
+}
+
+export function CreateFundDialog({ labId, onFundCreated }: CreateFundDialogProps) {
   const [fundName, setFundName] = useState("")
   const [description, setDescription] = useState("")
   const [goalAmount, setGoalAmount] = useState("")
   const [date, setDate] = useState<Date>()
   const [isOpen, setIsOpen] = useState(false)
+  const { user } = useAuth()
 
-  const handleSubmit = () => {
-    // Here you would typically save the fund to your database
-    console.log({
-      name: fundName,
-      description,
-      goalAmount: Number.parseFloat(goalAmount),
-      deadline: date,
+  const handleSubmit = async () => {
+    // Insert the fund into the backend
+    const { error } = await supabase.from("funding_goals").insert({
+      lab_id: labId,
+      goalName: fundName,
+      goal_description: description,
+      goal_amount: Number.parseFloat(goalAmount),
+      deadline: date ? date.toISOString() : null,
+      amount_contributed: 0,
+      created_by: user?.id || null,
     })
-
-    // Reset form and close dialog
-    setFundName("")
-    setDescription("")
-    setGoalAmount("")
-    setDate(undefined)
-    setIsOpen(false)
+    if (!error) {
+      onFundCreated()
+      // Reset form and close dialog
+      setFundName("")
+      setDescription("")
+      setGoalAmount("")
+      setDate(undefined)
+      setIsOpen(false)
+    } else {
+      // Optionally show error toast
+    }
   }
 
   return (
