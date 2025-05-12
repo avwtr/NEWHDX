@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,17 +13,76 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ArrowLeft, Upload, X, Plus, Bell, Mail, FileText, Beaker, Database } from "lucide-react"
+import { useAuth } from "@/components/auth-provider"
+import { supabase } from "@/lib/supabase"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 interface UserProfileSettingsProps {
-  user: any
   onClose: () => void
 }
 
-export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps) {
-  const [name, setName] = useState(user.name)
-  const [username, setUsername] = useState(user.username)
-  const [bio, setBio] = useState(user.bio)
-  const [selectedInterests, setSelectedInterests] = useState(user.interests)
+// Initialize Stripe
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+
+// Payment Form Component
+function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { error: submitError } = await stripe.confirmSetup({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/profile?payment=success`,
+        },
+      });
+
+      if (submitError) {
+        setError(submitError.message || 'An error occurred');
+      } else {
+        onSuccess();
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <PaymentElement />
+      {error && (
+        <div className="text-red-500 text-sm">{error}</div>
+      )}
+      <button
+        type="submit"
+        disabled={!stripe || loading}
+        className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50"
+      >
+        {loading ? 'Saving...' : 'Save Payment Method'}
+      </button>
+    </form>
+  );
+}
+
+export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
+  const { user } = useAuth()
+  const [name, setName] = useState("")
+  const [username, setUsername] = useState("")
+  const [bio, setBio] = useState("")
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([])
 
   // Mock data for science categories
   const allScienceCategories = [
@@ -124,6 +183,192 @@ export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps)
     }
   }
 
+  const [fundingId, setFundingId] = useState<string | null>(null)
+  const [bankInfo, setBankInfo] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [businessType, setBusinessType] = useState<'individual' | 'company'>('individual')
+  const [error, setError] = useState<string | null>(null)
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
+  const [paymentInfo, setPaymentInfo] = useState<any>(null)
+  const [showPaymentForm, setShowPaymentForm] = useState(false)
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [showRemovePaymentConfirm, setShowRemovePaymentConfirm] = useState(false)
+
+  // Populate initial state from user when available
+  useEffect(() => {
+    if (user) {
+      setName(user.user_metadata?.name || "")
+      setUsername(user.user_metadata?.username || "")
+      setBio(user.user_metadata?.bio || "")
+      setSelectedInterests(user.user_metadata?.interests || [])
+    }
+  }, [user])
+
+  // Fetch profile on mount
+  useEffect(() => {
+    if (!user) return
+    (async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('funding_id')
+        .eq('user_id', user.id)
+        .single()
+      if (error) return
+      setFundingId(data?.funding_id || null)
+    })()
+  }, [user])
+
+  // Fetch bank info if fundingId exists
+  useEffect(() => {
+    if (!fundingId) { setBankInfo(null); return }
+    (async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch('/api/stripe/get-funding-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ funding_id: fundingId }),
+        })
+        const data = await res.json()
+        if (data.error) setError(data.error)
+        else setBankInfo(data)
+      } catch (err: any) {
+        setError('Failed to fetch bank info')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [fundingId])
+
+  // After onboarding, save funding_id
+  useEffect(() => {
+    if (!user) return
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const accountId = params.get('account')
+    if (params.get('stripe') === 'success' && accountId) {
+      (async () => {
+        await fetch('/api/stripe/save-funding-id', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': user.id,
+          },
+          body: JSON.stringify({ funding_id: accountId }),
+        })
+        setFundingId(accountId)
+        setSuccess(true)
+        // Remove query params from URL
+        window.history.replaceState({}, document.title, window.location.pathname)
+      })()
+    }
+  }, [user])
+
+  // Add this effect to fetch payment info
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/stripe/get-payment-info', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': user.id,
+          },
+        });
+        const data = await res.json();
+        if (!data.error) {
+          setPaymentInfo(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch payment info:', err);
+      }
+    })();
+  }, [user]);
+
+  const handleStripeConnect = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/stripe/create-connect-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessType }),
+      })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        setLoading(false)
+        alert('Failed to get Stripe onboarding link.')
+      }
+    } catch (err) {
+      setLoading(false)
+      alert('Error connecting to Stripe.')
+    }
+  }
+
+  const handleRemove = async () => {
+    if (!user) return
+    setLoading(true)
+    await fetch('/api/stripe/remove-funding-id', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': user.id,
+      },
+    })
+    setFundingId(null)
+    setBankInfo(null)
+    setLoading(false)
+    setShowRemoveConfirm(false)
+  }
+
+  // Add this function to handle adding a payment method
+  const handleAddPaymentMethod = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/stripe/setup-payment-method', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user.id,
+        },
+      });
+      const data = await res.json();
+      if (data.clientSecret) {
+        setClientSecret(data.clientSecret);
+        setShowPaymentForm(true);
+      }
+    } catch (err) {
+      console.error('Failed to setup payment method:', err);
+    }
+  };
+
+  const handleRemovePayment = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/stripe/remove-payment-method', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      if (data.error) {
+        setError(data.error);
+      } else {
+        setPaymentInfo(null);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="container py-8 max-w-6xl">
       <div className="flex items-center justify-between mb-6">
@@ -142,7 +387,7 @@ export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps)
           <TabsTrigger value="interests">Research Interests</TabsTrigger>
           <TabsTrigger value="contributions">My Contributions</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="bank">Bank Account</TabsTrigger>
+          <TabsTrigger value="bank">Bank Accounts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="mt-6">
@@ -156,8 +401,8 @@ export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps)
                 <Label htmlFor="avatar">Profile Picture</Label>
                 <div className="flex items-center gap-4">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={user?.user_metadata?.avatar_url || "/placeholder.svg?height=80&width=80"} alt={user?.user_metadata?.name || user?.email || "User"} />
+                    <AvatarFallback>{(user?.user_metadata?.name?.charAt(0) || user?.email?.charAt(0) || "U")}</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col gap-2">
                     <Button variant="outline" size="sm" className="w-fit">
@@ -419,91 +664,162 @@ export function UserProfileSettings({ user, onClose }: UserProfileSettingsProps)
         <TabsContent value="bank" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Bank Account for Payouts</CardTitle>
-              <CardDescription>Connect your bank account to receive payouts from lab memberships, donations, and grants.</CardDescription>
+              <CardTitle>Bank Accounts</CardTitle>
+              <CardDescription>Manage your payout and payment bank accounts for HDX.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {(() => {
-                const [isBankConnected, setIsBankConnected] = useState(false)
-                const [accountInfo, setAccountInfo] = useState<any>(null)
-                const [loading, setLoading] = useState(false)
-                const [success, setSuccess] = useState(false)
-                const [businessType, setBusinessType] = useState<'individual' | 'company'>('individual')
-                // Check for Stripe return
-                useState(() => {
-                  if (typeof window !== 'undefined' && window.location.search.includes('stripe=success')) {
-                    setSuccess(true)
-                  }
-                })
-                const handleStripeConnect = async () => {
-                  setLoading(true)
-                  try {
-                    const res = await fetch('/api/stripe/create-connect-link', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ businessType }),
-                    })
-                    const data = await res.json()
-                    if (data.url) {
-                      window.location.href = data.url
-                    } else {
-                      setLoading(false)
-                      alert('Failed to get Stripe onboarding link.')
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Payout Bank Account (Stripe Connect) */}
+                <div className="border rounded-lg p-6 flex flex-col items-center bg-secondary/30">
+                  <h3 className="text-lg font-bold mb-2">PAYOUT BANK ACCOUNT</h3>
+                  <p className="text-sm text-muted-foreground mb-4 text-center">
+                    Required for receiving funding or grants on HDX.<br />Requires more info (KYC).
+                  </p>
+                  {/* Stripe Connect logic */}
+                  {(() => {
+                    if (loading) {
+                      return <div className="text-accent font-semibold">Loading...</div>
                     }
-                  } catch (err) {
-                    setLoading(false)
-                    alert('Error connecting to Stripe.')
-                  }
-                }
-                if (success) {
-                  return <div className="text-green-600 font-semibold">Bank account connected successfully!</div>
-                }
-                return (
-                  <div className="space-y-4">
-                    <div className="flex gap-4 items-center">
-                      <label className="font-medium">Account Type:</label>
-                      <Button
-                        variant={businessType === 'individual' ? 'default' : 'outline'}
-                        onClick={() => setBusinessType('individual')}
-                        className={businessType === 'individual' ? 'bg-accent text-primary-foreground' : ''}
-                      >
-                        Individual
-                      </Button>
-                      <Button
-                        variant={businessType === 'company' ? 'default' : 'outline'}
-                        onClick={() => setBusinessType('company')}
-                        className={businessType === 'company' ? 'bg-accent text-primary-foreground' : ''}
-                      >
-                        Business
-                      </Button>
-                    </div>
-                    {isBankConnected && accountInfo ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-green-100 text-green-800">Connected</Badge>
-                          <span className="text-sm text-muted-foreground">{accountInfo.bankName} ••••{accountInfo.last4}</span>
+                    if (error) {
+                      return <div className="text-red-600 font-semibold">{error}</div>
+                    }
+                    if (bankInfo) {
+                      return (
+                        <div className="space-y-4 w-full">
+                          <div className="flex flex-col items-center gap-2">
+                            <Badge className="bg-green-100 text-green-800">Connected</Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {bankInfo.bankName} ••••{bankInfo.last4}
+                            </span>
+                            <span className="text-xs text-muted-foreground">Status: {bankInfo.status}</span>
+                          </div>
+                          <div className="flex gap-2 w-full">
+                            <Button variant="outline" className="flex-1" onClick={handleStripeConnect}>Change</Button>
+                            <Button variant="destructive" className="flex-1" onClick={() => setShowRemoveConfirm(true)}>Remove</Button>
+                          </div>
                         </div>
-                        <div className="text-xs text-muted-foreground">Status: {accountInfo.status}</div>
-                        <Button variant="outline" onClick={() => setIsBankConnected(false)}>Change Bank Account</Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="text-sm text-muted-foreground">No bank account connected.</div>
-                        <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleStripeConnect} disabled={loading}>
-                          {loading ? 'Redirecting to Stripe...' : 'Connect Bank Account'}
+                      )
+                    }
+                    return (
+                      <div className="space-y-4 w-full">
+                        <div className="flex gap-4 items-center justify-center">
+                          <label className="font-medium">Account Type:</label>
+                          <Button
+                            variant={businessType === 'individual' ? 'default' : 'outline'}
+                            onClick={() => setBusinessType('individual')}
+                            className={businessType === 'individual' ? 'bg-accent text-primary-foreground' : ''}
+                          >
+                            Individual
+                          </Button>
+                          <Button
+                            variant={businessType === 'company' ? 'default' : 'outline'}
+                            onClick={() => setBusinessType('company')}
+                            className={businessType === 'company' ? 'bg-accent text-primary-foreground' : ''}
+                          >
+                            Business
+                          </Button>
+                        </div>
+                        <Button className="bg-accent text-primary-foreground hover:bg-accent/90 w-full" onClick={handleStripeConnect} disabled={loading}>
+                          {loading ? 'Redirecting to Stripe...' : 'Connect Payout Bank Account'}
                         </Button>
+                        {success && <div className="text-green-600 font-semibold">Bank account connected successfully!</div>}
                       </div>
-                    )}
-                  </div>
-                )
-              })()}
+                    )
+                  })()}
+                </div>
+                {/* Payment Bank Account (Stripe Customer) */}
+                <div className="border rounded-lg p-6 flex flex-col items-center bg-secondary/30">
+                  <h3 className="text-lg font-bold mb-2">PAYMENT BANK ACCOUNT</h3>
+                  <p className="text-sm text-muted-foreground mb-4 text-center">
+                    Required to donate to labs or subscribe to HDX membership tiers.<br />Brief KYC.
+                  </p>
+                  {paymentInfo && (
+                    <div className="space-y-4 w-full">
+                      <div className="flex flex-col items-center gap-2">
+                        <Badge className="bg-green-100 text-green-800">Connected</Badge>
+                        {paymentInfo.type === 'card' ? (
+                          <span className="text-sm text-muted-foreground">
+                            {paymentInfo.brand?.toUpperCase()} ••••{paymentInfo.last4}
+                          </span>
+                        ) : paymentInfo.type === 'us_bank_account' ? (
+                          <span className="text-sm text-muted-foreground">
+                            {paymentInfo.bank_name} ••••{paymentInfo.last4}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="flex gap-2 w-full">
+                        <Button variant="outline" className="flex-1" onClick={handleAddPaymentMethod}>Change</Button>
+                        <Button variant="destructive" className="flex-1" onClick={() => setShowRemovePaymentConfirm(true)}>Remove</Button>
+                      </div>
+                    </div>
+                  )}
+                  {showRemovePaymentConfirm && (
+                    <Dialog open={showRemovePaymentConfirm} onOpenChange={setShowRemovePaymentConfirm}>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Remove Payment Method</DialogTitle>
+                          <DialogDescription>
+                            Are you sure you want to remove your payment method? This action cannot be undone and you will not be able to make payments until you add a new one.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setShowRemovePaymentConfirm(false)}>Cancel</Button>
+                          <Button variant="destructive" onClick={async () => { await handleRemovePayment(); setShowRemovePaymentConfirm(false); }}>Remove Payment Method</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
+              </div>
             </CardContent>
             <CardFooter>
-              <div className="text-xs text-muted-foreground">You must connect a bank account to receive payouts from HDX.</div>
+              <div className="text-xs text-muted-foreground text-center w-full">
+                <span className="font-semibold">Payout Bank Account:</span> Required for receiving funds. <br />
+                <span className="font-semibold">Payment Bank Account:</span> Required for making payments. <br />
+                You can manage both here.
+              </div>
             </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Add confirmation dialog */}
+      <Dialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Bank Account</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove your payout bank account? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRemoveConfirm(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleRemove}>Remove Account</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Stripe Elements Dialog */}
+      <Dialog open={showPaymentForm} onOpenChange={setShowPaymentForm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Payment Method</DialogTitle>
+            <DialogDescription>
+              Add a credit card or bank account for making payments.
+            </DialogDescription>
+          </DialogHeader>
+          {clientSecret && (
+            <Elements stripe={stripePromise} options={{ clientSecret }}>
+              <PaymentForm onSuccess={() => {
+                setShowPaymentForm(false);
+                setClientSecret(null);
+                // Refresh payment info
+                window.location.reload();
+              }} />
+            </Elements>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
