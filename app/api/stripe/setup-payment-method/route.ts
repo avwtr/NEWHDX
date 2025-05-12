@@ -44,6 +44,9 @@ export async function POST(req: NextRequest) {
       payment_method_types: ['card', 'us_bank_account'],
     });
 
+    // NOTE: After confirming the SetupIntent on the frontend, you must call a backend endpoint to set the new payment method as default for the customer.
+    // This will ensure the payment method is always set as default.
+
     return new Response(JSON.stringify({ 
       clientSecret: setupIntent.client_secret 
     }), { status: 200 });

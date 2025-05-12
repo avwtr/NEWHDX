@@ -41,17 +41,28 @@ function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
     setError(null);
 
     try {
-      const { error: submitError } = await stripe.confirmSetup({
+      const { setupIntent, error: submitError } = await stripe.confirmSetup({
         elements,
         confirmParams: {
           return_url: `${window.location.origin}/profile?payment=success`,
         },
+        redirect: 'if_required',
       });
 
       if (submitError) {
         setError(submitError.message || 'An error occurred');
-      } else {
+      } else if (setupIntent && setupIntent.status === 'succeeded') {
+        // Call backend to finalize and set default payment method
+        if (setupIntent.id) {
+          await fetch('/api/stripe/finalize-setup-intent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setupIntentId: setupIntent.id }),
+          });
+        }
         onSuccess();
+      } else {
+        onSuccess(); // fallback
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
@@ -194,6 +205,8 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [showRemovePaymentConfirm, setShowRemovePaymentConfirm] = useState(false)
+  // Separate loading state for payment method
+  const [loadingPayment, setLoadingPayment] = useState(false)
 
   // Populate initial state from user when available
   useEffect(() => {
@@ -347,13 +360,15 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
   };
 
   const handleRemovePayment = async () => {
-    setLoading(true);
+    if (!user) return;
+    setLoadingPayment(true);
     setError(null);
     try {
       const response = await fetch('/api/stripe/remove-payment-method', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-user-id': user.id,
         },
       });
       const data = await response.json();
@@ -365,7 +380,7 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setLoadingPayment(false);
     }
   };
 
@@ -700,6 +715,7 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
                         </div>
                       )
                     }
+                    // If no payout account, show only connect UI (no error message)
                     return (
                       <div className="space-y-4 w-full">
                         <div className="flex gap-4 items-center justify-center">
@@ -734,7 +750,9 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
                     Required to donate to labs or subscribe to HDX membership tiers.<br />Brief KYC.
                   </p>
                   <div className="space-y-4 w-full">
-                    {paymentInfo ? (
+                    {loadingPayment ? (
+                      <div className="text-accent font-semibold">Loading...</div>
+                    ) : paymentInfo ? (
                       <div className="flex flex-col items-center gap-2">
                         <Badge className="bg-green-100 text-green-800">Connected</Badge>
                         {paymentInfo.type === 'card' ? (
@@ -747,15 +765,13 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
                           </span>
                         ) : null}
                       </div>
-                    ) : (
-                      <div className="text-sm text-muted-foreground text-center">No payment method connected.</div>
-                    )}
+                    ) : null}
                     <div className="flex gap-2 w-full">
-                      <Button variant="outline" className="flex-1" onClick={handleAddPaymentMethod}>
+                      <Button variant="outline" className="flex-1" onClick={handleAddPaymentMethod} disabled={loadingPayment}>
                         {paymentInfo ? 'Change/Add Payment Method' : 'Add Payment Method'}
                       </Button>
                       {paymentInfo && (
-                        <Button variant="destructive" className="flex-1" onClick={() => setShowRemovePaymentConfirm(true)}>
+                        <Button variant="destructive" className="flex-1" onClick={() => setShowRemovePaymentConfirm(true)} disabled={loadingPayment}>
                           Remove
                         </Button>
                       )}
@@ -791,7 +807,7 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
         </TabsContent>
       </Tabs>
 
-      {/* Add confirmation dialog */}
+      {/* Add confirmation dialog for payout bank account */}
       <Dialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
         <DialogContent>
           <DialogHeader>
@@ -802,7 +818,7 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRemoveConfirm(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleRemove}>Remove Account</Button>
+            <Button variant="destructive" onClick={async () => { await handleRemove(); setShowRemoveConfirm(false); }}>Remove Account</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

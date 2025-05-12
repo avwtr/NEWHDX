@@ -10,6 +10,7 @@ import { useState, useEffect, useRef } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 
 interface LabOverviewTabProps {
   isAdmin: boolean
@@ -65,6 +66,7 @@ export function LabOverviewTab({
   const [editingText, setEditingText] = useState("")
   const { user } = useAuth();
   const [usernames, setUsernames] = useState<{ [userId: string]: string }>({})
+  const [showCreateFundDialog, setShowCreateFundDialog] = useState(false);
 
   useEffect(() => {
     async function fetchBulletins() {
@@ -264,6 +266,22 @@ export function LabOverviewTab({
       await supabase.from("activity").insert([activityData]);
     }
   }
+
+  // Enhanced Funding Goals Section
+  // Map DB fields to UI fields for all funds
+  const mappedFunds = funds.map(fund => ({
+    ...fund,
+    name: fund.goalName ?? fund.name,
+    description: fund.goal_description ?? fund.description,
+    currentAmount: fund.amount_contributed ?? fund.currentAmount ?? 0,
+    goalAmount: fund.goal_amount ?? fund.goalAmount ?? 0,
+    percentFunded: (fund.goal_amount ?? fund.goalAmount)
+      ? Math.round(((fund.amount_contributed ?? fund.currentAmount ?? 0) / (fund.goal_amount ?? fund.goalAmount)) * 100)
+      : 0,
+    daysRemaining: fund.deadline
+      ? Math.max(0, Math.ceil((new Date(fund.deadline).getTime() - Date.now()) / (1000*60*60*24)))
+      : undefined,
+  }));
 
   return (
     <>
@@ -514,7 +532,24 @@ export function LabOverviewTab({
           <CardTitle className="text-xl">FUNDING GOALS</CardTitle>
           <div className="flex items-center gap-2">
             {/* Create fund button only for admins */}
-            {isAdmin && <CreateFundDialog />}
+            {isAdmin && (
+              <>
+                <Button onClick={() => setShowCreateFundDialog(true)} variant="outline" size="sm" className="border-accent text-accent hover:bg-secondary">
+                  <Plus className="h-4 w-4 mr-1" />
+                  CREATE FUNDING GOAL
+                </Button>
+                <Dialog open={showCreateFundDialog} onOpenChange={setShowCreateFundDialog}>
+                  <DialogContent>
+                    <CreateFundDialog
+                      labId={labId}
+                      onFundCreated={() => setShowCreateFundDialog(false)}
+                      isOpen={showCreateFundDialog}
+                      onOpenChange={setShowCreateFundDialog}
+                    />
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
             <Button variant="ghost" size="icon" onClick={() => toggleExpand("funding")} className="h-8 w-8">
               {expandedTab === "funding" ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </Button>
@@ -522,24 +557,24 @@ export function LabOverviewTab({
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {funds.map((fund) => (
+            {mappedFunds.map((fund) => (
               <Card key={fund.id} className="bg-secondary/50 border-secondary">
                 <CardContent className="p-4">
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
                       <h3 className="font-medium text-accent">{fund.name}</h3>
                       <span className="text-sm font-medium">
-                        ${fund.currentAmount.toLocaleString()} / ${fund.goalAmount.toLocaleString()}
+                        ${Number(fund.currentAmount ?? 0).toLocaleString()} / ${Number(fund.goalAmount ?? 0).toLocaleString()}
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">{fund.description}</p>
                     <div className="mt-2">
                       <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                        <div className="h-full bg-accent" style={{ width: `${fund.percentFunded}%` }} />
+                        <div className="h-full bg-accent" style={{ width: `${fund.percentFunded ?? 0}%` }} />
                       </div>
                       <div className="flex justify-between mt-1">
-                        <p className="text-xs text-muted-foreground">{fund.percentFunded}% funded</p>
-                        <p className="text-xs text-muted-foreground">{fund.daysRemaining} days remaining</p>
+                        <p className="text-xs text-muted-foreground">{fund.percentFunded ?? 0}% funded</p>
+                        <p className="text-xs text-muted-foreground">{fund.daysRemaining ?? 'No deadline'} days remaining</p>
                       </div>
                     </div>
                     <div className="mt-2">

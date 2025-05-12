@@ -23,6 +23,7 @@ import { Dialog as OverlayDialog, DialogContent as OverlayDialogContent, DialogT
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { OneTimeDonation } from "@/components/one-time-donation"
 
 interface LabFundingTabProps {
   isAdmin: boolean
@@ -99,6 +100,11 @@ export function LabFundingTab({
   const [showConnectModal, setShowConnectModal] = useState(false)
   const [adminBankInfo, setAdminBankInfo] = useState<any>(null)
   const [isConnecting, setIsConnecting] = useState(false)
+  const [showPokeDialog, setShowPokeDialog] = useState(false)
+  const [pokeAnon, setPokeAnon] = useState(false)
+  const [pokeLoading, setPokeLoading] = useState(false)
+  const [pokeFeed, setPokeFeed] = useState<any[]>([])
+  const [usernameMap, setUsernameMap] = useState<Record<string, string>>({})
 
   // Helper to determine if membership is set up and active
   const isMembershipSetUp = !!membership
@@ -338,10 +344,123 @@ export function LabFundingTab({
     await handleFundCreated()
   }
 
+  // Fetch poke feed for this lab
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchPokes() {
+      const { data, error } = await supabase
+        .from('labFundingPokes')
+        .select('*')
+        .eq('labId', labId)
+        .order('created_at', { ascending: false });
+      if (!error && isMounted) setPokeFeed(data || []);
+    }
+    fetchPokes();
+    // Optionally: subscribe to changes for real-time updates
+    const channel = supabase
+      .channel('labFundingPokes-feed')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'labFundingPokes', filter: `labId=eq.${labId}` }, fetchPokes)
+      .subscribe();
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [labId]);
+
+  // Fetch usernames for all unique pokedBy in the feed
+  useEffect(() => {
+    async function fetchUsernames() {
+      const ids = Array.from(new Set(pokeFeed.filter(p => p.pokedBy && !p.anon).map(p => p.pokedBy)));
+      if (ids.length === 0) return;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, username')
+        .in('user_id', ids);
+      if (!error && data) {
+        const map: Record<string, string> = {};
+        data.forEach((row: any) => { map[row.user_id] = row.username; });
+        setUsernameMap(map);
+      }
+    }
+    fetchUsernames();
+  }, [pokeFeed]);
+
+  // Handle poke submit
+  async function handlePoke() {
+    if (!user && !pokeAnon) return;
+    setPokeLoading(true);
+    const newPoke = {
+      labId,
+      pokedBy: pokeAnon ? null : user?.id,
+      anon: pokeAnon,
+    };
+    // Optimistic update
+    setPokeFeed([{ ...newPoke, created_at: new Date().toISOString(), id: Math.random() }, ...pokeFeed]);
+    await supabase.from('labFundingPokes').insert(newPoke);
+    setPokeLoading(false);
+    setShowPokeDialog(false);
+  }
+
   // Only show setup UI if fundingSetup is false
   if (!fundingSetup) {
+    // --- NEW: Non-admin view for funding not setup ---
     if (!isAdmin) {
-      return null
+      return (
+        <Card className="max-w-2xl mx-auto mt-8 shadow-lg border-accent/40">
+          <CardHeader className="bg-accent/10 rounded-t-lg p-6 flex flex-col items-center">
+            <CardTitle className="text-2xl font-bold text-accent mb-2 text-center">Funding is not yet setup for this lab</CardTitle>
+            <CardDescription className="text-center text-base mb-4 max-w-xl">
+              Poke this lab to suggest they setup funding so you can donate!
+            </CardDescription>
+            <Button className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2" onClick={() => setShowPokeDialog(true)}>
+              Poke Lab
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4">
+              <div className="font-semibold mb-2 text-accent">Recent Pokes</div>
+              <div className="space-y-2">
+                {pokeFeed.length === 0 && <div className="text-muted-foreground text-sm">No pokes yet. Be the first!</div>}
+                {pokeFeed.map((poke) => {
+                  let displayName = 'Unknown';
+                  if (poke.anon) displayName = 'Anonymous';
+                  else if (poke.pokedBy && usernameMap[poke.pokedBy]) displayName = usernameMap[poke.pokedBy];
+                  return (
+                    <div key={poke.id} className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
+                      <Avatar className="h-7 w-7"><AvatarFallback>{displayName.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>
+                      <span className="font-medium">{displayName}</span>
+                      <span className="text-muted-foreground">poked this lab</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{new Date(poke.created_at).toLocaleString()}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <Dialog open={showPokeDialog} onOpenChange={setShowPokeDialog}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Poke this lab to set up funding?</DialogTitle>
+                  <DialogDescription>
+                    You can poke as yourself or anonymously. Your username will be shown unless you choose anonymous.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-4 mt-4">
+                  <Label className="flex items-center gap-2">
+                    <Switch checked={pokeAnon} onCheckedChange={setPokeAnon} />
+                    Poke anonymously
+                  </Label>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowPokeDialog(false)}>Cancel</Button>
+                  <Button className="bg-accent text-primary-foreground" onClick={handlePoke} disabled={pokeLoading}>
+                    {pokeLoading ? 'Poking...' : 'Poke'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </CardContent>
+        </Card>
+      );
     }
     // Admin: Funding not set up
     return (
@@ -700,7 +819,7 @@ export function LabFundingTab({
                   {isDonationActive ? "DONATE" : "SET UP"}
                 </Button>
               ) : (
-                <FundAllocationDialog funds={mappedFunds} buttonText="CONTRIBUTE" donationType="one-time" defaultAmount={mappedFunds[0]?.amount || 0} />
+                <OneTimeDonation labId={labId} funds={mappedFunds} onDonationSuccess={handleFundCreated} />
               )}
             </CardFooter>
           </Card>
