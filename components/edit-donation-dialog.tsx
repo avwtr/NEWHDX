@@ -25,13 +25,19 @@ interface DonationBenefit {
 interface EditDonationDialogProps {
   initialBenefits: DonationBenefit[]
   initialSuggestedAmounts?: number[]
+  isOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+  onSave?: (data: any) => void
 }
 
 export function EditDonationDialog({
   initialBenefits,
   initialSuggestedAmounts = [10, 25, 50, 100, 250, 500],
+  isOpen,
+  onOpenChange,
+  onSave,
 }: EditDonationDialogProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [localOpen, setLocalOpen] = useState(false)
   const [benefits, setBenefits] = useState<DonationBenefit[]>(
     initialBenefits || [
       { id: "1", text: "Support our research" },
@@ -49,12 +55,26 @@ export function EditDonationDialog({
   const [isActive, setIsActive] = useState(true)
 
   const handleSave = () => {
-    // Here you would typically save the changes to your backend
-    toast({
-      title: "Donation Options Updated",
-      description: `One-time donation options have been updated with ${benefits.length} benefits and ${suggestedAmounts.length} suggested amounts.`,
-    })
-    setIsOpen(false)
+    if (onSave) {
+      onSave({
+        name: "One-Time Donation",
+        description: "Make a one-time donation to support our research initiatives.",
+        amounts: suggestedAmounts.map(Number),
+        isActive,
+        allowCustomAmount,
+        minAmount: Number(minAmount)
+      })
+    } else {
+      toast({
+        title: "Donation Options Updated",
+        description: `One-time donation options have been updated with ${benefits.length} benefits and ${suggestedAmounts.length} suggested amounts.`,
+      })
+    }
+    if (onOpenChange) {
+      onOpenChange(false)
+    } else {
+      setLocalOpen(false)
+    }
   }
 
   const addBenefit = () => {
@@ -84,15 +104,7 @@ export function EditDonationDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <Button
-        className="w-full border-accent text-accent hover:bg-secondary"
-        variant="outline"
-        onClick={() => setIsOpen(true)}
-      >
-        <Edit2 className="h-4 w-4 mr-2" />
-        EDIT
-      </Button>
+    <Dialog open={isOpen ?? localOpen} onOpenChange={onOpenChange ?? setLocalOpen}>
       <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit One-Time Donation Options</DialogTitle>
@@ -189,7 +201,7 @@ export function EditDonationDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setIsOpen(false)}>
+          <Button variant="outline" onClick={() => onOpenChange ? onOpenChange(false) : setLocalOpen(false)}>
             Cancel
           </Button>
           <Button onClick={handleSave}>Save Changes</Button>

@@ -212,9 +212,9 @@ export default function SignupPage() {
           description: "Please check your email to confirm your account.",
         })
 
-        // If email confirmation is not required, redirect to dashboard
+        // If email confirmation is not required, redirect to explore
         if (session) {
-          router.push("/dashboard")
+          router.push("/explore")
         } else {
           router.push("/login")
         }

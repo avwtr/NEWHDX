@@ -1,60 +1,65 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { supabase } from "@/lib/supabase"
+import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/lib/supabase"
 
 export default function ResetPasswordPage() {
-  const router = useRouter()
-  const { toast } = useToast()
-
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [passwordError, setPasswordError] = useState("")
+  const { toast } = useToast()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [tokenChecked, setTokenChecked] = useState(false)
 
-  // Check if we have a hash in the URL (from the password reset email)
+  // On mount, check for access_token in URL and set it in Supabase
   useEffect(() => {
-    const hashParams = new URLSearchParams(window.location.hash.substring(1))
-    if (!hashParams.get("access_token")) {
-      toast({
-        title: "Invalid reset link",
-        description: "This password reset link is invalid or has expired.",
-        variant: "destructive",
-      })
-      router.push("/login")
+    // If access_token and type are not in the query string, but are in the hash, move them to the query string
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const hash = window.location.hash
+      if (!params.get("access_token") && hash && hash.includes("access_token")) {
+        const hashParams = new URLSearchParams(hash.substring(1))
+        const access_token = hashParams.get("access_token")
+        const type = hashParams.get("type")
+        if (access_token && type) {
+          // Move to query string and reload
+          const newUrl = `${window.location.pathname}?access_token=${encodeURIComponent(access_token)}&type=${encodeURIComponent(type)}`
+          window.location.replace(newUrl)
+          return
+        }
+      }
     }
-  }, [router, toast])
+    const access_token = searchParams.get("access_token")
+    const type = searchParams.get("type")
+    if (access_token && type === "recovery") {
+      supabase.auth.setSession({ access_token, refresh_token: access_token })
+        .then(() => setTokenChecked(true))
+        .catch(() => setTokenChecked(true))
+    } else {
+      setTokenChecked(true)
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    // Validate passwords
     if (password !== confirmPassword) {
-      setPasswordError("Passwords do not match")
-      return
-    }
-
-    if (password.length < 8) {
-      setPasswordError("Password must be at least 8 characters long")
-      return
-    }
-
-    setIsSubmitting(true)
-
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password,
+      toast({
+        title: "Passwords do not match",
+        description: "Please make sure both passwords are the same.",
+        variant: "destructive",
       })
-
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password })
       if (error) {
         toast({
           title: "Error",
@@ -63,21 +68,28 @@ export default function ResetPasswordPage() {
         })
       } else {
         toast({
-          title: "Password updated",
-          description: "Your password has been successfully updated.",
+          title: "Password reset successful",
+          description: "You can now log in with your new password.",
         })
-        router.push("/login")
+        setTimeout(() => router.push("/login"), 2000)
       }
-    } catch (error) {
-      console.error("Password update error:", error)
+    } catch (err) {
       toast({
         title: "Error",
-        description: "An unexpected error occurred. Please try again.",
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       })
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  if (!tokenChecked) {
+    return (
+      <div className="min-h-screen w-full bg-background flex items-center justify-center p-4">
+        <div className="text-center">Loading...</div>
+      </div>
+    )
   }
 
   return (
@@ -86,10 +98,9 @@ export default function ResetPasswordPage() {
         <Card>
           <form onSubmit={handleSubmit}>
             <CardHeader className="space-y-1">
-              <CardTitle className="text-2xl font-bold">Create New Password</CardTitle>
+              <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
               <CardDescription>Enter your new password below.</CardDescription>
             </CardHeader>
-
             <CardContent className="space-y-4 pt-0">
               <div className="space-y-2">
                 <Label htmlFor="password">New Password</Label>
@@ -97,43 +108,31 @@ export default function ResetPasswordPage() {
                   id="password"
                   type="password"
                   value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value)
-                    setPasswordError("")
-                  }}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
+                  minLength={8}
+                  placeholder="At least 8 characters"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Password must be at least 8 characters long and include a number and special character
-                </p>
               </div>
-
               <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                  {passwordError && <span className="text-xs text-destructive">{passwordError}</span>}
-                </div>
+                <Label htmlFor="confirmPassword">Confirm New Password</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
                   value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value)
-                    setPasswordError("")
-                  }}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   required
+                  minLength={8}
+                  placeholder="Re-enter your new password"
                 />
               </div>
             </CardContent>
-
             <CardFooter className="flex flex-col space-y-4">
               <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Updating..." : "Update Password"}
+                {isSubmitting ? "Resetting..." : "Reset Password"}
               </Button>
               <div className="text-center text-sm text-muted-foreground">
-                <Link href="/login" className="text-primary hover:underline">
-                  Back to login
-                </Link>
+                <a href="/login" className="text-primary hover:underline">Back to login</a>
               </div>
             </CardFooter>
           </form>

@@ -16,6 +16,7 @@ import {
   Users,
   Award,
   LogIn,
+  Globe,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -24,6 +25,8 @@ import { HDXLogo } from "@/components/hdx-logo"
 import { ToggleTabs } from "@/components/toggle-tabs"
 import { CreateLab } from "@/components/create-lab"
 import { ExploreContribute } from "@/components/explore-contribute"
+import { useAuth } from "@/components/auth-provider"
+import { supabase } from "@/lib/supabase"
 
 // Custom color
 const CUSTOM_GREEN = "#A0FFDD"
@@ -220,9 +223,35 @@ function DynamicTagline() {
   )
 }
 
+// For button width
+const BUTTON_MAX_WIDTH = "max-w-3xl"
+
 export default function LandingPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("create")
+  const { user, signOut } = useAuth()
+  const [username, setUsername] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (user) {
+      (async () => {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('user_id', user.id)
+          .single();
+        if (data && data.username) {
+          setUsername(data.username);
+        } else if (user.user_metadata?.name) {
+          setUsername(user.user_metadata.name);
+        } else {
+          setUsername('User');
+        }
+      })();
+    } else {
+      setUsername(null);
+    }
+  }, [user]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -231,19 +260,42 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <HDXLogo />
           <div className="flex items-center gap-2">
-            <Link href="/login">
-              <Button variant="ghost" size="sm" className="text-foreground hover:bg-secondary hover:text-accent">
-                <LogIn className="h-4 w-4 mr-2" />
-                Log In
-              </Button>
-            </Link>
-            <Button
-              size="sm"
-              style={{ backgroundColor: CUSTOM_GREEN, color: "#000" }}
-              onClick={() => router.push("/signup")}
-            >
-              Get Started
-            </Button>
+            {user ? (
+              <>
+                <span className="text-foreground mr-2">Hi, {username}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-foreground hover:bg-secondary hover:text-accent"
+                  onClick={() => router.push("/profile")}
+                >
+                  Profile
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={signOut}
+                >
+                  Log Out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link href="/login">
+                  <Button variant="ghost" size="sm" className="text-foreground hover:bg-secondary hover:text-accent">
+                    <LogIn className="h-4 w-4 mr-2" />
+                    Log In
+                  </Button>
+                </Link>
+                <Button
+                  size="sm"
+                  style={{ backgroundColor: CUSTOM_GREEN, color: "#000" }}
+                  onClick={() => router.push("/signup")}
+                >
+                  Get Started
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -271,27 +323,40 @@ export default function LandingPage() {
               </h2>
 
               <div className="flex flex-col gap-4 pt-4">
-                <p className="text-base sm:text-lg md:text-xl font-medium" style={{ color: CUSTOM_GREEN }}>
-                  BETA HAS CONCLUDED, REGISTER FOR THE FULL HDX PLATFORM COMING SOON:
-                </p>
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="hover:bg-green-950 w-full sm:w-auto"
-                    onClick={() => router.push("/signup")}
-                    style={{ borderColor: CUSTOM_GREEN, color: CUSTOM_GREEN }}
-                  >
-                    Create Account
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="ghost"
-                    className="w-full sm:w-auto"
-                    onClick={() => router.push("/explore")}
-                  >
-                    EXPLORE
-                  </Button>
+                  {user ? (
+                    <div className={`flex justify-center ${BUTTON_MAX_WIDTH} w-full`}>
+                      <Button
+                        size="lg"
+                        className={`w-full px-8 py-5 text-2xl font-bold flex items-center justify-center gap-3 shadow-lg hover:scale-[1.03] transition-transform ${BUTTON_MAX_WIDTH}`}
+                        onClick={() => router.push("/explore")}
+                        style={{ backgroundColor: "#1A2252", color: CUSTOM_GREEN }}
+                      >
+                        <Globe className="h-7 w-7" style={{ color: CUSTOM_GREEN }} />
+                        <span className="ml-2">EXPLORE</span>
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <Button
+                        size="lg"
+                        variant="outline"
+                        className="hover:bg-green-950 w-full sm:w-auto"
+                        onClick={() => router.push("/signup")}
+                        style={{ borderColor: CUSTOM_GREEN, color: CUSTOM_GREEN }}
+                      >
+                        Create Account
+                      </Button>
+                      <Button
+                        size="lg"
+                        variant="ghost"
+                        className="w-full sm:w-auto"
+                        onClick={() => router.push("/explore")}
+                      >
+                        EXPLORE
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -372,14 +437,39 @@ export default function LandingPage() {
             ONE THAT IS RADICAL, OPEN AND DECENTRALIZED.
           </h3>
           <div className="flex justify-center">
-            <Button
-              size="lg"
-              className="hover:bg-opacity-90 w-full sm:w-auto"
-              asChild
-              style={{ backgroundColor: CUSTOM_GREEN, color: "#000" }}
-            >
-              <Link href="/signup">JOIN THE HETERODOXY</Link>
-            </Button>
+            {user ? (
+              <div className={`flex justify-center ${BUTTON_MAX_WIDTH} w-full`}>
+                <Button
+                  size="lg"
+                  className={`w-full px-8 py-5 text-2xl font-bold flex items-center justify-center gap-3 shadow-lg hover:scale-[1.03] transition-transform ${BUTTON_MAX_WIDTH}`}
+                  style={{ backgroundColor: "#1A2252", color: CUSTOM_GREEN }}
+                  onClick={() => router.push("/explore")}
+                >
+                  <Globe className="h-7 w-7" style={{ color: CUSTOM_GREEN }} />
+                  <span className="ml-2">EXPLORE</span>
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="hover:bg-green-950 w-full sm:w-auto mr-3"
+                  onClick={() => router.push("/signup")}
+                  style={{ borderColor: CUSTOM_GREEN, color: CUSTOM_GREEN }}
+                >
+                  Create Account
+                </Button>
+                <Button
+                  size="lg"
+                  className="hover:bg-opacity-90 w-full sm:w-auto"
+                  style={{ backgroundColor: CUSTOM_GREEN, color: "#000" }}
+                  onClick={() => router.push("/explore")}
+                >
+                  EXPLORE
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </section>

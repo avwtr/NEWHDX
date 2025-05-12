@@ -38,7 +38,20 @@ export async function signUp(data: SignUpData) {
       throw authError
     }
 
-    return { user: authData.user, session: authData.session, error: null }
+    // Insert into profiles table
+    let profileError = null
+    if (authData.user) {
+      const { error: insertError } = await supabase.from('profiles').insert({
+        user_id: authData.user.id,
+        username: `${data.firstName}${data.lastName}`,
+        research_interests: data.researchInterests,
+      })
+      if (insertError) {
+        profileError = insertError
+      }
+    }
+
+    return { user: authData.user, session: authData.session, error: profileError }
   } catch (error) {
     console.error("Error signing up:", error)
     return { user: null, session: null, error: error as AuthError }
@@ -54,7 +67,7 @@ export async function login(data: LoginData) {
     })
 
     if (authError) {
-      throw authError
+      return { user: null, session: null, error: authError }
     }
 
     return { user: authData.user, session: authData.session, error: null }

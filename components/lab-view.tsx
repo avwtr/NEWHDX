@@ -125,6 +125,17 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   const [membership, setMembership] = useState(null)
   const [labsMembershipOption, setLabsMembershipOption] = useState(false)
 
+  // Helper to refetch lab data (including funding_setup)
+  const refetchLab = async () => {
+    if (!lab?.labId) return;
+    const { data, error } = await supabase
+      .from('labs')
+      .select('*')
+      .eq('labId', lab.labId)
+      .single();
+    if (!error && data) setLabState(data);
+  }
+
   useEffect(() => {
     const fetchLabData = async () => {
       if (!lab?.labId) return
@@ -698,6 +709,8 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
               labsMembershipOption={labsMembershipOption}
               refetchMembership={refetchMembership}
               refetchOneTimeDonation={refetchOneTimeDonation}
+              lab={labState}
+              refetchLab={refetchLab}
             />
           )}
 

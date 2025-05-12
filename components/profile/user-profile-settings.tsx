@@ -733,8 +733,8 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
                   <p className="text-sm text-muted-foreground mb-4 text-center">
                     Required to donate to labs or subscribe to HDX membership tiers.<br />Brief KYC.
                   </p>
-                  {paymentInfo && (
-                    <div className="space-y-4 w-full">
+                  <div className="space-y-4 w-full">
+                    {paymentInfo ? (
                       <div className="flex flex-col items-center gap-2">
                         <Badge className="bg-green-100 text-green-800">Connected</Badge>
                         {paymentInfo.type === 'card' ? (
@@ -747,12 +747,20 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
                           </span>
                         ) : null}
                       </div>
-                      <div className="flex gap-2 w-full">
-                        <Button variant="outline" className="flex-1" onClick={handleAddPaymentMethod}>Change</Button>
-                        <Button variant="destructive" className="flex-1" onClick={() => setShowRemovePaymentConfirm(true)}>Remove</Button>
-                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground text-center">No payment method connected.</div>
+                    )}
+                    <div className="flex gap-2 w-full">
+                      <Button variant="outline" className="flex-1" onClick={handleAddPaymentMethod}>
+                        {paymentInfo ? 'Change/Add Payment Method' : 'Add Payment Method'}
+                      </Button>
+                      {paymentInfo && (
+                        <Button variant="destructive" className="flex-1" onClick={() => setShowRemovePaymentConfirm(true)}>
+                          Remove
+                        </Button>
+                      )}
                     </div>
-                  )}
+                  </div>
                   {showRemovePaymentConfirm && (
                     <Dialog open={showRemovePaymentConfirm} onOpenChange={setShowRemovePaymentConfirm}>
                       <DialogContent>

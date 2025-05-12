@@ -46,7 +46,9 @@ export default function LoginPage() {
       if (error) {
         toast({
           title: "Login failed",
-          description: error.message,
+          description: error.message === "Invalid login credentials"
+            ? "Incorrect email or password. Please try again or use the 'Forgot password?' link below."
+            : error.message,
           variant: "destructive",
         })
       } else if (session) {

@@ -21,6 +21,8 @@ import { supabase } from "@/lib/supabase"
 import { EditFundDialog } from "@/components/edit-fund-dialog"
 import { Dialog as OverlayDialog, DialogContent as OverlayDialogContent, DialogTitle as OverlayDialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
 interface LabFundingTabProps {
   isAdmin: boolean
@@ -40,6 +42,7 @@ interface LabFundingTabProps {
   refetchMembership: () => Promise<void>
   refetchOneTimeDonation: () => Promise<void>
   lab: any
+  refetchLab?: () => Promise<void>
 }
 
 export function LabFundingTab({
@@ -60,6 +63,7 @@ export function LabFundingTab({
   refetchMembership,
   refetchOneTimeDonation,
   lab,
+  refetchLab,
 }: LabFundingTabProps) {
   console.log("LabFundingTab props:", {
     membership,
@@ -91,6 +95,10 @@ export function LabFundingTab({
   const [currentEditFund, setCurrentEditFund] = useState<any>(null)
   const [showFundingActivity, setShowFundingActivity] = useState(false)
   const [showCreateFundDialog, setShowCreateFundDialog] = useState(false)
+  const [adminFundingId, setAdminFundingId] = useState<string | null>(null)
+  const [showConnectModal, setShowConnectModal] = useState(false)
+  const [adminBankInfo, setAdminBankInfo] = useState<any>(null)
+  const [isConnecting, setIsConnecting] = useState(false)
 
   // Helper to determine if membership is set up and active
   const isMembershipSetUp = !!membership
@@ -98,8 +106,9 @@ export function LabFundingTab({
   const isDonationSetUp = !!oneTimeDonation
   const isDonationActive = isDonationsActive
 
-  // Add funding_setup from lab prop
+  // Add funding_setup and funding_id from lab prop
   const fundingSetup = lab?.funding_setup
+  const labFundingId = lab?.funding_id
 
   // Fetch and ensure General Fund
   useEffect(() => {
@@ -161,30 +170,134 @@ export function LabFundingTab({
     })()
   }
 
-  // When opening the edit modal, prefill fields
-  const openEditDonationModal = () => {
-    setEditDonationName(oneTimeDonation.donation_setup_name || "")
-    setEditDonationDescription(oneTimeDonation.donation_description || "")
-    setEditDonationActive(isDonationsActive)
-    setEditDonationAmounts(oneTimeDonation.suggested_amounts || [])
-    setShowEditDonationDialog(true)
+  // Handler to save donation setup
+  const handleSaveDonation = async (data: any) => {
+    try {
+      const { error } = await supabase
+        .from("donation_funding")
+        .insert({
+          donation_setup_name: data.name,
+          donation_description: data.description,
+          suggested_amounts: data.amounts,
+          labId: labId,
+          created_by: user?.id || null,
+        });
+      if (error) throw error;
+      toast({ title: "Success", description: "Donation setup has been saved." });
+      setShowDonationDialog(false);
+      await refetchOneTimeDonation();
+    } catch (err) {
+      let message = "Failed to save donation setup";
+      if (err instanceof Error) message = err.message;
+      toast({ title: "Error", description: message });
+    }
+  };
+
+  // Handler to save membership setup
+  const handleSaveMembership = async (data: any) => {
+    try {
+      const { error } = await supabase
+        .from("recurring_funding")
+        .insert({
+          name: data.name,
+          description: data.description,
+          monthly_amount: data.amount,
+          labId: labId,
+          created_by: user?.id || null,
+        });
+      if (error) throw error;
+      toast({ title: "Success", description: "Membership setup has been saved." });
+      setShowSetupMembershipDialog(false);
+      await refetchMembership();
+    } catch (err) {
+      let message = "Failed to save membership setup";
+      if (err instanceof Error) message = err.message;
+      toast({ title: "Error", description: message });
+    }
+  };
+
+  // Handler to edit donation
+  const handleEditDonation = async (data: any) => {
+    try {
+      const { error } = await supabase
+        .from("donation_funding")
+        .update({
+          donation_setup_name: data.name,
+          donation_description: data.description,
+          suggested_amounts: data.amounts,
+        })
+        .eq("id", oneTimeDonation.id);
+      if (error) throw error;
+      toast({ title: "Success", description: "Donation settings have been updated." });
+      setShowEditDonationDialog(false);
+      await refetchOneTimeDonation();
+    } catch (err) {
+      let message = "Failed to update donation settings";
+      if (err instanceof Error) message = err.message;
+      toast({ title: "Error", description: message });
+    }
   }
 
-  const openEditMembershipModal = () => {
-    setEditMembershipName(membership?.name || "")
-    setEditMembershipDescription(membership?.description || "")
-    setEditMembershipActive(labsMembershipOption)
-    setEditMembershipAmount(membership?.monthly_amount || "")
-    setShowEditMembershipDialog(true)
+  // Handler to edit membership
+  const handleEditMembership = async (data: any) => {
+    try {
+      const { error } = await supabase
+        .from("recurring_funding")
+        .update({
+          name: data.name,
+          description: data.description,
+          monthly_amount: data.amount,
+        })
+        .eq("id", membership.id);
+      if (error) throw error;
+      toast({ title: "Success", description: "Membership settings have been updated." });
+      setShowEditMembershipDialog(false);
+      await refetchMembership();
+    } catch (err) {
+      let message = "Failed to update membership settings";
+      if (err instanceof Error) message = err.message;
+      toast({ title: "Error", description: message });
+    }
   }
 
-  const openSetupMembershipModal = () => {
-    setEditMembershipName("")
-    setEditMembershipDescription("")
-    setEditMembershipActive(true)
-    setEditMembershipAmount("")
-    setShowSetupMembershipDialog(true)
-  }
+  // Map backend funds to expected shape for FundAllocationDialog
+  const mappedFunds = funds.map(fund => ({
+    ...fund,
+    currentAmount: fund.amount_contributed ?? 0,
+    goalAmount: fund.goal_amount ?? 0,
+    percentFunded: fund.goal_amount ? Math.round((fund.amount_contributed ?? 0) / fund.goal_amount * 100) : 0,
+  }))
+
+  // Fetch admin's payout account (funding_id) from their profile
+  useEffect(() => {
+    if (!isAdmin || !user) return
+    (async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('funding_id')
+        .eq('user_id', user.id)
+        .single()
+      if (!error) setAdminFundingId(data?.funding_id || null)
+    })()
+  }, [isAdmin, user])
+
+  // Fetch bank info for adminFundingId
+  useEffect(() => {
+    if (!adminFundingId) { setAdminBankInfo(null); return }
+    (async () => {
+      try {
+        const res = await fetch('/api/stripe/get-funding-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ funding_id: adminFundingId }),
+        })
+        const data = await res.json()
+        setAdminBankInfo(data)
+      } catch (err) {
+        setAdminBankInfo(null)
+      }
+    })()
+  }, [adminFundingId, showConnectModal])
 
   // Handler to open edit dialog and fetch latest fund data
   const handleEditFund = async (fund: any) => {
@@ -225,28 +338,97 @@ export function LabFundingTab({
     await handleFundCreated()
   }
 
-  // Map backend funds to expected shape for FundAllocationDialog
-  const mappedFunds = funds.map(fund => ({
-    ...fund,
-    currentAmount: fund.amount_contributed ?? 0,
-    goalAmount: fund.goal_amount ?? 0,
-    percentFunded: fund.goal_amount ? Math.round((fund.amount_contributed ?? 0) / fund.goal_amount * 100) : 0,
-  }))
-
+  // Only show setup UI if fundingSetup is false
   if (!fundingSetup) {
     if (!isAdmin) {
-      return null // Or: return <div className="text-center text-muted-foreground py-12">Lab funding is not yet set up.</div>
+      return null
     }
+    // Admin: Funding not set up
     return (
       <Card className="max-w-2xl mx-auto mt-8 shadow-lg border-accent/40">
         <CardHeader className="bg-accent/10 rounded-t-lg p-6 flex flex-col items-center">
-          <CardTitle className="text-2xl font-bold text-accent mb-2 text-center">Get Started with Lab Funding</CardTitle>
+          <CardTitle className="text-2xl font-bold text-accent mb-2 text-center">Set Up Lab Funding</CardTitle>
           <CardDescription className="text-center text-base mb-4 max-w-xl">
-            Set up recurring lab memberships and/or receive donations from your science community. Unlock new ways to support your research, track funding goals, and engage your supporters.
+            To receive funding, donations, or memberships for this lab, you must connect a payout bank account.<br />
+            This is done via Stripe Connect. You can use your existing payout account from your profile.
           </CardDescription>
-          <Button className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2">
-            Get Started
-          </Button>
+          {!adminFundingId ? (
+            <>
+              <div className="text-red-500 font-semibold mb-2">You must first connect a payout bank account in your <a href="/profile" className="underline text-accent">profile settings</a>.</div>
+              <Button className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2" asChild>
+                <a href="/profile">Go to Profile Settings</a>
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="text-green-500 font-semibold mb-2">Payout account found. You can use this to receive lab funding.</div>
+              <Button
+                className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2"
+                onClick={() => setShowConnectModal(true)}
+              >
+                Connect Payout Account to Lab
+              </Button>
+              <Dialog open={showConnectModal} onOpenChange={setShowConnectModal}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Confirm Payout Account for Lab</DialogTitle>
+                    <DialogDescription>
+                      This payout account will be used to receive all funding for this lab. You can change or remove it in your profile settings.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {adminBankInfo ? (
+                    <div className="space-y-2 mb-4">
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="font-semibold">{adminBankInfo.bankName}</span>
+                        <span className="text-sm text-muted-foreground">••••{adminBankInfo.last4}</span>
+                        <span className="text-xs text-muted-foreground">Status: {adminBankInfo.status}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground mb-4">Loading account info...</div>
+                  )}
+                  <div className="flex gap-2 w-full mb-4">
+                    <Button variant="outline" className="flex-1" asChild>
+                      <a href="/profile">Change</a>
+                    </Button>
+                    <Button variant="destructive" className="flex-1" asChild>
+                      <a href="/profile">Remove</a>
+                    </Button>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowConnectModal(false)} disabled={isConnecting}>Cancel</Button>
+                    <Button
+                      className="bg-accent text-primary-foreground"
+                      onClick={async () => {
+                        setIsConnecting(true)
+                        try {
+                          const { error } = await supabase
+                            .from('labs')
+                            .update({ funding_setup: true, funding_id: adminFundingId })
+                            .eq('labId', labId)
+                          if (error) throw error
+                          toast({ title: "Lab Funding Setup Complete", description: "You can now receive funding for this lab!" })
+                          setShowConnectModal(false)
+                          if (typeof refetchLab === 'function') {
+                            await refetchLab();
+                          }
+                        } catch (err) {
+                          let message = "Failed to set up lab funding"
+                          if (err instanceof Error) message = err.message
+                          toast({ title: "Error", description: message })
+                        } finally {
+                          setIsConnecting(false)
+                        }
+                      }}
+                      disabled={isConnecting}
+                    >
+                      {isConnecting ? 'Connecting...' : 'Confirm'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
           {/* Example Funding Goals */}
@@ -322,19 +504,34 @@ export function LabFundingTab({
     )
   }
 
+  // --- POST-SETUP: SHOW FULL FUNDING UI ---
+  // Only show admin controls if fundingSetup is true
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>SUPPORT OUR RESEARCH</CardTitle>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => toggleExpand("funding")} className="h-8 w-8">
-            {expandedTab === "funding" ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
-        </div>
+        {isAdmin && (
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              className="bg-accent text-primary-foreground hover:bg-accent/90 font-semibold px-4 py-2 rounded"
+              onClick={() => setShowCreateFundDialog(true)}
+            >
+              CREATE FUNDING GOAL +
+            </Button>
+            <button
+              className="text-xs text-accent underline hover:text-accent/80 mt-1"
+              onClick={() => setShowFundingActivity(true)}
+              style={{ alignSelf: 'flex-end' }}
+            >
+              VIEW FUNDING ACTIVITY
+            </button>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <CardDescription>Your contributions help us advance our research and develop new technologies</CardDescription>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Membership Tile */}
           <Card className={`border-accent ${isMembershipSetUp && !isMembershipActive ? "opacity-60" : ""}`}>
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
@@ -394,114 +591,20 @@ export function LabFundingTab({
             <CardFooter>
               {isAdmin ? (
                 isMembershipSetUp ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 border-accent text-accent hover:bg-secondary"
-                      onClick={openEditMembershipModal}
-                    >
-                      <Edit2 className="h-4 w-4 mr-2" />
-                      EDIT
-                    </Button>
-                    <Dialog open={showEditMembershipDialog} onOpenChange={setShowEditMembershipDialog}>
-                      <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                          <DialogTitle>Edit Membership</DialogTitle>
-                          <DialogDescription>Update your lab's recurring membership option.</DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <Input placeholder="Membership Name" value={editMembershipName} onChange={e => setEditMembershipName(e.target.value)} />
-                          <Input placeholder="Description" value={editMembershipDescription} onChange={e => setEditMembershipDescription(e.target.value)} />
-                          <Input placeholder="Monthly Amount" type="number" min="1" value={editMembershipAmount} onChange={e => setEditMembershipAmount(e.target.value)} />
-                          <div className="border-t pt-4">
-                            <h4 className="font-medium mb-2">Welcome Email</h4>
-                            <Input 
-                              placeholder="Welcome Email Subject" 
-                              value={membership.welcome_email_subject || ""} 
-                              onChange={(e) => {
-                                // Handle welcome email subject update
-                              }}
-                            />
-                            <textarea 
-                              className="w-full min-h-[100px] bg-secondary/50 rounded-md p-2 text-sm mt-2"
-                              placeholder="Welcome Email Content"
-                              value={membership.welcome_email_content || ""}
-                              onChange={(e) => {
-                                // Handle welcome email content update
-                              }}
-                            />
-                          </div>
-                          <div className="grid grid-cols-3 gap-4 mt-4">
-                            <div className="bg-secondary/50 rounded-lg p-3">
-                              <div className="text-sm text-muted-foreground">Monthly Revenue</div>
-                              <div className="text-lg font-semibold">${membership.monthly_amount || 0}</div>
-                            </div>
-                            <div className="bg-secondary/50 rounded-lg p-3">
-                              <div className="text-sm text-muted-foreground">Active Subscribers</div>
-                              <div className="text-lg font-semibold">{membership.subscriber_count || 0}</div>
-                            </div>
-                            <div className="bg-secondary/50 rounded-lg p-3">
-                              <div className="text-sm text-muted-foreground">Total Revenue</div>
-                              <div className="text-lg font-semibold">${membership.total_revenue || 0}</div>
-                            </div>
-                          </div>
-                          <div className="border border-secondary rounded-lg p-4 mt-4">
-                            <h4 className="font-medium mb-2">Recent Subscribers</h4>
-                            <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                              {membership.subscribers?.map((subscriber: any) => (
-                                <div key={subscriber.id} className="flex items-center justify-between bg-secondary/50 rounded-md p-2">
-                                  <div>
-                                    <div className="font-medium">{subscriber.name}</div>
-                                    <div className="text-sm text-muted-foreground">{subscriber.email}</div>
-                                  </div>
-                                  <div className="text-sm text-muted-foreground">
-                                    Joined {new Date(subscriber.joined_at).toLocaleDateString()}
-                                  </div>
-                                </div>
-                              ))}
-                              {(!membership.subscribers || membership.subscribers.length === 0) && (
-                                <div className="text-sm text-muted-foreground text-center py-2">
-                                  No subscribers yet
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setShowEditMembershipDialog(false)}>Cancel</Button>
-                          <Button
-                            onClick={async () => {
-                              try {
-                                const { error: updateError } = await supabase.from("recurring_funding").update({
-                                  name: editMembershipName,
-                                  description: editMembershipDescription,
-                                  monthly_amount: editMembershipAmount,
-                                  welcome_email_subject: membership.welcome_email_subject,
-                                  welcome_email_content: membership.welcome_email_content,
-                                }).eq("id", membership.id)
-                                if (updateError) throw updateError
-                                const { error: labsError } = await supabase.from("labs").update({ membership_option: editMembershipActive }).eq("labId", labId)
-                                if (labsError) throw labsError
-                                toast({ title: "Membership Updated", description: "Membership option updated!" })
-                                setShowEditMembershipDialog(false)
-                                await refetchMembership()
-                                // Optionally trigger a refetch here
-                              } catch (err) {
-                                let message = "Failed to update membership option"
-                                if (err instanceof Error) message = err.message
-                                toast({ title: "Error", description: message })
-                              }
-                            }}
-                          >
-                            Confirm
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 border-accent text-accent hover:bg-secondary"
+                    onClick={() => setShowEditMembershipDialog(true)}
+                  >
+                    <Edit2 className="h-4 w-4 mr-2" />
+                    EDIT
+                  </Button>
                 ) : (
-                  <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={openSetupMembershipModal}>
+                  <Button 
+                    className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
+                    onClick={() => setShowSetupMembershipDialog(true)}
+                  >
                     SET UP
                   </Button>
                 )
@@ -515,6 +618,7 @@ export function LabFundingTab({
             </CardFooter>
           </Card>
 
+          {/* One-Time Donation Tile */}
           <Card className={`border-secondary ${isDonationSetUp && !isDonationActive ? "opacity-60" : ""}`}>
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
@@ -574,107 +678,20 @@ export function LabFundingTab({
             <CardFooter>
               {isAdmin ? (
                 isDonationSetUp ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 border-accent text-accent hover:bg-secondary"
-                      onClick={openEditDonationModal}
-                    >
-                      <Edit2 className="h-4 w-4 mr-2" />
-                      EDIT
-                    </Button>
-                    <Dialog open={showEditDonationDialog} onOpenChange={setShowEditDonationDialog}>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Edit One-Time Donation</DialogTitle>
-                          <DialogDescription>Update your one-time donation option.</DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <Input placeholder="Donation Name" value={editDonationName} onChange={e => setEditDonationName(e.target.value)} />
-                          <Input placeholder="Description" value={editDonationDescription} onChange={e => setEditDonationDescription(e.target.value)} />
-                          <div>
-                            <label className="block mb-1">Suggested Amounts</label>
-                            <div className="flex gap-2 mt-2 flex-wrap">
-                              {editDonationAmounts.map((amt, idx) => (
-                                <div key={idx} className="flex items-center bg-secondary rounded-md px-2 py-1 mb-1">
-                                  <input
-                                    type="number"
-                                    value={amt}
-                                    min="1"
-                                    className="w-16 bg-transparent border-none outline-none text-accent mr-1"
-                                    onChange={e => {
-                                      const newAmts = [...editDonationAmounts]
-                                      newAmts[idx] = Number(e.target.value)
-                                      setEditDonationAmounts(newAmts)
-                                    }}
-                                  />
-                                  <button
-                                    className="text-red-500 hover:text-red-600 ml-1"
-                                    onClick={() => setEditDonationAmounts(editDonationAmounts.filter((_, i) => i !== idx))}
-                                    type="button"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="flex gap-2 mt-2">
-                              <Input
-                                type="number"
-                                min="1"
-                                placeholder="Add amount..."
-                                value={editDonationAmountInput}
-                                onChange={e => setEditDonationAmountInput(e.target.value)}
-                                className="w-24"
-                                onKeyDown={e => {
-                                  if (e.key === "Enter" && editDonationAmountInput && !isNaN(Number(editDonationAmountInput))) {
-                                    setEditDonationAmounts([...editDonationAmounts, Number(editDonationAmountInput)])
-                                    setEditDonationAmountInput("")
-                                  }
-                                }}
-                              />
-                              <Button variant="outline" onClick={() => {
-                                if (editDonationAmountInput && !isNaN(Number(editDonationAmountInput))) {
-                                  setEditDonationAmounts([...editDonationAmounts, Number(editDonationAmountInput)])
-                                  setEditDonationAmountInput("")
-                                }
-                              }}>Add</Button>
-                            </div>
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setShowEditDonationDialog(false)}>Cancel</Button>
-                          <Button
-                            onClick={async () => {
-                              try {
-                                const { error: updateError } = await supabase.from("donation_funding").update({
-                                  donation_setup_name: editDonationName,
-                                  donation_description: editDonationDescription,
-                                  suggested_amounts: editDonationAmounts,
-                                }).eq("id", oneTimeDonation.id)
-                                if (updateError) throw updateError
-                                const { error: labsError } = await supabase.from("labs").update({ one_time_donation_option: editDonationActive }).eq("labId", labId)
-                                if (labsError) throw labsError
-                                toast({ title: "One-Time Donation Updated", description: "Donation option updated!" })
-                                setShowEditDonationDialog(false)
-                                await refetchOneTimeDonation()
-                                // Optionally trigger a refetch here
-                              } catch (err) {
-                                let message = "Failed to update donation option"
-                                if (err instanceof Error) message = err.message
-                                toast({ title: "Error", description: message })
-                              }
-                            }}
-                          >
-                            Confirm
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 border-accent text-accent hover:bg-secondary"
+                    onClick={() => setShowEditDonationDialog(true)}
+                  >
+                    <Edit2 className="h-4 w-4 mr-2" />
+                    EDIT
+                  </Button>
                 ) : (
-                  <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setShowDonationDialog(true)}>
+                  <Button 
+                    className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
+                    onClick={() => setShowDonationDialog(true)}
+                  >
                     SET UP
                   </Button>
                 )
@@ -793,6 +810,147 @@ export function LabFundingTab({
           <FundingActivityDialog isOpen={showFundingActivity} onOpenChange={setShowFundingActivity} />
         </OverlayDialogContent>
       </OverlayDialog>
+      {/* Donation Setup Dialog */}
+      <Dialog open={showDonationDialog} onOpenChange={setShowDonationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Up One-Time Donations</DialogTitle>
+            <DialogDescription>
+              Configure the options for one-time donations to your lab.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <Input value={donationName} onChange={e => setDonationName(e.target.value)} />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea value={donationDescription} onChange={e => setDonationDescription(e.target.value)} />
+            </div>
+            <div>
+              <Label>Suggested Amounts</Label>
+              <div className="flex flex-wrap gap-2">
+                {donationAmounts.map((amount, index) => (
+                  <div key={index} className="flex items-center bg-secondary rounded-md px-2 py-1">
+                    <span className="mr-1">${amount}</span>
+                    <button className="text-red-500 hover:text-red-600" onClick={() => setDonationAmounts(donationAmounts.filter((_, i) => i !== index))}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-lg">$</span>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="Add amount..."
+                  value={donationAmountInput}
+                  onChange={(e) => setDonationAmountInput(e.target.value)}
+                  className="w-24"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      if (donationAmountInput) {
+                        setDonationAmounts([...donationAmounts, donationAmountInput])
+                        setDonationAmountInput("")
+                      }
+                    }
+                  }}
+                />
+                <Button variant="outline" onClick={() => {
+                  if (donationAmountInput) {
+                    setDonationAmounts([...donationAmounts, donationAmountInput])
+                    setDonationAmountInput("")
+                  }
+                }}>
+                  Add
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDonationDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-accent text-primary-foreground"
+              onClick={() => handleSaveDonation({
+                name: donationName,
+                description: donationDescription,
+                amounts: donationAmounts.map(Number)
+              })}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Membership Setup Dialog */}
+      <Dialog open={showSetupMembershipDialog} onOpenChange={setShowSetupMembershipDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Up Lab Membership</DialogTitle>
+            <DialogDescription>
+              Configure the options for recurring lab memberships.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Name</Label>
+              <Input value={editMembershipName} onChange={e => setEditMembershipName(e.target.value)} />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea value={editMembershipDescription} onChange={e => setEditMembershipDescription(e.target.value)} />
+            </div>
+            <div>
+              <Label>Monthly Amount ($)</Label>
+              <Input 
+                type="number" 
+                min="1" 
+                value={editMembershipAmount} 
+                onChange={e => setEditMembershipAmount(e.target.value)} 
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSetupMembershipDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-accent text-primary-foreground"
+              onClick={() => handleSaveMembership({
+                name: editMembershipName,
+                description: editMembershipDescription,
+                amount: Number(editMembershipAmount)
+              })}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Donation Dialog */}
+      <EditDonationDialog
+        initialBenefits={[]}
+        initialSuggestedAmounts={oneTimeDonation?.suggested_amounts || []}
+        isOpen={showEditDonationDialog}
+        onOpenChange={setShowEditDonationDialog}
+        onSave={handleEditDonation}
+      />
+
+      {/* Edit Membership Dialog */}
+      <EditMembershipDialog
+        initialPrice={membership?.monthly_amount || 0}
+        initialBenefits={[]}
+        open={showEditMembershipDialog}
+        onOpenChange={setShowEditMembershipDialog}
+        onSave={handleEditMembership}
+      />
     </Card>
   )
 }

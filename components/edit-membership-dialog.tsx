@@ -144,6 +144,7 @@ interface EditMembershipDialogProps {
   initialBenefits: MembershipBenefit[]
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSave?: (data: any) => void
 }
 
 export function EditMembershipDialog({
@@ -151,6 +152,7 @@ export function EditMembershipDialog({
   initialBenefits,
   open,
   onOpenChange,
+  onSave,
 }: EditMembershipDialogProps) {
   const [activeTab, setActiveTab] = useState("details")
   const [price, setPrice] = useState(initialPrice.toString())
@@ -182,11 +184,19 @@ export function EditMembershipDialog({
   const totalRevenue = subscribers.reduce((sum, sub) => sum + sub.totalContributed, 0)
 
   const handleSave = () => {
-    // Here you would typically save the changes to your backend
-    toast({
-      title: "Membership Updated",
-      description: `Lab membership has been updated to $${price}/month with ${benefits.length} benefits.`,
-    })
+    if (onSave) {
+      onSave({
+        name: membershipName,
+        description,
+        amount: Number(price),
+        isActive
+      })
+    } else {
+      toast({
+        title: "Membership Updated",
+        description: `Lab membership has been updated to $${price}/month with ${benefits.length} benefits.`,
+      })
+    }
     onOpenChange(false)
   }
 

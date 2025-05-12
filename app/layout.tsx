@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/site-header"
 import { AuthProvider } from "@/components/auth-provider"
 import { RoleProvider } from "@/contexts/role-context"
 import "@/app/globals.css"
+import { Toaster } from "@/components/ui/toaster"
 
 // Initialize the JetBrains Mono font
 const jetbrainsMono = JetBrains_Mono({
@@ -31,6 +32,7 @@ export default function RootLayout({
             </RoleProvider>
           </AuthProvider>
         </ThemeProvider>
+        <Toaster />
       </body>
     </html>
   )
