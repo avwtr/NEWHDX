@@ -164,7 +164,7 @@ export function LabFundingTab({
   }, [labId])
 
   // Handler to refetch funds after creation
-  const handleFundCreated = async () => {
+  const handleFundCreated = async (logActivity = false) => {
     // Refetch funds
     (async () => {
       let { data: allFunds, error } = await supabase
@@ -180,15 +180,17 @@ export function LabFundingTab({
       ]
       setFunds(sortedFunds)
     })()
-    // Log activity for funding goal creation
-    await supabase.from("activity").insert({
-      activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-      created_at: new Date().toISOString(),
-      activity_name: "Funding Goal Created or Updated",
-      activity_type: "funding_goal",
-      performed_by: user?.id,
-      lab_from: labId
-    })
+    // Only log activity if requested (i.e. for actual fund creation/update)
+    if (logActivity) {
+      await supabase.from("activity").insert({
+        activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+        created_at: new Date().toISOString(),
+        activity_name: "Funding Goal Created or Updated",
+        activity_type: "funding_goal",
+        performed_by: user?.id,
+        lab_from: labId
+      })
+    }
   }
 
   // Handler to save donation setup
@@ -205,14 +207,7 @@ export function LabFundingTab({
         });
       if (error) throw error;
       // Log activity for donation setup
-      await supabase.from("activity").insert({
-        activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-        created_at: new Date().toISOString(),
-        activity_name: `Donation Option Setup: ${data.name}`,
-        activity_type: "donation_setup",
-        performed_by: user?.id,
-        lab_from: labId
-      })
+      await handleFundCreated(true)
       toast({ title: "Success", description: "Donation setup has been saved." });
       setShowDonationDialog(false);
       await refetchOneTimeDonation();
@@ -237,14 +232,7 @@ export function LabFundingTab({
         });
       if (error) throw error;
       // Log activity for membership setup
-      await supabase.from("activity").insert({
-        activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-        created_at: new Date().toISOString(),
-        activity_name: `Membership Option Setup: ${data.name}`,
-        activity_type: "membership_setup",
-        performed_by: user?.id,
-        lab_from: labId
-      })
+      await handleFundCreated(true)
       toast({ title: "Success", description: "Membership setup has been saved." });
       setShowSetupMembershipDialog(false);
       await refetchMembership();
@@ -374,7 +362,7 @@ export function LabFundingTab({
     setEditFundDialogOpen(false)
     setCurrentEditFund(null)
     // Refetch funds
-    await handleFundCreated()
+    await handleFundCreated(true)
   }
 
   // Fetch poke feed for this lab
@@ -464,11 +452,25 @@ export function LabFundingTab({
     fetchDonorAndSubscriberStats();
   }, [labId]);
 
-  // Also refetch donor stats after a donation is made
-  const handleDonationSuccess = () => {
-    fetchDonorAndSubscriberStats();
-    if (typeof handleFundCreated === 'function') handleFundCreated();
-  };
+  // Handle donation success
+  const handleDonationSuccess = async () => {
+    try {
+      // Refetch donor stats
+      await fetchDonorAndSubscriberStats()
+      // Show success message
+      toast({
+        title: "Donation Successful",
+        description: "Thank you for your support!",
+      })
+    } catch (error) {
+      console.error('Error handling donation success:', error)
+      toast({
+        title: "Error",
+        description: "There was an error processing your donation. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
 
   // Only show setup UI if fundingSetup is false
   if (!fundingSetup) {
@@ -998,7 +1000,7 @@ export function LabFundingTab({
           <CreateFundDialog
             labId={labId}
             onFundCreated={() => {
-              handleFundCreated()
+              handleFundCreated(true)
               setShowCreateFundDialog(false)
             }}
             isOpen={true}

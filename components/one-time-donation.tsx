@@ -96,6 +96,21 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess }: { labI
         setCaption("")
         setShowSuccessAnimation(true)
         setTimeout(() => setShowSuccessAnimation(false), 3000)
+        // Log donation activity
+        await fetch('/api/log-activity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            activity_name: 'Donated',
+            activity_type: 'donation',
+            performed_by: user.id,
+            lab_from: labId,
+            goal_id: fundId,
+            goal_name: fundName,
+            amount,
+            created_at: new Date().toISOString(),
+          })
+        });
         if (typeof onDonationSuccess === 'function') {
           onDonationSuccess();
         }
