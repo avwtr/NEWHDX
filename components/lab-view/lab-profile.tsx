@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Bell, Users, FileText, FlaskConical, DollarSign } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
 
 interface LabProfileProps {
   isAdmin: boolean
@@ -21,8 +22,9 @@ interface LabProfileProps {
   categories: { category: string }[]
   experimentsCount?: number
   filesCount?: number
-  fundingTotal?: number
+  fundingTotal?: { raised: number, goal: number } | undefined
   membersCount?: number
+  membersBreakdown?: { total: number, founders: number, admins: number, donors: number, contributors: number }
   onOpenContributeDialog?: () => void
 }
 
@@ -41,8 +43,9 @@ export default function LabProfile({
   categories,
   experimentsCount = 0,
   filesCount = 0,
-  fundingTotal = 0,
+  fundingTotal,
   membersCount = 0,
+  membersBreakdown,
   onOpenContributeDialog,
 }: LabProfileProps) {
   return (
@@ -153,17 +156,57 @@ export default function LabProfile({
             <span className="text-muted-foreground">Experiments</span>
           </div>
 
-          <div className="flex items-center gap-2 text-sm">
-            <Users className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{membersCount}</span>
-            <span className="text-muted-foreground">Members</span>
+          <div className="flex flex-col gap-0.5 text-sm min-w-[120px]">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{membersCount}</span>
+              <span className="text-muted-foreground">Members</span>
+            </div>
+            {membersBreakdown && (
+              <div className="flex flex-wrap gap-2 mt-0.5 text-xs text-muted-foreground">
+                {membersBreakdown.founders > 0 && (
+                  <span><span className="font-semibold text-primary">{membersBreakdown.founders}</span> founders</span>
+                )}
+                {membersBreakdown.admins > 0 && (
+                  <span><span className="font-semibold text-primary">{membersBreakdown.admins}</span> admins</span>
+                )}
+                {membersBreakdown.donors > 0 && (
+                  <span><span className="font-semibold text-primary">{membersBreakdown.donors}</span> donors</span>
+                )}
+                {membersBreakdown.contributors > 0 && (
+                  <span><span className="font-semibold text-primary">{membersBreakdown.contributors}</span> contributors</span>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 text-sm">
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">${fundingTotal.toLocaleString()}</span>
-            <span className="text-muted-foreground">Funding</span>
-          </div>
+          {fundingTotal && fundingTotal.raised > 0 && fundingTotal.goal > 0 && (
+            <div className="flex flex-col gap-1 min-w-[180px]">
+              <div className="flex items-center gap-2 text-sm">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">
+                  <span className="text-accent">${fundingTotal.raised.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground ml-1">funded</span>
+                  <span className="mx-1 text-muted-foreground">/</span>
+                  <span className="text-primary">${fundingTotal.goal.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground ml-1">goal</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex-1 max-w-[120px]">
+                  <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-accent transition-all duration-500"
+                      style={{ width: `${Math.round((fundingTotal.raised / fundingTotal.goal) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+                <span className="ml-2 text-xs font-semibold text-accent whitespace-nowrap">
+                  {Math.round((fundingTotal.raised / fundingTotal.goal) * 100)}%
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </CardFooter>
     </Card>

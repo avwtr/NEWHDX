@@ -15,6 +15,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Slider } from "@/components/ui/slider"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
+import { v4 as uuidv4 } from 'uuid'
 
 interface Fund {
   id: string
@@ -45,13 +48,24 @@ export function FundAllocationDialog({
   const [selectedFund, setSelectedFund] = useState<string | null>(funds.length > 0 ? funds[0].id : null)
   const [customAmount, setCustomAmount] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
+  const { user } = useAuth();
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Here you would typically process the donation
     console.log({
       amount: Number.parseFloat(amount),
       fundId: selectedFund,
       donationType,
+    })
+
+    // Log activity for donation
+    await supabase.from("activity").insert({
+      activity_id: uuidv4(),
+      created_at: new Date().toISOString(),
+      activity_name: `Donation Made: $${amount} to fund ${selectedFund} (${donationType})`,
+      activity_type: donationType === "one-time" ? "donation_made" : "membership_subscribed",
+      performed_by: user?.id || null,
+      lab_from: null // You may want to pass labId as a prop for more context
     })
 
     // Reset form and close dialog

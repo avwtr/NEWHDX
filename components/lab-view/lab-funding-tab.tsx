@@ -105,6 +105,12 @@ export function LabFundingTab({
   const [pokeLoading, setPokeLoading] = useState(false)
   const [pokeFeed, setPokeFeed] = useState<any[]>([])
   const [usernameMap, setUsernameMap] = useState<Record<string, string>>({})
+  const [editMembershipLoading, setEditMembershipLoading] = useState(false)
+  const [editDonationLoading, setEditDonationLoading] = useState(false)
+  const [donorCount, setDonorCount] = useState<number | null>(null)
+  const [avgDonation, setAvgDonation] = useState<number | null>(null)
+  const [donorStatsLoading, setDonorStatsLoading] = useState(true)
+  const [subscriberCount, setSubscriberCount] = useState(0)
 
   // Helper to determine if membership is set up and active
   const isMembershipSetUp = !!membership
@@ -158,7 +164,7 @@ export function LabFundingTab({
   }, [labId])
 
   // Handler to refetch funds after creation
-  const handleFundCreated = () => {
+  const handleFundCreated = async () => {
     // Refetch funds
     (async () => {
       let { data: allFunds, error } = await supabase
@@ -174,6 +180,15 @@ export function LabFundingTab({
       ]
       setFunds(sortedFunds)
     })()
+    // Log activity for funding goal creation
+    await supabase.from("activity").insert({
+      activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+      created_at: new Date().toISOString(),
+      activity_name: "Funding Goal Created or Updated",
+      activity_type: "funding_goal",
+      performed_by: user?.id,
+      lab_from: labId
+    })
   }
 
   // Handler to save donation setup
@@ -189,6 +204,15 @@ export function LabFundingTab({
           created_by: user?.id || null,
         });
       if (error) throw error;
+      // Log activity for donation setup
+      await supabase.from("activity").insert({
+        activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+        created_at: new Date().toISOString(),
+        activity_name: `Donation Option Setup: ${data.name}`,
+        activity_type: "donation_setup",
+        performed_by: user?.id,
+        lab_from: labId
+      })
       toast({ title: "Success", description: "Donation setup has been saved." });
       setShowDonationDialog(false);
       await refetchOneTimeDonation();
@@ -212,6 +236,15 @@ export function LabFundingTab({
           created_by: user?.id || null,
         });
       if (error) throw error;
+      // Log activity for membership setup
+      await supabase.from("activity").insert({
+        activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+        created_at: new Date().toISOString(),
+        activity_name: `Membership Option Setup: ${data.name}`,
+        activity_type: "membership_setup",
+        performed_by: user?.id,
+        lab_from: labId
+      })
       toast({ title: "Success", description: "Membership setup has been saved." });
       setShowSetupMembershipDialog(false);
       await refetchMembership();
@@ -400,6 +433,42 @@ export function LabFundingTab({
     setPokeLoading(false);
     setShowPokeDialog(false);
   }
+
+  const fetchDonorAndSubscriberStats = async () => {
+    setDonorStatsLoading(true);
+    if (!labId) return;
+    // Fetch donors
+    const { data: donorsRaw } = await supabase
+      .from("labDonors")
+      .select("userId, donationAmount")
+      .eq("labId", labId);
+    const donors = donorsRaw || [];
+    // Unique donors
+    const uniqueDonors = new Set(donors.map(d => d.userId));
+    setDonorCount(uniqueDonors.size);
+    // Average donation (all donations)
+    const totalDonated = donors.reduce((sum, d) => sum + (d.donationAmount || 0), 0);
+    setAvgDonation(donors.length > 0 ? Number((totalDonated / donors.length).toFixed(2)) : 0);
+    // Fetch subscribers
+    const { data: subsRaw } = await supabase
+      .from("labSubscribers")
+      .select("userId")
+      .eq("labId", labId);
+    const subs = subsRaw || [];
+    const uniqueSubs = new Set(subs.map(s => s.userId));
+    setSubscriberCount(uniqueSubs.size);
+    setDonorStatsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchDonorAndSubscriberStats();
+  }, [labId]);
+
+  // Also refetch donor stats after a donation is made
+  const handleDonationSuccess = () => {
+    fetchDonorAndSubscriberStats();
+    if (typeof handleFundCreated === 'function') handleFundCreated();
+  };
 
   // Only show setup UI if fundingSetup is false
   if (!fundingSetup) {
@@ -655,8 +724,8 @@ export function LabFundingTab({
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-lg">LAB MEMBERSHIP</CardTitle>
-                  <CardDescription>{isMembershipSetUp ? membership.name : "Not set up"}</CardDescription>
+                  <CardTitle className="text-lg">{membership?.name || "LAB MEMBERSHIP"}</CardTitle>
+                  <CardDescription>{membership?.description || "No description yet."}</CardDescription>
                 </div>
                 {isAdmin && isMembershipSetUp && (
                   <Button
@@ -664,16 +733,19 @@ export function LabFundingTab({
                     size="sm"
                     className={(isMembershipActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
                     onClick={async () => {
-                      try {
-                        const { error } = await supabase.from("labs").update({ membership_option: !isMembershipActive }).eq("labId", labId)
-                        if (error) throw error
-                        toast({ title: isMembershipActive ? "Memberships Deactivated" : "Memberships Activated", description: `Lab memberships have been ${isMembershipActive ? "deactivated" : "activated"}.` })
-                        await refetchMembership()
-                      } catch (err) {
-                        let message = "Failed to update membership status"
-                        if (err instanceof Error) message = err.message
-                        toast({ title: "Error", description: message })
+                      setEditMembershipLoading(true);
+                      const { data, error } = await supabase
+                        .from("recurring_funding")
+                        .select("*")
+                        .eq("id", membership.id)
+                        .single();
+                      if (!error && data) {
+                        setEditMembershipName(data.name || "LAB MEMBERSHIP");
+                        setEditMembershipDescription(data.description || "");
+                        setEditMembershipAmount(data.monthly_amount?.toString() || "");
                       }
+                      setEditMembershipLoading(false);
+                      setShowEditMembershipDialog(true);
                     }}
                   >
                     {isMembershipActive ? (
@@ -695,14 +767,13 @@ export function LabFundingTab({
               )}
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">{isMembershipSetUp ? membership.description : "No description yet."}</p>
               {isMembershipSetUp && (
                 <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
                   <div className="bg-secondary/50 rounded px-2 py-1">
                     <span className="font-semibold text-accent">${membership.monthly_amount || 0}</span> / month
                   </div>
                   <div className="bg-secondary/50 rounded px-2 py-1">
-                    Subscribers: <span className="font-semibold text-accent">42</span>
+                    Subscribers: <span className="font-semibold text-accent">{subscriberCount}</span>
                   </div>
                 </div>
               )}
@@ -714,7 +785,21 @@ export function LabFundingTab({
                     variant="outline"
                     size="sm"
                     className="flex-1 border-accent text-accent hover:bg-secondary"
-                    onClick={() => setShowEditMembershipDialog(true)}
+                    onClick={async () => {
+                      setEditMembershipLoading(true);
+                      const { data, error } = await supabase
+                        .from("recurring_funding")
+                        .select("*")
+                        .eq("id", membership.id)
+                        .single();
+                      if (!error && data) {
+                        setEditMembershipName(data.name || "LAB MEMBERSHIP");
+                        setEditMembershipDescription(data.description || "");
+                        setEditMembershipAmount(data.monthly_amount?.toString() || "");
+                      }
+                      setEditMembershipLoading(false);
+                      setShowEditMembershipDialog(true);
+                    }}
                   >
                     <Edit2 className="h-4 w-4 mr-2" />
                     EDIT
@@ -742,8 +827,8 @@ export function LabFundingTab({
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-lg">ONE-TIME DONATION</CardTitle>
-                  <CardDescription>{isDonationSetUp ? oneTimeDonation.donation_setup_name : "Not set up"}</CardDescription>
+                  <CardTitle className="text-lg">{oneTimeDonation?.donation_setup_name || "ONE-TIME DONATION"}</CardTitle>
+                  <CardDescription>{oneTimeDonation?.donation_description || "No description yet."}</CardDescription>
                 </div>
                 {isAdmin && isDonationSetUp && (
                   <Button
@@ -751,16 +836,19 @@ export function LabFundingTab({
                     size="sm"
                     className={(isDonationActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
                     onClick={async () => {
-                      try {
-                        const { error } = await supabase.from("labs").update({ one_time_donation_option: !isDonationActive }).eq("labId", labId)
-                        if (error) throw error
-                        toast({ title: isDonationActive ? "Donations Deactivated" : "Donations Activated", description: `One-time donations have been ${isDonationActive ? "deactivated" : "activated"}.` })
-                        await refetchOneTimeDonation()
-                      } catch (err) {
-                        let message = "Failed to update donation status"
-                        if (err instanceof Error) message = err.message
-                        toast({ title: "Error", description: message })
+                      setEditDonationLoading(true);
+                      const { data, error } = await supabase
+                        .from("donation_funding")
+                        .select("*")
+                        .eq("id", oneTimeDonation.id)
+                        .single();
+                      if (!error && data) {
+                        setEditDonationName(data.donation_setup_name || "One-Time Donation");
+                        setEditDonationDescription(data.donation_description || "");
+                        setEditDonationAmounts(data.suggested_amounts || []);
                       }
+                      setEditDonationLoading(false);
+                      setShowEditDonationDialog(true);
                     }}
                   >
                     {isDonationActive ? (
@@ -782,14 +870,13 @@ export function LabFundingTab({
               )}
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">{isDonationSetUp ? oneTimeDonation.donation_description : "No description yet."}</p>
               {isDonationSetUp && (
                 <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
                   <div className="bg-secondary/50 rounded px-2 py-1">
-                    Donors: <span className="font-semibold text-accent">17</span>
+                    Donors: <span className="font-semibold text-accent">{donorStatsLoading ? '...' : donorCount}</span>
                   </div>
                   <div className="bg-secondary/50 rounded px-2 py-1">
-                    Avg. Donation: <span className="font-semibold text-accent">$68</span>
+                    Avg. Donation: <span className="font-semibold text-accent">{donorStatsLoading ? '...' : `$${avgDonation}`}</span>
                   </div>
                 </div>
               )}
@@ -801,7 +888,21 @@ export function LabFundingTab({
                     variant="outline"
                     size="sm"
                     className="flex-1 border-accent text-accent hover:bg-secondary"
-                    onClick={() => setShowEditDonationDialog(true)}
+                    onClick={async () => {
+                      setEditDonationLoading(true);
+                      const { data, error } = await supabase
+                        .from("donation_funding")
+                        .select("*")
+                        .eq("id", oneTimeDonation.id)
+                        .single();
+                      if (!error && data) {
+                        setEditDonationName(data.donation_setup_name || "One-Time Donation");
+                        setEditDonationDescription(data.donation_description || "");
+                        setEditDonationAmounts(data.suggested_amounts || []);
+                      }
+                      setEditDonationLoading(false);
+                      setShowEditDonationDialog(true);
+                    }}
                   >
                     <Edit2 className="h-4 w-4 mr-2" />
                     EDIT
@@ -819,7 +920,7 @@ export function LabFundingTab({
                   {isDonationActive ? "DONATE" : "SET UP"}
                 </Button>
               ) : (
-                <OneTimeDonation labId={labId} funds={mappedFunds} onDonationSuccess={handleFundCreated} />
+                <OneTimeDonation labId={labId} funds={mappedFunds} onDonationSuccess={handleDonationSuccess} />
               )}
             </CardFooter>
           </Card>
@@ -830,23 +931,6 @@ export function LabFundingTab({
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-lg">CURRENT FUNDING GOALS</CardTitle>
-              {isAdmin && (
-                <div className="flex flex-col items-end gap-1">
-                  <Button
-                    className="bg-accent text-primary-foreground hover:bg-accent/90 font-semibold px-4 py-2 rounded"
-                    onClick={() => setShowCreateFundDialog(true)}
-                  >
-                    CREATE FUNDING GOAL +
-                  </Button>
-                  <button
-                    className="text-xs text-accent underline hover:text-accent/80 mt-1"
-                    onClick={() => setShowFundingActivity(true)}
-                    style={{ alignSelf: 'flex-end' }}
-                  >
-                    VIEW FUNDING ACTIVITY
-                  </button>
-                </div>
-              )}
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
@@ -1055,20 +1139,25 @@ export function LabFundingTab({
 
       {/* Edit Donation Dialog */}
       <EditDonationDialog
-        initialBenefits={[]}
-        initialSuggestedAmounts={oneTimeDonation?.suggested_amounts || []}
+        initialName={editDonationName}
+        initialDescription={editDonationDescription}
+        initialSuggestedAmounts={editDonationAmounts}
         isOpen={showEditDonationDialog}
         onOpenChange={setShowEditDonationDialog}
         onSave={handleEditDonation}
+        initialBenefits={[]}
       />
 
       {/* Edit Membership Dialog */}
       <EditMembershipDialog
-        initialPrice={membership?.monthly_amount || 0}
-        initialBenefits={[]}
+        initialName={editMembershipName}
+        initialDescription={editMembershipDescription}
+        initialPrice={Number(editMembershipAmount) || 0}
         open={showEditMembershipDialog}
         onOpenChange={setShowEditMembershipDialog}
         onSave={handleEditMembership}
+        initialIsActive={isMembershipActive}
+        initialBenefits={[]}
       />
     </Card>
   )

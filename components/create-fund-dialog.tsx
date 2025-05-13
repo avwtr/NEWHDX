@@ -21,6 +21,7 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
+import { v4 as uuidv4 } from 'uuid'
 
 interface CreateFundDialogProps {
   labId: string
@@ -50,6 +51,15 @@ export function CreateFundDialog({ labId, onFundCreated, isOpen, onOpenChange }:
       created_by: user?.id || null,
     })
     if (!error) {
+      // Log activity for funding goal creation
+      await supabase.from("activity").insert({
+        activity_id: uuidv4(),
+        created_at: new Date().toISOString(),
+        activity_name: `Funding Goal Created: ${fundName}`,
+        activity_type: "funding_created",
+        performed_by: user?.id || null,
+        lab_from: labId
+      })
       onFundCreated()
       // Reset form and close dialog
       setFundName("")

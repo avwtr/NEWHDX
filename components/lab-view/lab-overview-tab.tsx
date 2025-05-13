@@ -67,6 +67,7 @@ export function LabOverviewTab({
   const { user } = useAuth();
   const [usernames, setUsernames] = useState<{ [userId: string]: string }>({})
   const [showCreateFundDialog, setShowCreateFundDialog] = useState(false);
+  const [recentFunds, setRecentFunds] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchBulletins() {
@@ -101,6 +102,23 @@ export function LabOverviewTab({
     }
     fetchBulletins()
   }, [labId])
+
+  // Fetch the two most recent funding goals (excluding 'GENERAL FUND')
+  useEffect(() => {
+    async function fetchRecentFunds() {
+      if (!labId) return;
+      const { data, error } = await supabase
+        .from("funding_goals")
+        .select("*")
+        .eq("lab_id", labId)
+        .neq("goalName", "GENERAL FUND")
+        .order("created_at", { ascending: false })
+        .limit(2);
+      if (!error && data) setRecentFunds(data);
+      else setRecentFunds([]);
+    }
+    fetchRecentFunds();
+  }, [labId]);
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -526,80 +544,62 @@ export function LabOverviewTab({
         </CardFooter>
       </Card>
 
-      {/* Enhanced Funding Goals Section */}
-      <Card className="border-accent/20">
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-xl">FUNDING GOALS</CardTitle>
-          <div className="flex items-center gap-2">
-            {/* Create fund button only for admins */}
-            {isAdmin && (
-              <>
-                <Button onClick={() => setShowCreateFundDialog(true)} variant="outline" size="sm" className="border-accent text-accent hover:bg-secondary">
-                  <Plus className="h-4 w-4 mr-1" />
-                  CREATE FUNDING GOAL
-                </Button>
-                <Dialog open={showCreateFundDialog} onOpenChange={setShowCreateFundDialog}>
-                  <DialogContent>
-                    <CreateFundDialog
-                      labId={labId}
-                      onFundCreated={() => setShowCreateFundDialog(false)}
-                      isOpen={showCreateFundDialog}
-                      onOpenChange={setShowCreateFundDialog}
-                    />
-                  </DialogContent>
-                </Dialog>
-              </>
-            )}
-            <Button variant="ghost" size="icon" onClick={() => toggleExpand("funding")} className="h-8 w-8">
-              {expandedTab === "funding" ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {mappedFunds.map((fund) => (
-              <Card key={fund.id} className="bg-secondary/50 border-secondary">
-                <CardContent className="p-4">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium text-accent">{fund.name}</h3>
-                      <span className="text-sm font-medium">
-                        ${Number(fund.currentAmount ?? 0).toLocaleString()} / ${Number(fund.goalAmount ?? 0).toLocaleString()}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{fund.description}</p>
-                    <div className="mt-2">
-                      <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                        <div className="h-full bg-accent" style={{ width: `${fund.percentFunded ?? 0}%` }} />
+      {/* Enhanced Funding Goals Section (only if there are any) */}
+      {recentFunds.length > 0 && (
+        <Card className="border-accent/20">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-xl">FUNDING GOALS</CardTitle>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={() => toggleExpand("funding")} className="h-8 w-8">
+                {expandedTab === "funding" ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {recentFunds.map((fund) => {
+                const percentFunded = fund.goal_amount ? Math.round((fund.amount_contributed || 0) / fund.goal_amount * 100) : 0;
+                const daysRemaining = fund.deadline ? Math.max(0, Math.ceil((new Date(fund.deadline).getTime() - Date.now()) / (1000*60*60*24))) : undefined;
+                return (
+                  <Card key={fund.id} className="bg-secondary/50 border-secondary">
+                    <CardContent className="p-4">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-medium text-accent">{fund.goalName}</h3>
+                          <span className="text-sm font-medium">
+                            ${Number(fund.amount_contributed ?? 0).toLocaleString()} / ${Number(fund.goal_amount ?? 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{fund.goal_description}</p>
+                        <div className="mt-2">
+                          <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                            <div className="h-full bg-accent" style={{ width: `${percentFunded}%` }} />
+                          </div>
+                          <div className="flex justify-between mt-1">
+                            <p className="text-xs text-muted-foreground">{percentFunded}% funded</p>
+                            <p className="text-xs text-muted-foreground">{daysRemaining !== undefined ? `${daysRemaining} days remaining` : 'No deadline'}</p>
+                          </div>
+                        </div>
+                        {!isAdmin && (
+                          <div className="mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full text-accent border-accent/20 hover:bg-accent/10"
+                            >
+                              CONTRIBUTE $
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex justify-between mt-1">
-                        <p className="text-xs text-muted-foreground">{fund.percentFunded ?? 0}% funded</p>
-                        <p className="text-xs text-muted-foreground">{fund.daysRemaining ?? 'No deadline'} days remaining</p>
-                      </div>
-                    </div>
-                    <div className="mt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full text-accent border-accent/20 hover:bg-accent/10"
-                      >
-                        CONTRIBUTE
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Link href="/funding" className="w-full">
-            <Button variant="ghost" size="sm" className="w-full text-accent hover:bg-secondary">
-              VIEW ALL FUNDING GOALS
-            </Button>
-          </Link>
-        </CardFooter>
-      </Card>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </>
   )
 }

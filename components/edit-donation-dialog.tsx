@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,6 +16,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/use-toast"
 import { Edit2 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
+import { v4 as uuidv4 } from 'uuid'
 
 interface DonationBenefit {
   id: string
@@ -25,6 +28,11 @@ interface DonationBenefit {
 interface EditDonationDialogProps {
   initialBenefits: DonationBenefit[]
   initialSuggestedAmounts?: number[]
+  initialName?: string
+  initialDescription?: string
+  initialIsActive?: boolean
+  initialAllowCustomAmount?: boolean
+  initialMinAmount?: number | string
   isOpen?: boolean
   onOpenChange?: (open: boolean) => void
   onSave?: (data: any) => void
@@ -33,6 +41,11 @@ interface EditDonationDialogProps {
 export function EditDonationDialog({
   initialBenefits,
   initialSuggestedAmounts = [10, 25, 50, 100, 250, 500],
+  initialName = "One-Time Donation",
+  initialDescription = "Make a one-time donation to support our research initiatives.",
+  initialIsActive = true,
+  initialAllowCustomAmount = true,
+  initialMinAmount = 1,
   isOpen,
   onOpenChange,
   onSave,
@@ -47,18 +60,30 @@ export function EditDonationDialog({
   )
   const [newBenefit, setNewBenefit] = useState("")
   const [suggestedAmounts, setSuggestedAmounts] = useState<string[]>(
-    initialSuggestedAmounts.map((amount) => amount.toString()),
+    (initialSuggestedAmounts || [10, 25, 50, 100, 250, 500]).map((amount) => amount.toString()),
   )
   const [newAmount, setNewAmount] = useState("")
-  const [allowCustomAmount, setAllowCustomAmount] = useState(true)
-  const [minAmount, setMinAmount] = useState("1")
-  const [isActive, setIsActive] = useState(true)
+  const [name, setName] = useState(initialName)
+  const [description, setDescription] = useState(initialDescription)
+  const [allowCustomAmount, setAllowCustomAmount] = useState(initialAllowCustomAmount)
+  const [minAmount, setMinAmount] = useState(initialMinAmount?.toString?.() || "1")
+  const [isActive, setIsActive] = useState(initialIsActive)
+  const { user } = useAuth();
 
-  const handleSave = () => {
+  useEffect(() => {
+    setName(initialName);
+    setDescription(initialDescription);
+    setSuggestedAmounts((initialSuggestedAmounts || [10, 25, 50, 100, 250, 500]).map((amount) => amount.toString()));
+    setIsActive(initialIsActive);
+    setAllowCustomAmount(initialAllowCustomAmount);
+    setMinAmount(initialMinAmount?.toString?.() || "1");
+  }, [initialName, initialDescription, initialSuggestedAmounts, initialIsActive, initialAllowCustomAmount, initialMinAmount]);
+
+  const handleSave = async () => {
     if (onSave) {
       onSave({
-        name: "One-Time Donation",
-        description: "Make a one-time donation to support our research initiatives.",
+        name,
+        description,
         amounts: suggestedAmounts.map(Number),
         isActive,
         allowCustomAmount,
@@ -70,6 +95,15 @@ export function EditDonationDialog({
         description: `One-time donation options have been updated with ${benefits.length} benefits and ${suggestedAmounts.length} suggested amounts.`,
       })
     }
+    // Log activity for donation option edit
+    await supabase.from("activity").insert({
+      activity_id: uuidv4(),
+      created_at: new Date().toISOString(),
+      activity_name: `Donation Option Edited` ,
+      activity_type: "donation_edited",
+      performed_by: user?.id || null,
+      lab_from: null // Pass labId if available
+    })
     if (onOpenChange) {
       onOpenChange(false)
     } else {
@@ -113,6 +147,17 @@ export function EditDonationDialog({
 
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="name" className="text-right">
+              Name
+            </Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="col-span-3"
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="description" className="text-right">
               Description
             </Label>
@@ -120,7 +165,8 @@ export function EditDonationDialog({
               id="description"
               placeholder="Describe the donation options..."
               className="col-span-3"
-              defaultValue="Make a one-time donation to support our research initiatives and help us reach our funding goals."
+              value={description}
+              onChange={e => setDescription(e.target.value)}
             />
           </div>
 
@@ -186,16 +232,6 @@ export function EditDonationDialog({
                 onChange={(e) => setMinAmount(e.target.value)}
                 className="w-24"
               />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="isActive" className="text-right">
-              Active
-            </Label>
-            <div className="col-span-3 flex items-center space-x-2">
-              <Switch id="isActive" checked={isActive} onCheckedChange={setIsActive} />
-              <Label htmlFor="isActive">Active</Label>
             </div>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { DialogFooter } from "@/components/ui/dialog"
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -19,6 +19,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
+import { v4 as uuidv4 } from 'uuid'
 
 interface MembershipBenefit {
   id: string
@@ -142,6 +145,9 @@ const mockSubscribers: Subscriber[] = [
 interface EditMembershipDialogProps {
   initialPrice: number
   initialBenefits: MembershipBenefit[]
+  initialName?: string;
+  initialDescription?: string;
+  initialIsActive?: boolean;
   open: boolean
   onOpenChange: (open: boolean) => void
   onSave?: (data: any) => void
@@ -150,13 +156,16 @@ interface EditMembershipDialogProps {
 export function EditMembershipDialog({
   initialPrice = 25,
   initialBenefits,
+  initialName = "LAB MEMBERSHIP",
+  initialDescription = "",
+  initialIsActive = true,
   open,
   onOpenChange,
   onSave,
 }: EditMembershipDialogProps) {
   const [activeTab, setActiveTab] = useState("details")
   const [price, setPrice] = useState(initialPrice.toString())
-  const [membershipName, setMembershipName] = useState("LAB MEMBERSHIP")
+  const [membershipName, setMembershipName] = useState(initialName)
   const [benefits, setBenefits] = useState<MembershipBenefit[]>(
     initialBenefits || [
       { id: "1", text: "Access to member-only updates" },
@@ -174,8 +183,16 @@ export function EditMembershipDialog({
   const [emailSubject, setEmailSubject] = useState("")
   const [emailContent, setEmailContent] = useState("")
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
-  const [description, setDescription] = useState("")
-  const [isActive, setIsActive] = useState(true)
+  const [description, setDescription] = useState(initialDescription)
+  const [isActive, setIsActive] = useState(initialIsActive)
+  const { user } = useAuth();
+
+  useEffect(() => {
+    setMembershipName(initialName);
+    setDescription(initialDescription);
+    setPrice(initialPrice.toString());
+    setIsActive(initialIsActive);
+  }, [initialName, initialDescription, initialPrice, initialIsActive]);
 
   // Metrics calculations
   const activeSubscribers = subscribers.filter((sub) => sub.status === "active").length
@@ -183,7 +200,7 @@ export function EditMembershipDialog({
   const monthlyRevenue = activeSubscribers * Number.parseFloat(price)
   const totalRevenue = subscribers.reduce((sum, sub) => sum + sub.totalContributed, 0)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (onSave) {
       onSave({
         name: membershipName,
@@ -197,6 +214,15 @@ export function EditMembershipDialog({
         description: `Lab membership has been updated to $${price}/month with ${benefits.length} benefits.`,
       })
     }
+    // Log activity for membership option edit
+    await supabase.from("activity").insert({
+      activity_id: uuidv4(),
+      created_at: new Date().toISOString(),
+      activity_name: `Membership Option Edited` ,
+      activity_type: "membership_edited",
+      performed_by: user?.id || null,
+      lab_from: null // Pass labId if available
+    })
     onOpenChange(false)
   }
 
@@ -301,10 +327,6 @@ export function EditMembershipDialog({
           <div>
             <Label>Monthly Amount ($)</Label>
             <Input type="number" min="1" value={price} onChange={e => setPrice(e.target.value)} />
-          </div>
-          <div className="flex items-center gap-2">
-            <Label>Active</Label>
-            <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
           </div>
         </div>
         <DialogFooter>

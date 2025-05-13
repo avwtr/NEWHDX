@@ -19,6 +19,9 @@ import { CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
+import { v4 as uuidv4 } from 'uuid'
 
 interface Fund {
   id: string
@@ -47,6 +50,8 @@ export function EditFundDialog({ fund, onSave, isOpen, onOpenChange }: EditFundD
     fund.endDate || (fund.daysRemaining ? new Date(Date.now() + fund.daysRemaining * 24 * 60 * 60 * 1000) : undefined),
   )
 
+  const { user } = useAuth();
+
   useEffect(() => {
     setName(fund.name)
     setDescription(fund.description)
@@ -58,7 +63,7 @@ export function EditFundDialog({ fund, onSave, isOpen, onOpenChange }: EditFundD
     )
   }, [fund])
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Calculate days remaining based on end date
     const now = new Date()
     const daysRemaining = endDate ? Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : undefined
@@ -80,6 +85,15 @@ export function EditFundDialog({ fund, onSave, isOpen, onOpenChange }: EditFundD
     }
 
     onSave(updatedFund)
+    // Log activity for funding goal edit
+    await supabase.from("activity").insert({
+      activity_id: uuidv4(),
+      created_at: new Date().toISOString(),
+      activity_name: `Funding Goal Edited: ${name}`,
+      activity_type: "funding_edited",
+      performed_by: user?.id || null,
+      lab_from: null // Pass labId if available
+    })
     toast({
       title: "Fund Updated",
       description: `${name} has been updated successfully.`,

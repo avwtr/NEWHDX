@@ -74,6 +74,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   // Funding state
   const [funds, setFunds] = useState<any[]>([])
   const [isDonationsActive, setIsDonationsActive] = useState(true)
+  const [fundingTotals, setFundingTotals] = useState<{raised: number, goal: number} | undefined>(undefined)
 
   // Experiments state
   const [experimentsExpanded, setExperimentsExpanded] = useState(false)
@@ -104,13 +105,12 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   const pendingCount = pendingContributions.length
 
   const [experiments, setExperiments] = useState<any[]>([])
-  const [files, setFiles] = useState<any[]>([])
+  const [filesCount, setFilesCount] = useState(0)
   const [members, setMembers] = useState<any[]>([])
   const [bulletins, setBulletins] = useState<any[]>([])
 
   // --- Add state for experiments and funding ---
   const [experimentsCount, setExperimentsCount] = useState(0)
-  const [fundingTotal, setFundingTotal] = useState(0)
 
   // --- LAB ADMIN STATUS ---
   const [isAdmin, setIsAdmin] = useState(false)
@@ -124,6 +124,9 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
 
   const [membership, setMembership] = useState(null)
   const [labsMembershipOption, setLabsMembershipOption] = useState(false)
+
+  // --- Members breakdown state ---
+  const [membersBreakdown, setMembersBreakdown] = useState<{ total: number, founders: number, admins: number, donors: number, contributors: number }>({ total: 0, founders: 0, admins: 0, donors: 0, contributors: 0 });
 
   // Helper to refetch lab data (including funding_setup)
   const refetchLab = async () => {
@@ -147,12 +150,13 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .eq("lab_id", lab.labId)
       setExperiments(expData || [])
 
-      // Fetch files
-      const { data: fileData } = await supabase
+      // Fetch files count (exclude folders)
+      const { count: fileCount, error: fileCountError } = await supabase
         .from("files")
-        .select("*")
-        .eq("lab_id", lab.labId)
-      setFiles(fileData || [])
+        .select("id", { count: "exact", head: true })
+        .eq("labID", lab.labId)
+        .neq("fileTag", "folder")
+      setFilesCount(fileCountError ? 0 : fileCount || 0)
 
       // Fetch funding
       const { data: fundingData } = await supabase
@@ -215,16 +219,21 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .eq("lab_id", lab.labId)
       setExperimentsCount(expError ? 0 : experiments || 0)
 
-      // Fetch funding goals and sum their currentAmount
+      // Fetch funding goals from funding_goals table
       const { data: fundingGoals, error: fundError } = await supabase
-        .from("funding")
-        .select("currentAmount")
+        .from("funding_goals")
+        .select("amount_contributed, goal_amount")
         .eq("lab_id", lab.labId)
-      if (fundError || !fundingGoals) {
-        setFundingTotal(0)
+      if (fundError || !fundingGoals || fundingGoals.length === 0) {
+        setFundingTotals(undefined)
       } else {
-        const total = fundingGoals.reduce((sum, goal) => sum + (goal.currentAmount || 0), 0)
-        setFundingTotal(total)
+        const totalRaised = fundingGoals.reduce((sum, goal) => sum + (goal.amount_contributed || 0), 0)
+        const totalGoal = fundingGoals.reduce((sum, goal) => sum + (goal.goal_amount || 0), 0)
+        if (totalRaised > 0 && totalGoal > 0) {
+          setFundingTotals({ raised: totalRaised, goal: totalGoal })
+        } else {
+          setFundingTotals(undefined)
+        }
       }
     }
     fetchExperimentsAndFunding()
@@ -298,6 +307,51 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
       setMembership(data);
     }
     fetchMembership();
+  }, [lab?.labId]);
+
+  useEffect(() => {
+    async function fetchMembersBreakdown() {
+      if (!lab?.labId) return;
+      // 1. Fetch labMembers (founders/admins/others)
+      const { data: labMembers = [] } = await supabase
+        .from("labMembers")
+        .select("user, role")
+        .eq("lab_id", lab.labId);
+      const founders = new Set(labMembers.filter(m => m.role === "founder").map(m => m.user));
+      const admins = new Set(labMembers.filter(m => m.role === "admin").map(m => m.user));
+      // 2. Fetch labContributors
+      const { data: labContribs = [] } = await supabase
+        .from("labContributors")
+        .select("userId")
+        .eq("labId", lab.labId);
+      const contributors = new Set(labContribs.map(c => c.userId));
+      // 3. Fetch labDonors
+      const { data: labDonors = [] } = await supabase
+        .from("labDonors")
+        .select("userId")
+        .eq("labId", lab.labId);
+      // 4. Fetch labSubscribers (these are donors)
+      const { data: labSubs = [] } = await supabase
+        .from("labSubscribers")
+        .select("userId")
+        .eq("labId", lab.labId);
+      const donors = new Set([...labDonors.map(d => d.userId), ...labSubs.map(s => s.userId)]);
+      // 5. Union all user IDs for total
+      const all = new Set([
+        ...founders,
+        ...admins,
+        ...contributors,
+        ...donors,
+      ]);
+      setMembersBreakdown({
+        total: all.size,
+        founders: founders.size,
+        admins: admins.size,
+        donors: donors.size,
+        contributors: contributors.size,
+      });
+    }
+    fetchMembersBreakdown();
   }, [lab?.labId]);
 
   const handleTabChange = (value: string) => {
@@ -550,9 +604,10 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
           setActiveTab={setLocalActiveTab}
           router={router}
           experimentsCount={experimentsCount}
-          filesCount={files.length}
-          fundingTotal={fundingTotal}
-          membersCount={members.length}
+          filesCount={filesCount}
+          fundingTotal={fundingTotals}
+          membersCount={membersBreakdown.total}
+          membersBreakdown={membersBreakdown}
           onOpenContributeDialog={() => setContributionDialogOpen(true)}
         />
       </div>
