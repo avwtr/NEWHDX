@@ -43,42 +43,6 @@ const exampleTopics = [
   "Sustainable Materials",
 ]
 
-// Sample collaborators for invitation step
-const sampleCollaborators = [
-  {
-    id: 1,
-    name: "Dr. Sarah Johnson",
-    email: "sjohnson@research.edu",
-    role: "Principal Investigator",
-    avatar: "/placeholder.svg?height=40&width=40",
-    initials: "SJ",
-  },
-  {
-    id: 2,
-    name: "Alex Kim",
-    email: "akim@research.edu",
-    role: "Data Scientist",
-    avatar: "/placeholder.svg?height=40&width=40",
-    initials: "AK",
-  },
-  {
-    id: 3,
-    name: "Maria Lopez",
-    email: "mlopez@research.edu",
-    role: "Research Assistant",
-    avatar: "/placeholder.svg?height=40&width=40",
-    initials: "ML",
-  },
-  {
-    id: 4,
-    name: "Robert Chen",
-    email: "rchen@research.edu",
-    role: "Postdoctoral Researcher",
-    avatar: "/placeholder.svg?height=40&width=40",
-    initials: "RC",
-  },
-]
-
 export function CreateLab() {
   // State for multi-step wizard
   const [step, setStep] = useState<"template" | "ai-description" | "details" | "invite" | "finalize">("template")
