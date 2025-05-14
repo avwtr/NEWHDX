@@ -35,8 +35,8 @@ export async function POST(req: NextRequest) {
 
     let paymentMethod = (customer as Stripe.Customer).invoice_settings?.default_payment_method;
 
-    // If no default, fetch the first attached payment method
-    if (!paymentMethod || typeof paymentMethod === 'string') {
+    // If no default, fetch the first attached card payment method
+    if (!paymentMethod || typeof paymentMethod === 'string' || paymentMethod.type !== 'card') {
       const paymentMethods = await stripe.paymentMethods.list({
         customer: profile.payment_acc_id,
         type: 'card',
@@ -45,28 +45,17 @@ export async function POST(req: NextRequest) {
       if (paymentMethods.data.length > 0) {
         paymentMethod = paymentMethods.data[0];
       } else {
-        // Try bank account if no card
-        const bankMethods = await stripe.paymentMethods.list({
-          customer: profile.payment_acc_id,
-          type: 'us_bank_account',
-          limit: 1,
-        });
-        if (bankMethods.data.length > 0) {
-          paymentMethod = bankMethods.data[0];
-        } else {
-          return new Response(JSON.stringify({ error: 'No payment method found' }), { status: 404 });
-        }
+        return new Response(JSON.stringify({ error: 'No card payment method found' }), { status: 404 });
       }
     }
 
-    // Return payment method details
+    // Return card payment method details
     return new Response(JSON.stringify({
       type: paymentMethod.type,
       brand: paymentMethod.card?.brand,
-      last4: paymentMethod.card?.last4 || paymentMethod.us_bank_account?.last4,
+      last4: paymentMethod.card?.last4,
       exp_month: paymentMethod.card?.exp_month,
       exp_year: paymentMethod.card?.exp_year,
-      bank_name: paymentMethod.us_bank_account?.bank_name,
     }), { status: 200 });
   } catch (err: any) {
     console.error('Error getting payment info:', err);

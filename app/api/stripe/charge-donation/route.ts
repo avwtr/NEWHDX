@@ -44,32 +44,36 @@ export async function POST(req: NextRequest) {
   }
 
   // 3. Get user's default payment method
-  const customerObj = await stripe.customers.retrieve(userProfile.payment_acc_id);
+  const customerObj = await stripe.customers.retrieve(userProfile.payment_acc_id, {
+    expand: ['invoice_settings.default_payment_method'],
+  });
   const customer = customerObj as Stripe.Customer;
   console.log('[charge-donation] Customer:', customer);
-  
+
   let paymentMethodId = null;
-  if (customer.invoice_settings?.default_payment_method) {
-    paymentMethodId = typeof customer.invoice_settings.default_payment_method === 'string'
-      ? customer.invoice_settings.default_payment_method
-      : customer.invoice_settings.default_payment_method.id;
-    console.log('[charge-donation] Using default payment method:', paymentMethodId);
-  } else {
-    // fallback: get first attached payment method
+  if (customer.invoice_settings?.default_payment_method &&
+      typeof customer.invoice_settings.default_payment_method !== 'string' &&
+      customer.invoice_settings.default_payment_method.type === 'card') {
+    paymentMethodId = customer.invoice_settings.default_payment_method.id;
+    console.log('[charge-donation] Using default card payment method:', paymentMethodId);
+  }
+
+  // fallback: get first attached card payment method
+  if (!paymentMethodId) {
     const paymentMethods = await stripe.paymentMethods.list({
       customer: userProfile.payment_acc_id,
-      type: "us_bank_account", // Changed from "card" to "us_bank_account"
+      type: 'card',
       limit: 1,
     });
-    console.log('[charge-donation] Found payment methods:', paymentMethods);
+    console.log('[charge-donation] Found card payment methods:', paymentMethods);
     if (paymentMethods.data.length > 0) {
       paymentMethodId = paymentMethods.data[0].id;
-      console.log('[charge-donation] Using first payment method:', paymentMethodId);
+      console.log('[charge-donation] Using first card payment method:', paymentMethodId);
     }
   }
   if (!paymentMethodId) {
-    console.log('[charge-donation] No payment method found');
-    return NextResponse.json({ error: "No payment method found for user." }, { status: 400 });
+    console.log('[charge-donation] No card payment method found');
+    return NextResponse.json({ error: "No card payment method found for user." }, { status: 400 });
   }
 
   // 4. Calculate fee and net
@@ -104,7 +108,7 @@ export async function POST(req: NextRequest) {
         labId,
         goalId,
       },
-      payment_method_types: ['card', 'us_bank_account'],
+      payment_method_types: ['card'],
     });
     console.log('[charge-donation] Payment intent created:', paymentIntent.id);
   } catch (err: any) {

@@ -73,7 +73,8 @@ function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
+      {/* Only allow card payment element */}
+      <PaymentElement options={{ paymentMethodOrder: ['card'] }} />
       {error && (
         <div className="text-red-500 text-sm">{error}</div>
       )}
@@ -752,23 +753,17 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
                   <div className="space-y-4 w-full">
                     {loadingPayment ? (
                       <div className="text-accent font-semibold">Loading...</div>
-                    ) : paymentInfo ? (
+                    ) : paymentInfo && paymentInfo.type === 'card' ? (
                       <div className="flex flex-col items-center gap-2">
                         <Badge className="bg-green-100 text-green-800">Connected</Badge>
-                        {paymentInfo.type === 'card' ? (
-                          <span className="text-sm text-muted-foreground">
-                            {paymentInfo.brand?.toUpperCase()} ••••{paymentInfo.last4}
-                          </span>
-                        ) : paymentInfo.type === 'us_bank_account' ? (
-                          <span className="text-sm text-muted-foreground">
-                            {paymentInfo.bank_name} ••••{paymentInfo.last4}
-                          </span>
-                        ) : null}
+                        <span className="text-sm text-muted-foreground">
+                          {paymentInfo.brand?.toUpperCase()} ••••{paymentInfo.last4}
+                        </span>
                       </div>
                     ) : null}
                     <div className="flex gap-2 w-full">
                       <Button variant="outline" className="flex-1" onClick={handleAddPaymentMethod} disabled={loadingPayment}>
-                        {paymentInfo ? 'Change/Add Payment Method' : 'Add Payment Method'}
+                        {paymentInfo && paymentInfo.type === 'card' ? 'Change/Add Payment Method' : 'Add Payment Method'}
                       </Button>
                       {paymentInfo && (
                         <Button variant="destructive" className="flex-1" onClick={() => setShowRemovePaymentConfirm(true)} disabled={loadingPayment}>

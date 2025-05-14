@@ -24,6 +24,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { OneTimeDonation } from "@/components/one-time-donation"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 interface LabFundingTabProps {
   isAdmin: boolean
@@ -111,6 +112,17 @@ export function LabFundingTab({
   const [avgDonation, setAvgDonation] = useState<number | null>(null)
   const [donorStatsLoading, setDonorStatsLoading] = useState(true)
   const [subscriberCount, setSubscriberCount] = useState(0)
+  const [userSubscription, setUserSubscription] = useState<any>(null)
+  const [showSubscribeDialog, setShowSubscribeDialog] = useState(false)
+  const [membershipPaymentMethod, setMembershipPaymentMethod] = useState<any>(null)
+  const [loadingMembershipPM, setLoadingMembershipPM] = useState(false)
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [pendingDeleteFundId, setPendingDeleteFundId] = useState<string | null>(null)
+  const [selectedMembershipFund, setSelectedMembershipFund] = useState(funds[0]?.id || "")
+  const [subscribing, setSubscribing] = useState(false)
+  const [subscribeSuccess, setSubscribeSuccess] = useState(false)
+  const [subscribeError, setSubscribeError] = useState("")
 
   // Helper to determine if membership is set up and active
   const isMembershipSetUp = !!membership
@@ -122,64 +134,58 @@ export function LabFundingTab({
   const fundingSetup = lab?.funding_setup
   const labFundingId = lab?.funding_id
 
-  // Fetch and ensure General Fund
-  useEffect(() => {
-    async function fetchAndEnsureFunds() {
-      if (!labId) return
-      let { data: allFunds, error } = await supabase
+  // Calculate fee and net for membership
+  const membershipAmount = Number(membership?.monthly_amount || 0)
+  const membershipFee = +(membershipAmount * 0.025).toFixed(2)
+  const membershipNet = +(membershipAmount - membershipFee).toFixed(2)
+
+  // Centralized fetch and refetch logic for funding goals
+  const refetchFunds = async () => {
+    if (!labId) return;
+    try {
+      const { data: allFunds, error } = await supabase
         .from("funding_goals")
         .select("*")
         .eq("lab_id", labId)
-      if (error) return
-      allFunds = allFunds || []
-      // Check for General Fund
-      let generalFund = allFunds.find(f => f.goalName === "GENERAL FUND")
-      if (!generalFund) {
-        const { data: inserted, error: insertError } = await supabase
-          .from("funding_goals")
-          .insert({
-            lab_id: labId,
-            goalName: "GENERAL FUND",
-            goal_description: "A flexible fund for general lab support.",
-            goal_amount: null,
-            deadline: null,
-            amount_contributed: 0,
-            created_by: null,
-          })
-          .select()
-          .single()
-        if (!insertError && inserted) {
-          generalFund = inserted
-          allFunds = [inserted, ...allFunds]
-        }
+        .order("created_at", { ascending: false });
+      
+      if (error) {
+        console.error("Error fetching funds:", error);
+        setFunds([]);
+        return;
       }
-      // Always put General Fund first
+
+      // Always put General Fund first if present
+      const generalFund = allFunds?.find(f => f.goalName === "GENERAL FUND");
       const sortedFunds = [
         ...(generalFund ? [generalFund] : []),
-        ...allFunds.filter(f => f.goalName !== "GENERAL FUND")
-      ]
-      setFunds(sortedFunds)
+        ...(allFunds ? allFunds.filter(f => f.goalName !== "GENERAL FUND") : [])
+      ];
+
+      // Map the funds once during the fetch
+      const mappedFunds = sortedFunds.map(fund => ({
+        ...fund,
+        currentAmount: fund.amount_contributed ?? 0,
+        goalAmount: fund.goal_amount ?? 0,
+        percentFunded: fund.goal_amount ? Math.round((fund.amount_contributed ?? 0) / fund.goal_amount * 100) : 0,
+        daysRemaining: fund.deadline ? Math.max(0, Math.ceil((new Date(fund.deadline).getTime() - Date.now()) / (1000*60*60*24))) : undefined,
+      }));
+
+      setFunds(mappedFunds);
+    } catch (err) {
+      console.error("Error in refetchFunds:", err);
+      setFunds([]);
     }
-    fetchAndEnsureFunds()
-  }, [labId])
+  };
+
+  useEffect(() => {
+    refetchFunds();
+  }, [labId]);
 
   // Handler to refetch funds after creation
   const handleFundCreated = async (logActivity = false) => {
     // Refetch funds
-    (async () => {
-      let { data: allFunds, error } = await supabase
-        .from("funding_goals")
-        .select("*")
-        .eq("lab_id", labId)
-      if (error) return
-      allFunds = allFunds || []
-      let generalFund = allFunds.find(f => f.goalName === "GENERAL FUND")
-      const sortedFunds = [
-        ...(generalFund ? [generalFund] : []),
-        ...allFunds.filter(f => f.goalName !== "GENERAL FUND")
-      ]
-      setFunds(sortedFunds)
-    })()
+    await refetchFunds()
     // Only log activity if requested (i.e. for actual fund creation/update)
     if (logActivity) {
       await supabase.from("activity").insert({
@@ -286,14 +292,6 @@ export function LabFundingTab({
       toast({ title: "Error", description: message });
     }
   }
-
-  // Map backend funds to expected shape for FundAllocationDialog
-  const mappedFunds = funds.map(fund => ({
-    ...fund,
-    currentAmount: fund.amount_contributed ?? 0,
-    goalAmount: fund.goal_amount ?? 0,
-    percentFunded: fund.goal_amount ? Math.round((fund.amount_contributed ?? 0) / fund.goal_amount * 100) : 0,
-  }))
 
   // Fetch admin's payout account (funding_id) from their profile
   useEffect(() => {
@@ -410,16 +408,53 @@ export function LabFundingTab({
   async function handlePoke() {
     if (!user && !pokeAnon) return;
     setPokeLoading(true);
+    const tempId = Math.random().toString(36).substring(2, 15);
     const newPoke = {
+      id: tempId,
       labId,
       pokedBy: pokeAnon ? null : user?.id,
       anon: pokeAnon,
+      created_at: new Date().toISOString()
     };
     // Optimistic update
-    setPokeFeed([{ ...newPoke, created_at: new Date().toISOString(), id: Math.random() }, ...pokeFeed]);
-    await supabase.from('labFundingPokes').insert(newPoke);
-    setPokeLoading(false);
-    setShowPokeDialog(false);
+    setPokeFeed([newPoke, ...pokeFeed]);
+    
+    try {
+      // Insert poke into labFundingPokes table
+      const { error: pokeError } = await supabase.from('labFundingPokes').insert({
+        labId,
+        pokedBy: pokeAnon ? null : user?.id,
+        anon: pokeAnon
+      });
+      if (pokeError) throw pokeError;
+
+      // Log activity for the poke
+      const activityData = {
+        activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+        created_at: new Date().toISOString(),
+        activity_name: `Lab Poked: ${pokeAnon ? 'Anonymous' : 'User'} suggested setting up funding`,
+        activity_type: "lab_poked",
+        performed_by: pokeAnon ? null : user?.id,
+        lab_from: labId
+      };
+      
+      const { error: activityError } = await supabase.from("activity").insert(activityData);
+      if (activityError) {
+        console.error("Failed to log poke activity:", activityError);
+      }
+    } catch (err) {
+      console.error("Error in handlePoke:", err);
+      // Revert optimistic update on error
+      setPokeFeed(pokeFeed.filter(p => p.id !== tempId));
+      toast({
+        title: "Error",
+        description: "Failed to send poke. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setPokeLoading(false);
+      setShowPokeDialog(false);
+    }
   }
 
   const fetchDonorAndSubscriberStats = async () => {
@@ -472,226 +507,433 @@ export function LabFundingTab({
     }
   }
 
+  useEffect(() => {
+    async function fetchUserSubscription() {
+      if (!user?.id || !labId) {
+        setUserSubscription(null);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('labSubscribers')
+        .select('*')
+        .eq('userId', user.id)
+        .eq('labId', labId)
+        .single();
+      if (!error && data) setUserSubscription(data);
+      else setUserSubscription(null);
+    }
+    fetchUserSubscription();
+  }, [user?.id, labId]);
+
+  // Fetch payment method when subscribe dialog opens
+  useEffect(() => {
+    if (showSubscribeDialog && user?.id) {
+      setLoadingMembershipPM(true);
+      fetch("/api/stripe/get-payment-info", {
+        method: "POST",
+        headers: { "x-user-id": user.id },
+      })
+        .then(res => res.json())
+        .then(data => {
+          setMembershipPaymentMethod(data.error ? null : data);
+        })
+        .finally(() => setLoadingMembershipPM(false));
+    } else if (!showSubscribeDialog) {
+      setMembershipPaymentMethod(null);
+    }
+  }, [showSubscribeDialog, user?.id]);
+
+  // Handle subscribe
+  async function handleSubscribe() {
+    if (!user || !selectedMembershipFund) return;
+    setSubscribing(true);
+    setSubscribeError("");
+    try {
+      const res = await fetch("/api/stripe/create-membership-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          labId,
+          goalId: selectedMembershipFund,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Log activity for successful subscription
+        const selectedFund = funds.find(f => f.id === selectedMembershipFund);
+        const activityData = {
+          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          created_at: new Date().toISOString(),
+          activity_name: `Lab Membership: Subscribed $${membershipAmount.toFixed(2)}/mo to ${selectedFund?.goalName || 'Lab Membership'}`,
+          activity_type: "lab_subscribed",
+          performed_by: user.id,
+          lab_from: labId
+        };
+        
+        const { error: activityError } = await supabase.from("activity").insert(activityData);
+        if (activityError) {
+          console.error("Failed to log subscription activity:", activityError);
+        }
+
+        setSubscribeSuccess(true);
+        setTimeout(() => {
+          setShowSubscribeDialog(false);
+          setSubscribeSuccess(false);
+          refetchMembership();
+        }, 2000);
+      } else {
+        setSubscribeError(data.error || "Subscription failed. Please try again.");
+      }
+    } catch (err) {
+      setSubscribeError("An unexpected error occurred. Please try again.");
+    } finally {
+      setSubscribing(false);
+    }
+  }
+
+  // Handler to cancel membership subscription
+  async function handleCancelSubscription() {
+    if (!userSubscription) return;
+    setCancelling(true);
+    setSubscribeError("");
+    try {
+      const res = await fetch("/api/stripe/cancel-membership-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscriptionId: userSubscription.stripe_id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowCancelDialog(false);
+        setUserSubscription(null);
+        toast({ title: "Subscription Cancelled", description: "Your membership has been cancelled." });
+        refetchMembership();
+      } else {
+        setSubscribeError(data.error || "Cancellation failed. Please try again.");
+      }
+    } catch (err) {
+      setSubscribeError("An unexpected error occurred. Please try again.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  // Handler to delete a funding goal
+  const handleDeleteFund = async (goalId: string) => {
+    try {
+      const res = await fetch('/api/funding-goals/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goalId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({ title: "Funding Goal Deleted", description: "The funding goal was deleted successfully." });
+        await refetchFunds();
+      } else {
+        toast({ title: "Error", description: data.error || "Failed to delete funding goal." });
+      }
+    } catch (err) {
+      toast({ title: "Error", description: "An unexpected error occurred." });
+    }
+  };
+
+  // Handler to toggle membership active/inactive
+  const handleToggleMembershipActive = async () => {
+    if (!labId) return;
+    try {
+      const { error } = await supabase
+        .from('labs')
+        .update({ membership_option: !labsMembershipOption })
+        .eq('labId', labId);
+      if (error) {
+        toast({ title: 'Error', description: 'Failed to update membership status.' });
+        return;
+      }
+      toast({ title: labsMembershipOption ? 'Membership Deactivated' : 'Membership Activated' });
+      await refetchMembership();
+    } catch (err) {
+      toast({ title: 'Error', description: 'An unexpected error occurred.' });
+    }
+  };
+
+  // Handler to toggle one-time donation active/inactive
+  const handleToggleDonationActive = async () => {
+    if (!labId) return;
+    try {
+      const { error } = await supabase
+        .from('labs')
+        .update({ one_time_donation_option: !isDonationsActive })
+        .eq('labId', labId);
+      if (error) {
+        toast({ title: 'Error', description: 'Failed to update donation status.' });
+        return;
+      }
+      toast({ title: isDonationsActive ? 'Donations Deactivated' : 'Donations Activated' });
+      await refetchOneTimeDonation();
+    } catch (err) {
+      toast({ title: 'Error', description: 'An unexpected error occurred.' });
+    }
+  };
+
   // Only show setup UI if fundingSetup is false
   if (!fundingSetup) {
-    // --- NEW: Non-admin view for funding not setup ---
-    if (!isAdmin) {
+    if (isAdmin) {
+      // Admins see setup card and poke feed
       return (
-        <Card className="max-w-2xl mx-auto mt-8 shadow-lg border-accent/40">
-          <CardHeader className="bg-accent/10 rounded-t-lg p-6 flex flex-col items-center">
-            <CardTitle className="text-2xl font-bold text-accent mb-2 text-center">Funding is not yet setup for this lab</CardTitle>
-            <CardDescription className="text-center text-base mb-4 max-w-xl">
-              Poke this lab to suggest they setup funding so you can donate!
-            </CardDescription>
-            <Button className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2" onClick={() => setShowPokeDialog(true)}>
-              Poke Lab
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4">
-              <div className="font-semibold mb-2 text-accent">Recent Pokes</div>
-              <div className="space-y-2">
-                {pokeFeed.length === 0 && <div className="text-muted-foreground text-sm">No pokes yet. Be the first!</div>}
-                {pokeFeed.map((poke) => {
-                  let displayName = 'Unknown';
-                  if (poke.anon) displayName = 'Anonymous';
-                  else if (poke.pokedBy && usernameMap[poke.pokedBy]) displayName = usernameMap[poke.pokedBy];
-                  return (
-                    <div key={poke.id} className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
-                      <Avatar className="h-7 w-7"><AvatarFallback>{displayName.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>
-                      <span className="font-medium">{displayName}</span>
-                      <span className="text-muted-foreground">poked this lab</span>
-                      <span className="ml-auto text-xs text-muted-foreground">{new Date(poke.created_at).toLocaleString()}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <Dialog open={showPokeDialog} onOpenChange={setShowPokeDialog}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Poke this lab to set up funding?</DialogTitle>
-                  <DialogDescription>
-                    You can poke as yourself or anonymously. Your username will be shown unless you choose anonymous.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="flex flex-col gap-4 mt-4">
-                  <Label className="flex items-center gap-2">
-                    <Switch checked={pokeAnon} onCheckedChange={setPokeAnon} />
-                    Poke anonymously
-                  </Label>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowPokeDialog(false)}>Cancel</Button>
-                  <Button className="bg-accent text-primary-foreground" onClick={handlePoke} disabled={pokeLoading}>
-                    {pokeLoading ? 'Poking...' : 'Poke'}
+        <div className="space-y-6">
+          {/* Admin Setup Card */}
+          <Card className="max-w-2xl mx-auto shadow-lg border-accent/40">
+            <CardHeader className="bg-accent/10 rounded-t-lg p-6 flex flex-col items-center">
+              <CardTitle className="text-2xl font-bold text-accent mb-2 text-center">Set Up Lab Funding</CardTitle>
+              <CardDescription className="text-center text-base mb-4 max-w-xl">
+                To receive funding, donations, or memberships for this lab, you must connect a payout bank account.<br />
+                This is done via Stripe Connect. You can use your existing payout account from your profile.
+              </CardDescription>
+              {!adminFundingId ? (
+                <>
+                  <div className="text-red-500 font-semibold mb-2">You must first connect a payout bank account in your <a href="/profile" className="underline text-accent">profile settings</a>.</div>
+                  <Button className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2" asChild>
+                    <a href="/profile">Go to Profile Settings</a>
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </CardContent>
-        </Card>
+                </>
+              ) : (
+                <>
+                  <div className="text-green-500 font-semibold mb-2">Payout account found. You can use this to receive lab funding.</div>
+                  <Button
+                    className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2"
+                    onClick={() => setShowConnectModal(true)}
+                  >
+                    Connect Payout Account to Lab
+                  </Button>
+                  <Dialog open={showConnectModal} onOpenChange={setShowConnectModal}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Confirm Payout Account for Lab</DialogTitle>
+                        <DialogDescription>
+                          This payout account will be used to receive all funding for this lab. You can change or remove it in your profile settings.
+                        </DialogDescription>
+                      </DialogHeader>
+                      {adminBankInfo ? (
+                        <div className="space-y-2 mb-4">
+                          <div className="flex flex-col items-center gap-2">
+                            <span className="font-semibold">{adminBankInfo.bankName}</span>
+                            <span className="text-sm text-muted-foreground">••••{adminBankInfo.last4}</span>
+                            <span className="text-xs text-muted-foreground">Status: {adminBankInfo.status}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground mb-4">Loading account info...</div>
+                      )}
+                      <div className="flex gap-2 w-full mb-4">
+                        <Button variant="outline" className="flex-1" asChild>
+                          <a href="/profile">Change</a>
+                        </Button>
+                        <Button variant="destructive" className="flex-1" asChild>
+                          <a href="/profile">Remove</a>
+                        </Button>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowConnectModal(false)} disabled={isConnecting}>Cancel</Button>
+                        <Button
+                          className="bg-accent text-primary-foreground"
+                          onClick={async () => {
+                            setIsConnecting(true)
+                            try {
+                              const { error } = await supabase
+                                .from('labs')
+                                .update({ funding_setup: true, funding_id: adminFundingId })
+                                .eq('labId', labId)
+                              if (error) throw error
+                              toast({ title: "Lab Funding Setup Complete", description: "You can now receive funding for this lab!" })
+                              setShowConnectModal(false)
+                              if (typeof refetchLab === 'function') {
+                                await refetchLab();
+                              }
+                            } catch (err) {
+                              let message = "Failed to set up lab funding"
+                              if (err instanceof Error) message = err.message
+                              toast({ title: "Error", description: message })
+                            } finally {
+                              setIsConnecting(false)
+                            }
+                          }}
+                          disabled={isConnecting}
+                        >
+                          {isConnecting ? 'Connecting...' : 'Confirm'}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </>
+              )}
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+              {/* Example Funding Goals */}
+              <div>
+                <div className="font-semibold mb-2 text-accent">Example Funding Goals</div>
+                <div className="space-y-4">
+                  <div className="border border-secondary rounded-lg p-4 bg-accent/5">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium">GENERAL FUND</span>
+                      <Badge className="bg-accent text-primary-foreground">GENERAL</Badge>
+                    </div>
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden mb-2">
+                      <div className="h-full bg-accent" style={{ width: '0%' }} />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>$0 raised</span>
+                      <span>No deadline</span>
+                    </div>
+                  </div>
+                  <div className="border border-secondary rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-medium">NEW EQUIPMENT FUND</span>
+                      <Badge className="bg-accent/60 text-primary-foreground">0% FUNDED</Badge>
+                    </div>
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden mb-2">
+                      <div className="h-full bg-accent/60" style={{ width: '0%' }} />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>$0 raised</span>
+                      <span>Goal: $5,000</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">30 days remaining</div>
+                  </div>
+                </div>
+              </div>
+              {/* Example Funding Activity & Metrics */}
+              <div>
+                <div className="font-semibold mb-2 text-accent">Example Funding Activity</div>
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
+                    <Avatar className="h-7 w-7"><AvatarFallback>AW</AvatarFallback></Avatar>
+                    <span className="font-medium">Alex Wong</span>
+                    <span className="text-muted-foreground">donated $50 to GENERAL FUND</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
+                    <Avatar className="h-7 w-7"><AvatarFallback>MR</AvatarFallback></Avatar>
+                    <span className="font-medium">Maria Rodriguez</span>
+                    <span className="text-muted-foreground">subscribed $25/mo to NEW EQUIPMENT FUND</span>
+                  </div>
+                </div>
+                <div className="font-semibold mb-2 text-accent">Example Metrics</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-secondary/50 rounded-lg p-3 text-center">
+                    <div className="text-xs text-muted-foreground">Total Raised</div>
+                    <div className="text-lg font-bold text-accent">$0</div>
+                  </div>
+                  <div className="bg-secondary/50 rounded-lg p-3 text-center">
+                    <div className="text-xs text-muted-foreground">Active Donors</div>
+                    <div className="text-lg font-bold text-accent">0</div>
+                  </div>
+                  <div className="bg-secondary/50 rounded-lg p-3 text-center">
+                    <div className="text-xs text-muted-foreground">Active Members</div>
+                    <div className="text-lg font-bold text-accent">0</div>
+                  </div>
+                  <div className="bg-secondary/50 rounded-lg p-3 text-center">
+                    <div className="text-xs text-muted-foreground">Funding Goals</div>
+                    <div className="text-lg font-bold text-accent">2</div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          {/* Poke Feed for Admins */}
+          <Card className="max-w-2xl mx-auto shadow-lg border-accent/40">
+            <CardHeader className="bg-accent/10 rounded-t-lg p-6 flex flex-col items-center">
+              <CardTitle className="text-2xl font-bold text-accent mb-2 text-center">Lab Funding Not Set Up</CardTitle>
+              <CardDescription className="text-center text-base mb-4 max-w-xl">
+                Others can poke this lab to suggest setting up funding.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <div className="font-semibold mb-2 text-accent">Recent Pokes</div>
+                <div className="space-y-2">
+                  {pokeFeed.length === 0 && <div className="text-muted-foreground text-sm">No pokes yet. Be the first!</div>}
+                  {pokeFeed.map((poke) => {
+                    let displayName = 'Unknown';
+                    if (poke.anon) displayName = 'Anonymous';
+                    else if (poke.pokedBy && usernameMap[poke.pokedBy]) displayName = usernameMap[poke.pokedBy];
+                    return (
+                      <div key={poke.id} className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
+                        <Avatar className="h-7 w-7"><AvatarFallback>{displayName.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>
+                        <span className="font-medium">{displayName}</span>
+                        <span className="text-muted-foreground">poked this lab</span>
+                        <span className="ml-auto text-xs text-muted-foreground">{new Date(poke.created_at).toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       );
-    }
-    // Admin: Funding not set up
-    return (
-      <Card className="max-w-2xl mx-auto mt-8 shadow-lg border-accent/40">
-        <CardHeader className="bg-accent/10 rounded-t-lg p-6 flex flex-col items-center">
-          <CardTitle className="text-2xl font-bold text-accent mb-2 text-center">Set Up Lab Funding</CardTitle>
-          <CardDescription className="text-center text-base mb-4 max-w-xl">
-            To receive funding, donations, or memberships for this lab, you must connect a payout bank account.<br />
-            This is done via Stripe Connect. You can use your existing payout account from your profile.
-          </CardDescription>
-          {!adminFundingId ? (
-            <>
-              <div className="text-red-500 font-semibold mb-2">You must first connect a payout bank account in your <a href="/profile" className="underline text-accent">profile settings</a>.</div>
-              <Button className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2" asChild>
-                <a href="/profile">Go to Profile Settings</a>
+    } else {
+      // Non-admins see only the poke card
+      return (
+        <div className="space-y-6">
+          {/* Poke Card - Only for non-admins */}
+          <Card className="max-w-2xl mx-auto shadow-lg border-accent/40">
+            <CardHeader className="bg-accent/10 rounded-t-lg p-6 flex flex-col items-center">
+              <CardTitle className="text-2xl font-bold text-accent mb-2 text-center">Lab Funding Not Set Up</CardTitle>
+              <CardDescription className="text-center text-base mb-4 max-w-xl">
+                Poke this lab to suggest they setup funding so you can donate!
+              </CardDescription>
+              <Button className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2" onClick={() => setShowPokeDialog(true)}>
+                Poke Lab
               </Button>
-            </>
-          ) : (
-            <>
-              <div className="text-green-500 font-semibold mb-2">Payout account found. You can use this to receive lab funding.</div>
-              <Button
-                className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2"
-                onClick={() => setShowConnectModal(true)}
-              >
-                Connect Payout Account to Lab
-              </Button>
-              <Dialog open={showConnectModal} onOpenChange={setShowConnectModal}>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <div className="font-semibold mb-2 text-accent">Recent Pokes</div>
+                <div className="space-y-2">
+                  {pokeFeed.length === 0 && <div className="text-muted-foreground text-sm">No pokes yet. Be the first!</div>}
+                  {pokeFeed.map((poke) => {
+                    let displayName = 'Unknown';
+                    if (poke.anon) displayName = 'Anonymous';
+                    else if (poke.pokedBy && usernameMap[poke.pokedBy]) displayName = usernameMap[poke.pokedBy];
+                    return (
+                      <div key={poke.id} className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
+                        <Avatar className="h-7 w-7"><AvatarFallback>{displayName.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>
+                        <span className="font-medium">{displayName}</span>
+                        <span className="text-muted-foreground">poked this lab</span>
+                        <span className="ml-auto text-xs text-muted-foreground">{new Date(poke.created_at).toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <Dialog open={showPokeDialog} onOpenChange={setShowPokeDialog}>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Confirm Payout Account for Lab</DialogTitle>
+                    <DialogTitle>Poke this lab to set up funding?</DialogTitle>
                     <DialogDescription>
-                      This payout account will be used to receive all funding for this lab. You can change or remove it in your profile settings.
+                      You can poke as yourself or anonymously. Your username will be shown unless you choose anonymous.
                     </DialogDescription>
                   </DialogHeader>
-                  {adminBankInfo ? (
-                    <div className="space-y-2 mb-4">
-                      <div className="flex flex-col items-center gap-2">
-                        <span className="font-semibold">{adminBankInfo.bankName}</span>
-                        <span className="text-sm text-muted-foreground">••••{adminBankInfo.last4}</span>
-                        <span className="text-xs text-muted-foreground">Status: {adminBankInfo.status}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground mb-4">Loading account info...</div>
-                  )}
-                  <div className="flex gap-2 w-full mb-4">
-                    <Button variant="outline" className="flex-1" asChild>
-                      <a href="/profile">Change</a>
-                    </Button>
-                    <Button variant="destructive" className="flex-1" asChild>
-                      <a href="/profile">Remove</a>
-                    </Button>
+                  <div className="flex flex-col gap-4 mt-4">
+                    <Label className="flex items-center gap-2">
+                      <Switch checked={pokeAnon} onCheckedChange={setPokeAnon} />
+                      Poke anonymously
+                    </Label>
                   </div>
                   <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowConnectModal(false)} disabled={isConnecting}>Cancel</Button>
-                    <Button
-                      className="bg-accent text-primary-foreground"
-                      onClick={async () => {
-                        setIsConnecting(true)
-                        try {
-                          const { error } = await supabase
-                            .from('labs')
-                            .update({ funding_setup: true, funding_id: adminFundingId })
-                            .eq('labId', labId)
-                          if (error) throw error
-                          toast({ title: "Lab Funding Setup Complete", description: "You can now receive funding for this lab!" })
-                          setShowConnectModal(false)
-                          if (typeof refetchLab === 'function') {
-                            await refetchLab();
-                          }
-                        } catch (err) {
-                          let message = "Failed to set up lab funding"
-                          if (err instanceof Error) message = err.message
-                          toast({ title: "Error", description: message })
-                        } finally {
-                          setIsConnecting(false)
-                        }
-                      }}
-                      disabled={isConnecting}
-                    >
-                      {isConnecting ? 'Connecting...' : 'Confirm'}
+                    <Button variant="outline" onClick={() => setShowPokeDialog(false)}>Cancel</Button>
+                    <Button className="bg-accent text-primary-foreground" onClick={handlePoke} disabled={pokeLoading}>
+                      {pokeLoading ? 'Poking...' : 'Poke'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
-            </>
-          )}
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
-          {/* Example Funding Goals */}
-          <div>
-            <div className="font-semibold mb-2 text-accent">Example Funding Goals</div>
-            <div className="space-y-4">
-              <div className="border border-secondary rounded-lg p-4 bg-accent/5">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-medium">GENERAL FUND</span>
-                  <Badge className="bg-accent text-primary-foreground">GENERAL</Badge>
-                </div>
-                <div className="h-2 bg-secondary rounded-full overflow-hidden mb-2">
-                  <div className="h-full bg-accent" style={{ width: '0%' }} />
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>$0 raised</span>
-                  <span>No deadline</span>
-                </div>
-              </div>
-              <div className="border border-secondary rounded-lg p-4">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-medium">NEW EQUIPMENT FUND</span>
-                  <Badge className="bg-accent/60 text-primary-foreground">0% FUNDED</Badge>
-                </div>
-                <div className="h-2 bg-secondary rounded-full overflow-hidden mb-2">
-                  <div className="h-full bg-accent/60" style={{ width: '0%' }} />
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>$0 raised</span>
-                  <span>Goal: $5,000</span>
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">30 days remaining</div>
-              </div>
-            </div>
-          </div>
-          {/* Example Funding Activity & Metrics */}
-          <div>
-            <div className="font-semibold mb-2 text-accent">Example Funding Activity</div>
-            <div className="space-y-2 mb-4">
-              <div className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
-                <Avatar className="h-7 w-7"><AvatarFallback>AW</AvatarFallback></Avatar>
-                <span className="font-medium">Alex Wong</span>
-                <span className="text-muted-foreground">donated $50 to GENERAL FUND</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm bg-secondary/50 rounded px-3 py-2">
-                <Avatar className="h-7 w-7"><AvatarFallback>MR</AvatarFallback></Avatar>
-                <span className="font-medium">Maria Rodriguez</span>
-                <span className="text-muted-foreground">subscribed $25/mo to NEW EQUIPMENT FUND</span>
-              </div>
-            </div>
-            <div className="font-semibold mb-2 text-accent">Example Metrics</div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-secondary/50 rounded-lg p-3 text-center">
-                <div className="text-xs text-muted-foreground">Total Raised</div>
-                <div className="text-lg font-bold text-accent">$0</div>
-              </div>
-              <div className="bg-secondary/50 rounded-lg p-3 text-center">
-                <div className="text-xs text-muted-foreground">Active Donors</div>
-                <div className="text-lg font-bold text-accent">0</div>
-              </div>
-              <div className="bg-secondary/50 rounded-lg p-3 text-center">
-                <div className="text-xs text-muted-foreground">Active Members</div>
-                <div className="text-lg font-bold text-accent">0</div>
-              </div>
-              <div className="bg-secondary/50 rounded-lg p-3 text-center">
-                <div className="text-xs text-muted-foreground">Funding Goals</div>
-                <div className="text-lg font-bold text-accent">2</div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    )
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
   }
 
   // --- POST-SETUP: SHOW FULL FUNDING UI ---
@@ -699,9 +941,9 @@ export function LabFundingTab({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>SUPPORT OUR RESEARCH</CardTitle>
+        <div className="text-5xl font-bold text-accent">$</div>
         {isAdmin && (
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-col items-end gap-1 ml-auto">
             <Button
               className="bg-accent text-primary-foreground hover:bg-accent/90 font-semibold px-4 py-2 rounded"
               onClick={() => setShowCreateFundDialog(true)}
@@ -719,7 +961,6 @@ export function LabFundingTab({
         )}
       </CardHeader>
       <CardContent className="space-y-4">
-        <CardDescription>Your contributions help us advance our research and develop new technologies</CardDescription>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Membership Tile */}
           <Card className={`border-accent ${isMembershipSetUp && !isMembershipActive ? "opacity-60" : ""}`}>
@@ -734,21 +975,7 @@ export function LabFundingTab({
                     variant="outline"
                     size="sm"
                     className={(isMembershipActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
-                    onClick={async () => {
-                      setEditMembershipLoading(true);
-                      const { data, error } = await supabase
-                        .from("recurring_funding")
-                        .select("*")
-                        .eq("id", membership.id)
-                        .single();
-                      if (!error && data) {
-                        setEditMembershipName(data.name || "LAB MEMBERSHIP");
-                        setEditMembershipDescription(data.description || "");
-                        setEditMembershipAmount(data.monthly_amount?.toString() || "");
-                      }
-                      setEditMembershipLoading(false);
-                      setShowEditMembershipDialog(true);
-                    }}
+                    onClick={handleToggleMembershipActive}
                   >
                     {isMembershipActive ? (
                       <>
@@ -818,9 +1045,125 @@ export function LabFundingTab({
                 <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleGuestAction} disabled={!isMembershipActive}>
                   {isMembershipActive ? "SUBSCRIBE" : "SET UP"}
                 </Button>
-              ) : (
-                <FundAllocationDialog funds={mappedFunds} buttonText={isMembershipActive ? "SUBSCRIBE" : "SET UP"} donationType="monthly" fixedAmount={isMembershipActive ? membership?.monthly_amount || 0 : 0} />
-              )}
+              ) : userSubscription && isMembershipActive ? (
+                <div className="flex flex-col w-full items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-green-600 text-white">SUBSCRIBED</Badge>
+                    <span className="text-accent font-semibold">${userSubscription.monthlyAmount?.toFixed(2) || membershipAmount.toFixed(2)} / month</span>
+                    {/* Optionally show months paid if available */}
+                    {userSubscription.monthsPaid && (
+                      <span className="text-muted-foreground">({userSubscription.monthsPaid} months paid)</span>
+                    )}
+                  </div>
+                  <Button variant="destructive" onClick={() => setShowCancelDialog(true)} disabled={cancelling} className="w-full mt-2">
+                    {cancelling ? "Cancelling..." : "Cancel Membership"}
+                  </Button>
+                  <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Cancel Membership?</DialogTitle>
+                        <DialogDescription>
+                          Are you sure you want to cancel your recurring membership? You will not be billed again.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowCancelDialog(false)} disabled={cancelling}>Keep Membership</Button>
+                        <Button variant="destructive" onClick={handleCancelSubscription} disabled={cancelling}>
+                          {cancelling ? "Cancelling..." : "Confirm Cancel"}
+                        </Button>
+                      </DialogFooter>
+                      {subscribeError && <div className="text-red-500 text-sm mt-2">{subscribeError}</div>}
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              ) : (!userSubscription && isMembershipActive) ? (
+                <>
+                  <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setShowSubscribeDialog(true)}>
+                    SUBSCRIBE
+                  </Button>
+                  <Dialog open={showSubscribeDialog} onOpenChange={setShowSubscribeDialog}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Subscribe to Lab Membership</DialogTitle>
+                        <DialogDescription>
+                          Support this lab with a recurring monthly membership. Select a fund/goal for your membership to support.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Select Fund/Goal</Label>
+                          <RadioGroup value={selectedMembershipFund} onValueChange={setSelectedMembershipFund} className="max-h-[40vh] overflow-y-auto pr-2">
+                            {funds.map((fund) => (
+                              <div key={fund.id} className="flex items-start space-x-2 p-2 rounded-md hover:bg-secondary/50 mb-2">
+                                <RadioGroupItem value={fund.id} id={`membership-fund-${fund.id}`} className="mt-1" />
+                                <div className="grid gap-1.5 leading-none">
+                                  <Label htmlFor={`membership-fund-${fund.id}`} className="font-medium">
+                                    {fund.goalName || fund.name}
+                                  </Label>
+                                  <p className="text-sm text-muted-foreground">{fund.goal_description || fund.description}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </RadioGroup>
+                        </div>
+                        <div>
+                          <Label>Monthly Amount</Label>
+                          <div className="text-md font-semibold">${membershipAmount.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <Label>HDX Fee (2.5%)</Label>
+                          <div className="text-md">${membershipFee.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <Label>Net to Lab</Label>
+                          <div className="text-md font-semibold text-green-700">${membershipNet.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <Label>Payment Method</Label>
+                          {loadingMembershipPM ? (
+                            <div>Loading...</div>
+                          ) : membershipPaymentMethod ? (
+                            <div className="flex items-center gap-3">
+                              <span>{membershipPaymentMethod.brand?.toUpperCase() || membershipPaymentMethod.bank_name}</span>
+                              <span>•••• {membershipPaymentMethod.last4}</span>
+                              {membershipPaymentMethod.exp_month && membershipPaymentMethod.exp_year && (
+                                <span>Exp: {membershipPaymentMethod.exp_month}/{membershipPaymentMethod.exp_year}</span>
+                              )}
+                              <Button size="sm" variant="outline" className="ml-2" asChild>
+                                <a href="/profile">Change</a>
+                              </Button>
+                              <Button size="sm" variant="destructive" className="ml-1" asChild>
+                                <a href="/profile">Remove</a>
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="text-red-500">No payment method found. <a href="/profile" className="underline">Add one in your profile</a>.</div>
+                          )}
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowSubscribeDialog(false)} disabled={subscribing}>Cancel</Button>
+                        <Button className="bg-accent text-primary-foreground" onClick={handleSubscribe} disabled={subscribing || !membershipPaymentMethod || !user}>
+                          {subscribing ? "Subscribing..." : `Confirm $${membershipAmount.toFixed(2)} / month`}
+                        </Button>
+                        {(user === null || membershipPaymentMethod === null) && (
+                          <div className="text-xs text-red-500 mt-2">
+                            {!user && "You must be logged in to subscribe."}
+                            {!membershipPaymentMethod && user && "You must add a payment method in your profile before subscribing."}
+                          </div>
+                        )}
+                      </DialogFooter>
+                      {subscribeError && <div className="text-red-500 text-sm mt-2">{subscribeError}</div>}
+                      {subscribeSuccess && (
+                        <div className="flex flex-col items-center mt-4">
+                          <div className="text-green-600 text-lg font-semibold mb-2">Subscription successful!</div>
+                          <div className="text-muted-foreground text-sm">Thank you for supporting this lab.</div>
+                        </div>
+                      )}
+                    </DialogContent>
+                  </Dialog>
+                </>
+              ) : null}
             </CardFooter>
           </Card>
 
@@ -837,21 +1180,7 @@ export function LabFundingTab({
                     variant="outline"
                     size="sm"
                     className={(isDonationActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
-                    onClick={async () => {
-                      setEditDonationLoading(true);
-                      const { data, error } = await supabase
-                        .from("donation_funding")
-                        .select("*")
-                        .eq("id", oneTimeDonation.id)
-                        .single();
-                      if (!error && data) {
-                        setEditDonationName(data.donation_setup_name || "One-Time Donation");
-                        setEditDonationDescription(data.donation_description || "");
-                        setEditDonationAmounts(data.suggested_amounts || []);
-                      }
-                      setEditDonationLoading(false);
-                      setShowEditDonationDialog(true);
-                    }}
+                    onClick={handleToggleDonationActive}
                   >
                     {isDonationActive ? (
                       <>
@@ -922,7 +1251,7 @@ export function LabFundingTab({
                   {isDonationActive ? "DONATE" : "SET UP"}
                 </Button>
               ) : (
-                <OneTimeDonation labId={labId} funds={mappedFunds} onDonationSuccess={handleDonationSuccess} />
+                <OneTimeDonation labId={labId} funds={funds} onDonationSuccess={handleDonationSuccess} />
               )}
             </CardFooter>
           </Card>
@@ -936,49 +1265,67 @@ export function LabFundingTab({
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                {funds.map((fund, idx) => {
-                  const percentFunded = fund.goal_amount ? Math.round((fund.amount_contributed ?? 0) / fund.goal_amount * 100) : 0;
-                  return (
-                    <div key={fund.id} className={`border border-secondary rounded-lg p-4${fund.goalName === "GENERAL FUND" ? " bg-accent/10" : ""}`}>
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h3 className="font-medium">{fund.goalName}</h3>
-                          <p className="text-sm text-muted-foreground">{fund.goal_description}</p>
-                        </div>
-                        <Badge className="bg-accent text-primary-foreground">{fund.goalName === "GENERAL FUND" ? "GENERAL" : `${percentFunded}% FUNDED`}</Badge>
+                {funds.map((fund) => (
+                  <div key={fund.id} className={`border border-secondary rounded-lg p-4${fund.goalName === "GENERAL FUND" ? " bg-accent/10" : ""}`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h3 className="font-medium">{fund.goalName}</h3>
+                        <p className="text-sm text-muted-foreground">{fund.goal_description}</p>
                       </div>
-                      <div className="space-y-2">
-                        <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                          <div className="h-full bg-accent" style={{ width: `${percentFunded}%` }} />
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>${(fund.amount_contributed ?? 0).toLocaleString()} raised</span>
-                          {fund.goalName !== "GENERAL FUND" && <span>Goal: ${(fund.goal_amount ?? 0).toLocaleString()}</span>}
-                        </div>
-                        {fund.goalName !== "GENERAL FUND" && <div className="text-xs text-muted-foreground">{fund.deadline ? `${Math.max(0, Math.ceil((new Date(fund.deadline).getTime() - Date.now()) / (1000*60*60*24)))} days remaining` : "No deadline"}</div>}
-                      </div>
-                      <div className="mt-4 flex justify-end gap-2">
-                        {/* Only show edit/delete for non-General Fund and only for admins */}
-                        {isAdmin && fund.goalName !== "GENERAL FUND" && (
-                          <>
-                            <Button variant="outline" className="border-accent text-accent hover:bg-secondary" onClick={() => handleEditFund(fund)}>
-                              <Edit2 className="h-4 w-4 mr-2" />
-                              EDIT
-                            </Button>
-                            <Button variant="outline" className="border-red-500 text-red-500 hover:bg-red-500/10" onClick={() => {
-                              toast({ title: "Delete Fund", description: `${fund.goalName} has been deleted` });
-                              setFunds(funds.filter((f) => f.id !== fund.id));
-                              // Optionally: delete from backend and refetch
-                            }}>
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              DELETE
-                            </Button>
-                          </>
-                        )}
-                      </div>
+                      <Badge className="bg-accent text-primary-foreground">
+                        {fund.goalName === "GENERAL FUND" ? "GENERAL" : `${fund.percentFunded}% FUNDED`}
+                      </Badge>
                     </div>
-                  )
-                })}
+                    <div className="space-y-2">
+                      <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                        <div className="h-full bg-accent" style={{ width: `${fund.percentFunded}%` }} />
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>${fund.currentAmount.toLocaleString()} raised</span>
+                        {fund.goalName !== "GENERAL FUND" && <span>Goal: ${fund.goalAmount.toLocaleString()}</span>}
+                      </div>
+                      {fund.goalName !== "GENERAL FUND" && (
+                        <div className="text-xs text-muted-foreground">
+                          {fund.daysRemaining !== undefined ? `${fund.daysRemaining} days remaining` : "No deadline"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 flex justify-end gap-2">
+                      {/* Only show edit/delete for non-General Fund and only for admins */}
+                      {isAdmin && fund.goalName !== "GENERAL FUND" && (
+                        <>
+                          <Button variant="outline" className="border-accent text-accent hover:bg-secondary" onClick={() => handleEditFund(fund)}>
+                            <Edit2 className="h-4 w-4 mr-2" />
+                            EDIT
+                          </Button>
+                          <Button variant="outline" className="border-red-500 text-red-500 hover:bg-red-500/10" onClick={() => setPendingDeleteFundId(fund.id)}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            DELETE
+                          </Button>
+                          <Dialog 
+                            open={pendingDeleteFundId === fund.id} 
+                            onOpenChange={(open) => setPendingDeleteFundId(open ? fund.id : null)}
+                          >
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Delete Funding Goal?</DialogTitle>
+                                <DialogDescription>
+                                  Are you sure you want to delete this funding goal? This action cannot be undone.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setPendingDeleteFundId(null)}>Cancel</Button>
+                                <Button variant="destructive" onClick={async () => { await handleDeleteFund(fund.id); setPendingDeleteFundId(null); }}>
+                                  Confirm Delete
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>

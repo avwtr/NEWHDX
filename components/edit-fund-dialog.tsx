@@ -235,3 +235,12 @@ export function EditFundDialog({ fund, onSave, isOpen, onOpenChange }: EditFundD
     </Dialog>
   )
 }
+
+<style jsx global>{`
+  .rdp-head_cell {
+    color: transparent !important;
+    font-size: 0 !important;
+    pointer-events: none !important;
+    user-select: none !important;
+  }
+`}</style>

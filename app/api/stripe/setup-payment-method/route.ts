@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     // Create a SetupIntent
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      payment_method_types: ['card', 'us_bank_account'],
+      payment_method_types: ['card'],
     });
 
     // NOTE: After confirming the SetupIntent on the frontend, you must call a backend endpoint to set the new payment method as default for the customer.
