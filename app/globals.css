@@ -33,6 +33,21 @@
     --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
+
+    /* Science badge colors */
+    --science-neuroscience: #9D4EDD;
+    --science-ai: #3A86FF;
+    --science-biology: #38B000;
+    --science-chemistry: #FF5400;
+    --science-physics: #FFD60A;
+    --science-medicine: #FF0054;
+    --science-psychology: #FB5607;
+    --science-engineering: #4361EE;
+    --science-mathematics: #7209B7;
+    --science-environmental: #2DC653;
+    --science-astronomy: #3F37C9;
+    --science-geology: #AA6C25;
+    --science-default: #6C757D;
   }
 
   .dark {
@@ -138,43 +153,56 @@
 @layer components {
   /* Custom styles for science domain badges */
   .badge-neuroscience {
-    @apply bg-science-neuroscience text-white uppercase text-xs tracking-wide;
+    background-color: #9D4EDD !important;
+    color: white !important;
   }
   .badge-ai {
-    @apply bg-science-ai text-white uppercase text-xs tracking-wide;
+    background-color: #3A86FF !important;
+    color: white !important;
   }
   .badge-biology {
-    @apply bg-science-biology text-white uppercase text-xs tracking-wide;
+    background-color: #38B000 !important;
+    color: white !important;
   }
   .badge-chemistry {
-    @apply bg-science-chemistry text-white uppercase text-xs tracking-wide;
+    background-color: #FF5400 !important;
+    color: white !important;
   }
   .badge-physics {
-    @apply bg-science-physics text-black uppercase text-xs tracking-wide;
+    background-color: #FFD60A !important;
+    color: black !important;
   }
   .badge-medicine {
-    @apply bg-science-medicine text-white uppercase text-xs tracking-wide;
+    background-color: #FF0054 !important;
+    color: white !important;
   }
   .badge-psychology {
-    @apply bg-science-psychology text-white uppercase text-xs tracking-wide;
+    background-color: #FB5607 !important;
+    color: white !important;
   }
   .badge-engineering {
-    @apply bg-science-engineering text-white uppercase text-xs tracking-wide;
+    background-color: #4361EE !important;
+    color: white !important;
   }
   .badge-mathematics {
-    @apply bg-science-mathematics text-white uppercase text-xs tracking-wide;
+    background-color: #7209B7 !important;
+    color: white !important;
   }
   .badge-environmental {
-    @apply bg-science-environmental text-white uppercase text-xs tracking-wide;
+    background-color: #2DC653 !important;
+    color: white !important;
   }
   .badge-astronomy {
-    @apply bg-science-astronomy text-white uppercase text-xs tracking-wide;
+    background-color: #3F37C9 !important;
+    color: white !important;
   }
   .badge-geology {
-    @apply bg-science-geology text-white uppercase text-xs tracking-wide;
+    background-color: #AA6C25 !important;
+    color: white !important;
   }
   .badge-default {
-    @apply bg-science-default text-white uppercase text-xs tracking-wide;
+    background-color: #6C757D !important;
+    color: white !important;
   }
 }
 

@@ -44,6 +44,9 @@ export function LabSettingsTab({
   const [contributions, setContributions] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [usernames, setUsernames] = useState<{ [userId: string]: string }>({})
+  const [founders, setFounders] = useState<any[]>([])
+  const [admins, setAdmins] = useState<any[]>([])
+  const [adminProfiles, setAdminProfiles] = useState<{ [userId: string]: any }>({})
   const labId = props.labId
 
   useEffect(() => {
@@ -73,6 +76,40 @@ export function LabSettingsTab({
       })
   }, [labId])
 
+  useEffect(() => {
+    if (!labId) return
+    (async () => {
+      // Fetch founders and admins from labMembers
+      const { data: members, error: membersError } = await supabase
+        .from("labMembers")
+        .select("user, role")
+        .eq("lab_id", labId)
+      const founderIds = members?.filter(m => m.role === "founder").map(m => m.user) || []
+      const adminIdsFromMembers = members?.filter(m => m.role === "admin").map(m => m.user) || []
+      // Fetch admins from labAdmins
+      const { data: adminsData, error: adminsError } = await supabase
+        .from("labAdmins")
+        .select("user")
+        .eq("lab_id", labId)
+      const adminIdsFromAdmins = adminsData?.map(a => a.user) || []
+      // Combine and deduplicate admin IDs
+      const allAdminIds = Array.from(new Set([...adminIdsFromMembers, ...adminIdsFromAdmins]))
+      setFounders(founderIds)
+      setAdmins(allAdminIds)
+      // Fetch profiles for all unique IDs
+      const allIds = Array.from(new Set([...founderIds, ...allAdminIds]))
+      if (allIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, username")
+          .in("user_id", allIds)
+        const map: { [userId: string]: any } = {}
+        profiles?.forEach((p: any) => { map[p.user_id] = p })
+        setAdminProfiles(map)
+      }
+    })()
+  }, [labId])
+
   // Filtering and searching
   const filtered = contributions
     .filter((contribution) => {
@@ -89,6 +126,44 @@ export function LabSettingsTab({
 
   return (
     <div className="mt-4">
+      {/* --- Founders & Admins Section --- */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>FOUNDERS & ADMINS</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4">
+            {/* Founders first */}
+            {founders.map((userId) => (
+              <div key={userId} className="flex items-center gap-2 px-3 py-2 rounded bg-secondary/50">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback>{adminProfiles[userId]?.username?.charAt(0)?.toUpperCase() || "U"}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="font-semibold">{adminProfiles[userId]?.username || userId}</div>
+                  <div className="text-xs text-accent font-bold uppercase">Founder</div>
+                </div>
+              </div>
+            ))}
+            {/* Admins (excluding those who are also founders) */}
+            {admins.filter(userId => !founders.includes(userId)).map((userId) => (
+              <div key={userId} className="flex items-center gap-2 px-3 py-2 rounded bg-secondary/50">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback>{adminProfiles[userId]?.username?.charAt(0)?.toUpperCase() || "U"}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="font-semibold">{adminProfiles[userId]?.username || userId}</div>
+                  <div className="text-xs text-muted-foreground uppercase">Admin</div>
+                </div>
+              </div>
+            ))}
+            {founders.length === 0 && admins.length === 0 && (
+              <div className="text-muted-foreground">No founders or admins found for this lab.</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      {/* --- End Founders & Admins Section --- */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle>SETTINGS</CardTitle>

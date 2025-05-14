@@ -10,94 +10,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { X, Check } from "lucide-react"
+import { X, Check, Search } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
-
-const researchAreas = [
-  { value: "molecular-biology", label: "Molecular Biology" },
-  { value: "cell-biology", label: "Cell Biology" },
-  { value: "genetics", label: "Genetics" },
-  { value: "genomics", label: "Genomics" },
-  { value: "proteomics", label: "Proteomics" },
-  { value: "bioinformatics", label: "Bioinformatics" },
-  { value: "microbiology", label: "Microbiology" },
-  { value: "virology", label: "Virology" },
-  { value: "immunology", label: "Immunology" },
-  { value: "neuroscience", label: "Neuroscience" },
-  { value: "developmental-biology", label: "Developmental Biology" },
-  { value: "evolutionary-biology", label: "Evolutionary Biology" },
-  { value: "ecology", label: "Ecology" },
-  { value: "marine-biology", label: "Marine Biology" },
-  { value: "botany", label: "Botany" },
-  { value: "zoology", label: "Zoology" },
-  { value: "organic-chemistry", label: "Organic Chemistry" },
-  { value: "inorganic-chemistry", label: "Inorganic Chemistry" },
-  { value: "physical-chemistry", label: "Physical Chemistry" },
-  { value: "analytical-chemistry", label: "Analytical Chemistry" },
-  { value: "biochemistry", label: "Biochemistry" },
-  { value: "medicinal-chemistry", label: "Medicinal Chemistry" },
-  { value: "polymer-chemistry", label: "Polymer Chemistry" },
-  { value: "materials-chemistry", label: "Materials Chemistry" },
-  { value: "computational-chemistry", label: "Computational Chemistry" },
-  { value: "environmental-chemistry", label: "Environmental Chemistry" },
-  { value: "quantum-physics", label: "Quantum Physics" },
-  { value: "particle-physics", label: "Particle Physics" },
-  { value: "nuclear-physics", label: "Nuclear Physics" },
-  { value: "astrophysics", label: "Astrophysics" },
-  { value: "cosmology", label: "Cosmology" },
-  { value: "condensed-matter-physics", label: "Condensed Matter Physics" },
-  { value: "optics", label: "Optics" },
-  { value: "thermodynamics", label: "Thermodynamics" },
-  { value: "fluid-dynamics", label: "Fluid Dynamics" },
-  { value: "plasma-physics", label: "Plasma Physics" },
-  { value: "biophysics", label: "Biophysics" },
-  { value: "geology", label: "Geology" },
-  { value: "geophysics", label: "Geophysics" },
-  { value: "geochemistry", label: "Geochemistry" },
-  { value: "meteorology", label: "Meteorology" },
-  { value: "climatology", label: "Climatology" },
-  { value: "oceanography", label: "Oceanography" },
-  { value: "hydrology", label: "Hydrology" },
-  { value: "seismology", label: "Seismology" },
-  { value: "volcanology", label: "Volcanology" },
-  { value: "paleontology", label: "Paleontology" },
-  { value: "anatomy", label: "Anatomy" },
-  { value: "physiology", label: "Physiology" },
-  { value: "pathology", label: "Pathology" },
-  { value: "pharmacology", label: "Pharmacology" },
-  { value: "toxicology", label: "Toxicology" },
-  { value: "epidemiology", label: "Epidemiology" },
-  { value: "public-health", label: "Public Health" },
-  { value: "cardiology", label: "Cardiology" },
-  { value: "neurology", label: "Neurology" },
-  { value: "oncology", label: "Oncology" },
-  { value: "pediatrics", label: "Pediatrics" },
-  { value: "geriatrics", label: "Geriatrics" },
-  { value: "psychiatry", label: "Psychiatry" },
-  { value: "biomedical-engineering", label: "Biomedical Engineering" },
-  { value: "chemical-engineering", label: "Chemical Engineering" },
-  { value: "civil-engineering", label: "Civil Engineering" },
-  { value: "electrical-engineering", label: "Electrical Engineering" },
-  { value: "mechanical-engineering", label: "Mechanical Engineering" },
-  { value: "computer-science", label: "Computer Science" },
-  { value: "artificial-intelligence", label: "Artificial Intelligence" },
-  { value: "machine-learning", label: "Machine Learning" },
-  { value: "robotics", label: "Robotics" },
-  { value: "nanotechnology", label: "Nanotechnology" },
-  { value: "materials-science", label: "Materials Science" },
-  { value: "biotechnology", label: "Biotechnology" },
-  { value: "systems-biology", label: "Systems Biology" },
-  { value: "synthetic-biology", label: "Synthetic Biology" },
-  { value: "computational-biology", label: "Computational Biology" },
-  { value: "quantum-computing", label: "Quantum Computing" },
-  { value: "renewable-energy", label: "Renewable Energy" },
-  { value: "sustainable-development", label: "Sustainable Development" },
-  { value: "climate-science", label: "Climate Science" },
-  { value: "data-science", label: "Data Science" },
-  { value: "cognitive-science", label: "Cognitive Science" },
-  { value: "astrobiology", label: "Astrobiology" },
-].sort((a, b) => a.label.localeCompare(b.label))
+import { researchAreas } from "@/lib/research-areas"
 
 // Utility to slugify org names
 function slugify(name: string) {
@@ -131,6 +47,10 @@ export default function CreateOrganization() {
   const categoryInputRef = useRef<HTMLInputElement>(null)
   const categoryDropdownRef = useRef<HTMLDivElement>(null)
   const [addLoading, setAddLoading] = useState<string | null>(null)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [categoriesError, setCategoriesError] = useState("")
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -188,7 +108,9 @@ export default function CreateOrganization() {
         .ilike("username", `%${query}%`)
         .limit(10)
       if (error) throw error
-      setSearchResults((data || []).filter((u: any) => !selectedUsers.some(su => su.id === u.user_id)))
+      setSearchResults((data || []).filter((u: any) => 
+        u.user_id !== user?.id && !selectedUsers.some(su => su.id === u.user_id)
+      ))
     } catch (err) {
       setSearchResults([])
     } finally {
@@ -213,6 +135,36 @@ export default function CreateOrganization() {
   const handleRemoveUser = (userId: string) => {
     setSelectedUsers(selectedUsers.filter((user) => user.id !== userId))
   }
+
+  // Handle category selection
+  const handleCategoryClick = (value: string) => {
+    setSelectedCategories((prev) => {
+      const newCategories = prev.includes(value) 
+        ? prev.filter((category) => category !== value)
+        : prev.length < 3 
+          ? [...prev, value]
+          : prev
+
+      // Clear error if at least one category is selected
+      if (categoriesError && newCategories.length > 0) {
+        setCategoriesError("")
+      }
+
+      return newCategories
+    })
+  }
+
+  // Handle removing a category
+  const handleRemoveCategory = (e: React.MouseEvent, value: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setSelectedCategories((prev) => prev.filter((category) => category !== value))
+  }
+
+  // Filter areas based on search term
+  const filteredAreas = researchAreas.filter((area) =>
+    area.label.toLowerCase().includes(searchTerm.toLowerCase())
+  )
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -260,7 +212,7 @@ export default function CreateOrganization() {
         org_name: name,
         description,
         profilePic: profilePicUrl,
-        categories: selectedTags,
+        categories: selectedCategories,
         slug,
         created_at: new Date().toISOString(),
         created_by: user.id,
@@ -273,13 +225,15 @@ export default function CreateOrganization() {
     }
     // Insert org members (creator + selected users) with the same org_id
     const memberRows = [
+      // Always add the creator first
       {
         org_id: orgId,
         user_id: user.id,
         created_at: new Date().toISOString(),
       },
+      // Then add any other selected users
       ...selectedUsers
-        .filter(u => u.id !== user.id && typeof u.id === 'string' && u.id.length === 36 && u.id.includes('-'))
+        .filter(u => u.id !== user.id) // Filter out creator if they somehow got added
         .map(u => ({
           org_id: orgId,
           user_id: u.id,
@@ -351,113 +305,106 @@ export default function CreateOrganization() {
         </div>
 
         <div className="space-y-2">
-          <Label>Science Categories (Select up to 3)</Label>
-          <div className="flex flex-wrap gap-1 mb-1">
-            {selectedTags.map((tag) => {
-              const area = researchAreas.find((a) => a.value === tag)
-              return (
-                <Badge key={tag} className="flex items-center gap-1 px-3 py-1.5">
-                  {area?.label || tag}
-                  <X size={14} className="cursor-pointer" onClick={() => setSelectedTags(selectedTags.filter((t) => t !== tag))} />
-                </Badge>
-              )
-            })}
+          <div className="flex justify-between items-center">
+            <Label>Science Categories</Label>
+            {categoriesError && <span className="text-xs text-destructive">{categoriesError}</span>}
           </div>
           <div className="relative">
-            <Input
-              ref={categoryInputRef}
-              placeholder="Search science categories..."
-              value={categorySearch}
-              onFocus={() => setCategoryDropdownOpen(true)}
-              onChange={e => {
-                setCategorySearch(e.target.value)
-                setCategoryDropdownOpen(true)
-              }}
-              autoComplete="off"
-              className="h-9 text-sm px-3"
-            />
-            {categoryDropdownOpen && (categorySearch.length > 0 || researchAreas.filter(area => !selectedTags.includes(area.value)).length > 0) && (
-              <div
-                ref={categoryDropdownRef}
-                className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-y-auto"
-                tabIndex={-1}
-              >
-                {researchAreas
-                  .filter(area =>
-                    !selectedTags.includes(area.value) &&
-                    (!categorySearch || area.label.toLowerCase().includes(categorySearch.toLowerCase()))
-                  )
-                  .slice(0, 20)
-                  .map(area => (
-                    <div
-                      key={area.value}
-                      className="flex items-center gap-2 p-2 hover:bg-accent cursor-pointer"
-                      onMouseDown={e => e.preventDefault()}
-                      onClick={() => {
-                        if (selectedTags.length < 3) {
-                          setSelectedTags([...selectedTags, area.value])
-                          setCategoryDropdownOpen(false)
-                          setCategorySearch("")
-                        }
-                      }}
-                    >
-                      <Check className="h-4 w-4 text-muted-foreground" />
-                      <span>{area.label}</span>
-                    </div>
-                  ))}
-                {researchAreas.filter(area => !selectedTags.includes(area.value) && (!categorySearch || area.label.toLowerCase().includes(categorySearch.toLowerCase()))).length === 0 && (
-                  <div className="p-2 text-center text-muted-foreground">No categories found</div>
-                )}
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full justify-between"
+              onClick={() => setIsDropdownOpen((prev) => !prev)}
+            >
+              {selectedCategories.length > 0
+                ? `${selectedCategories.length} selected`
+                : "Select science categories..."}
+            </Button>
+
+            {isDropdownOpen && (
+              <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg">
+                <div className="flex items-center border-b p-2">
+                  <Search className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search science categories..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                </div>
+
+                <div className="max-h-60 overflow-y-auto p-1">
+                  {filteredAreas.length === 0 ? (
+                    <div className="py-2 px-3 text-sm text-muted-foreground">No categories found</div>
+                  ) : (
+                    filteredAreas.map((area) => {
+                      const isSelected = selectedCategories.includes(area.value)
+                      return (
+                        <div
+                          key={area.value}
+                          className={`flex items-center px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer ${
+                            isSelected ? "bg-accent/50" : ""
+                          }`}
+                          onClick={() => handleCategoryClick(area.value)}
+                        >
+                          <div className="mr-2 h-4 w-4 flex items-center justify-center border rounded">
+                            {isSelected && <Check className="h-3 w-3" />}
+                          </div>
+                          {area.label}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
               </div>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">Select up to 3 categories</p>
+
+          {selectedCategories.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {selectedCategories.map((category) => {
+                const area = researchAreas.find((a) => a.value === category)
+                return (
+                  <Badge key={category} variant="secondary" className="flex items-center gap-1">
+                    {area?.label}
+                    <button
+                      type="button"
+                      className="h-4 w-4 p-0 hover:bg-transparent rounded-full flex items-center justify-center"
+                      onClick={(e) => handleRemoveCategory(e, category)}
+                    >
+                      <X className="h-3 w-3" />
+                      <span className="sr-only">Remove {area?.label}</span>
+                    </button>
+                  </Badge>
+                )
+              })}
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground mt-1">
+            Select up to 3 science categories ({selectedCategories.length}/3 selected)
+          </p>
         </div>
 
         <div className="space-y-2">
           <Label>Organization Members</Label>
 
-          {selectedUsers.length > 0 && (
-            <div className="mb-4">
-              <h4 className="text-sm font-medium mb-2">Selected Members:</h4>
-              <div className="space-y-2">
-                {selectedUsers.map((user) => (
-                  <div key={user.id} className="flex items-center justify-between p-2 border rounded-md">
-                    <div className="flex items-center gap-2">
-                      <div className="relative w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
-                        {user.initials}
-                      </div>
-                      <span>{user.name}</span>
-                      <Badge variant="outline" className="ml-2">
-                        {user.role}
-                      </Badge>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => handleRemoveUser(user.id)} className="h-8 w-8 p-0">
-                      <X size={16} />
-                      <span className="sr-only">Remove</span>
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="relative">
+          <div className="relative mb-2">
             <Input
               placeholder="Search for users to add..."
               value={searchQuery}
               onChange={e => handleSearch(e.target.value)}
               className="mb-2 h-9 text-sm px-3"
             />
-            {searchLoading && searchQuery.length >= 2 && (
-              <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg p-2 text-center text-muted-foreground">
-                Searching...
-              </div>
-            )}
-            {searchQuery && searchResults.length > 0 && (
-              <div className="border rounded-md divide-y bg-background absolute z-10 w-full mt-1 shadow-lg max-h-48 overflow-auto">
-                {searchResults.map((user) => (
-                  <div key={user.user_id} className="flex items-center justify-between p-2">
+            {/* Search Results Dropdown */}
+            {searchQuery && (searchLoading || searchResults.length > 0) && (
+              <div className="absolute z-20 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-auto">
+                <div className="p-2 text-xs text-muted-foreground font-semibold border-b">Search Results</div>
+                {searchLoading && (
+                  <div className="p-2 text-center text-muted-foreground">Searching...</div>
+                )}
+                {!searchLoading && searchResults.length > 0 && searchResults.map((user) => (
+                  <div key={user.user_id} className="flex items-center justify-between p-2 hover:bg-accent transition-colors">
                     <div className="flex items-center gap-2">
                       <div className="relative w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
                         {user.username ? user.username.slice(0, 2).toUpperCase() : "U"}
@@ -468,26 +415,56 @@ export default function CreateOrganization() {
                       size="sm"
                       onClick={() => handleAddUser(user)}
                       disabled={addLoading === user.user_id || selectedUsers.some((u) => u.id === user.user_id)}
-                      className="h-9 px-3 text-sm"
+                      className={`h-9 px-3 text-sm ${selectedUsers.some((u) => u.id === user.user_id) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {addLoading === user.user_id ? "Adding..." : <>Add</>}
+                      {addLoading === user.user_id ? "Adding..." : selectedUsers.some((u) => u.id === user.user_id) ? "Added" : <>Add</>}
+                    </Button>
+                  </div>
+                ))}
+                {!searchLoading && searchResults.length === 0 && searchQuery.length >= 2 && (
+                  <div className="p-2 text-center text-muted-foreground">No users found</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Selected Members Section */}
+          {selectedUsers.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-sm font-medium mb-2">Selected Members:</h4>
+              <div className="space-y-2">
+                {selectedUsers.map((user) => (
+                  <div key={user.id} className="flex items-center justify-between p-2 border rounded-md bg-secondary/30">
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
+                        {user.initials}
+                      </div>
+                      <span>{user.name}</span>
+                      <Badge variant="outline" className="ml-2">
+                        {user.role}
+                      </Badge>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => handleRemoveUser(user.id)} 
+                      className="h-8 w-8 p-0 opacity-60 hover:opacity-100"
+                      title="Remove member"
+                    >
+                      <X size={16} />
+                      <span className="sr-only">Remove</span>
                     </Button>
                   </div>
                 ))}
               </div>
-            )}
-            {searchQuery && !searchLoading && searchResults.length === 0 && searchQuery.length >= 2 && (
-              <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg p-2 text-center text-muted-foreground">
-                No users found
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <Button
           type="submit"
           className="w-full h-9 px-3 text-sm"
-          disabled={!name || !description || selectedTags.length === 0 || selectedUsers.length === 0}
+          disabled={!name || !description || selectedCategories.length === 0 || selectedUsers.length === 0}
         >
           Create Organization
         </Button>

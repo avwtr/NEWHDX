@@ -160,36 +160,49 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
     }
   }
 
-  // Fetch current admins (founders and admins) from labMembers
+  // Replace fetchAdmins with logic that fetches founders from labMembers (role 'founder'), admins from both labMembers (role 'admin') and labAdmins, deduplicates, fetches profiles, and sets role labels.
   const fetchAdmins = async () => {
     setAdminsLoading(true)
     setAdminError(null)
     try {
-      const { data: memberRows, error } = await supabase
+      // 1. Fetch founders and admins from labMembers
+      const { data: memberRows, error: memberError } = await supabase
         .from("labMembers")
         .select("user, role, created_at")
         .eq("lab_id", lab.labId)
         .in("role", ["founder", "admin"])
-      if (error) throw error
-      if (!memberRows || memberRows.length === 0) {
-        setAdmins([])
-        setAdminsLoading(false)
-        return
+      if (memberError) throw memberError
+      const founderIds = memberRows?.filter((m: any) => m.role === "founder").map((m: any) => m.user) || []
+      const adminIdsFromMembers = memberRows?.filter((m: any) => m.role === "admin").map((m: any) => m.user) || []
+      // 2. Fetch admins from labAdmins
+      const { data: adminsData, error: adminsError } = await supabase
+        .from("labAdmins")
+        .select("user")
+        .eq("lab_id", lab.labId)
+      if (adminsError) throw adminsError
+      const adminIdsFromAdmins = adminsData?.map((a: any) => a.user) || []
+      // 3. Combine and deduplicate
+      const allAdminIds = Array.from(new Set([...adminIdsFromMembers, ...adminIdsFromAdmins]))
+      const allIds = Array.from(new Set([...founderIds, ...allAdminIds]))
+      // 4. Fetch profiles for all
+      let profiles: any[] = []
+      if (allIds.length > 0) {
+        const { data: profileRows, error: profileError } = await supabase
+          .from("profiles")
+          .select("user_id, username")
+          .in("user_id", allIds)
+        if (profileError) throw profileError
+        profiles = profileRows || []
       }
-      // Get user info from profiles
-      const userIds = memberRows.map((row: any) => row.user)
-      const { data: profiles, error: profileError } = await supabase
-        .from("profiles")
-        .select("user_id, username")
-        .in("user_id", userIds)
-      if (profileError) throw profileError
-      // Combine member data with profile data
-      const combinedAdmins = memberRows.map((row: any) => {
-        const profile = profiles.find((p: any) => p.user_id === row.user)
+      // 5. Build combined admin list with role and created_at
+      const combinedAdmins = allIds.map((userId) => {
+        const profile = profiles.find((p: any) => p.user_id === userId)
+        const memberRow = memberRows?.find((m: any) => m.user === userId)
         return {
-          ...profile,
-          role: row.role,
-          created_at: row.created_at
+          user_id: userId,
+          username: profile?.username || userId,
+          role: founderIds.includes(userId) ? "founder" : "admin",
+          created_at: memberRow?.created_at || null,
         }
       })
       setAdmins(combinedAdmins)
@@ -220,7 +233,9 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
         .ilike("username", `%${query}%`)
         .limit(10)
       if (error) throw error
-      setSearchResults(data || [])
+      // Filter out users who are already admins or founders
+      const adminIds = admins.map((a: any) => a.user_id)
+      setSearchResults((data || []).filter((u: any) => !adminIds.includes(u.user_id)))
     } catch (err) {
       setSearchResults([])
     } finally {
@@ -453,28 +468,28 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
                   >
                     <div className="flex items-center gap-3">
                       <Avatar className="h-10 w-10">
-                        {/* Optionally add avatar if available in profiles */}
                         <AvatarFallback>{admin.username?.charAt(0) || "A"}</AvatarFallback>
                       </Avatar>
                       <div>
                         <p className="font-medium">{admin.username}</p>
                         <p className="text-sm text-muted-foreground">
-                          {admin.role.toUpperCase()} • {new Date(admin.created_at).toLocaleString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {admin.role.toUpperCase()}
+                          {admin.created_at && (
+                            <> • {new Date(admin.created_at).toLocaleString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}</>
+                          )}
                         </p>
                       </div>
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
-                      className={
-                        `text-destructive hover:text-destructive${admin.role === "founder" ? " opacity-50 cursor-not-allowed" : ""}`
-                      }
+                      className={`text-destructive hover:text-destructive${admin.role === "founder" ? " opacity-50 cursor-not-allowed" : ""}`}
                       onClick={() => handleRemoveAdmin(admin)}
                       disabled={removeLoading === admin.user_id || admins.length === 1 || admin.role === "founder"}
                     >

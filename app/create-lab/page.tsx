@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation"
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -22,6 +22,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
+import Image from "next/image"
 
 // Lab template data - SIMPLIFIED to only two options
 const labTemplates = [
@@ -97,7 +98,7 @@ const sampleCollaborators = [
 
 export default function CreateLabPage() {
   // State for multi-step wizard
-  const [step, setStep] = useState<"template" | "ai-description" | "details" | "invite" | "finalize">("template")
+  const [step, setStep] = useState<"template" | "ai-description" | "details" | "invite">("template")
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
   const [aiDescription, setAiDescription] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
@@ -115,13 +116,68 @@ export default function CreateLabPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; email: string; avatar?: string }>>([])
-  const [selectedFounders, setSelectedFounders] = useState<Array<{ id: string; name: string; email: string; avatar?: string }>>([])
+  const [selectedFounders, setSelectedFounders] = useState<Array<{ id: string; username: string; avatar_url?: string }>>([])
   const [isSearching, setIsSearching] = useState(false)
   const [profilePic, setProfilePic] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { user } = useAuth()
   const router = useRouter()
+  const [orgSearch, setOrgSearch] = useState("")
+  const [orgOptions, setOrgOptions] = useState<{ org_id: string; org_name: string; profilePic?: string }[]>([])
+  const [orgSearchLoading, setOrgSearchLoading] = useState(false)
+  const [selectedOrg, setSelectedOrg] = useState<{ org_id: string; org_name: string; profilePic?: string } | null>(null)
+  const [orgDropdownOpen, setOrgDropdownOpen] = useState(false)
+  const [founderSearch, setFounderSearch] = useState("")
+  const [founderResults, setFounderResults] = useState<any[]>([])
+  const [founderSearchLoading, setFounderSearchLoading] = useState(false)
+  const [isLabCreating, setIsLabCreating] = useState(false)
+  const [typewriterText, setTypewriterText] = useState("")
+
+  // Search organizations as user types
+  useEffect(() => {
+    if (orgSearch.length < 1) {
+      setOrgOptions([])
+      return
+    }
+    setOrgSearchLoading(true)
+    supabase
+      .from("organizations")
+      .select("org_id, org_name, profilePic")
+      .ilike("org_name", `%${orgSearch}%`)
+      .limit(10)
+      .then(({ data, error }) => {
+        if (!error && data) setOrgOptions(data)
+        setOrgSearchLoading(false)
+      })
+  }, [orgSearch])
+
+  // Real user search for founders
+  useEffect(() => {
+    if (!founderSearch || founderSearch.length < 2) {
+      setFounderResults([])
+      return
+    }
+    setFounderSearchLoading(true)
+    console.log('Searching for founders with query:', founderSearch)
+    supabase
+      .from("profiles")
+      .select("user_id, username")
+      .ilike("username", `%${founderSearch}%`)
+      .limit(10)
+      .then(({ data, error }) => {
+        console.log('Founder search results:', { data, error })
+        if (!error && data) {
+          const filteredData = data.filter((u: any) => !selectedFounders.some(f => f.id === u.user_id) && u.user_id !== user?.id)
+          console.log('Filtered founder results:', filteredData)
+          setFounderResults(filteredData)
+        } else {
+          console.error('Error in founder search:', error)
+          setFounderResults([])
+        }
+        setFounderSearchLoading(false)
+      })
+  }, [founderSearch, selectedFounders, user])
 
   // Handle template selection
   const handleSelectTemplate = (templateId: string) => {
@@ -242,8 +298,6 @@ export default function CreateLabPage() {
       if (hasError) return
       setStep("invite")
     } else if (step === "invite") {
-      setStep("finalize")
-    } else if (step === "finalize") {
       handleCreateLab()
     }
   }
@@ -260,8 +314,6 @@ export default function CreateLabPage() {
       }
     } else if (step === "invite") {
       setStep("details")
-    } else if (step === "finalize") {
-      setStep("invite")
     }
   }
 
@@ -271,8 +323,16 @@ export default function CreateLabPage() {
       console.error('No authenticated user found')
       return
     }
+    setIsLabCreating(true)
+    setTypewriterText("")
+    let message = "Creating your lab..."
+    let i = 0
+    const typeInterval = setInterval(() => {
+      setTypewriterText(message.slice(0, i + 1))
+      i++
+      if (i === message.length) clearInterval(typeInterval)
+    }, 60)
 
-    setIsCreating(true)
     try {
       // 1. Generate a UUID for the lab
       const labId = uuidv4()
@@ -308,7 +368,8 @@ export default function CreateLabPage() {
         membership_option: false,
         one_time_donation_option: false,
         created_at: new Date().toISOString(),
-        profilePic: profilePicUrl // <-- new column
+        profilePic: profilePicUrl,
+        org_id: selectedOrg ? selectedOrg.org_id : null,
       }
       
       console.log('Attempting to create lab with data:', labData)
@@ -421,12 +482,13 @@ export default function CreateLabPage() {
               user: founder.id
             }])
 
-          // Add as member
+          // Add as member with founder role
           await supabase
             .from('labMembers')
             .insert([{
               lab_id: labId,
-              user: founder.id
+              user: founder.id,
+              role: 'founder'
             }])
         })
 
@@ -434,12 +496,13 @@ export default function CreateLabPage() {
       }
 
       // ADD THIS REDIRECT:
-      router.push(`/lab/${labId}`) // <-- This will redirect to the new lab view
+      setTimeout(() => {
+        router.push(`/lab/${labId}`)
+      }, 1800)
 
     } catch (error) {
+      setIsLabCreating(false)
       console.error('Error in lab creation process:', error)
-    } finally {
-      setIsCreating(false)
     }
   }
 
@@ -469,21 +532,6 @@ export default function CreateLabPage() {
     }, 500)
   }
 
-  // Handle add founder
-  const handleAddFounder = (founder: { id: string; name: string; email: string; avatar?: string }) => {
-    if (selectedFounders.length >= 3) return
-    if (selectedFounders.some(f => f.id === founder.id)) return
-    
-    setSelectedFounders([...selectedFounders, founder])
-    setSearchQuery("")
-    setSearchResults([])
-  }
-
-  // Handle remove founder
-  const handleRemoveFounder = (id: string) => {
-    setSelectedFounders(selectedFounders.filter(f => f.id !== id))
-  }
-
   // Handle profile picture change
   const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -499,6 +547,11 @@ export default function CreateLabPage() {
   // Open file picker
   const handleProfilePicClick = () => {
     fileInputRef.current?.click()
+  }
+
+  // Re-add handleRemoveFounder for removing founders
+  const handleRemoveFounder = (id: string) => {
+    setSelectedFounders(selectedFounders.filter(f => f.id !== id))
   }
 
   // Render template selection step
@@ -731,6 +784,73 @@ export default function CreateLabPage() {
             />
           </div>
 
+          <div className="space-y-2">
+            <UILable htmlFor="org-search">Associate with Organization (optional)</UILable>
+            <div className="relative">
+              <Input
+                id="org-search"
+                placeholder="Search organizations by name..."
+                value={selectedOrg ? selectedOrg.org_name : orgSearch}
+                onChange={e => {
+                  setSelectedOrg(null)
+                  setOrgSearch(e.target.value)
+                  setOrgDropdownOpen(true)
+                }}
+                onFocus={() => setOrgDropdownOpen(true)}
+                autoComplete="off"
+              />
+              {orgDropdownOpen && (orgSearch.length > 0 || orgOptions.length > 0) && (
+                <div className="absolute z-20 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-auto">
+                  {orgSearchLoading && (
+                    <div className="p-2 text-center text-muted-foreground">Searching...</div>
+                  )}
+                  {!orgSearchLoading && orgOptions.length === 0 && orgSearch.length > 0 && (
+                    <div className="p-2 text-center text-muted-foreground">No organizations found</div>
+                  )}
+                  {!orgSearchLoading && orgOptions.map(org => (
+                    <div
+                      key={org.org_id}
+                      className="p-2 hover:bg-accent cursor-pointer flex items-center gap-2"
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => {
+                        setSelectedOrg(org)
+                        setOrgSearch(org.org_name)
+                        setOrgDropdownOpen(false)
+                      }}
+                    >
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage src={org.profilePic || "/placeholder.svg"} alt={org.org_name} />
+                        <AvatarFallback>{org.org_name?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <span className="truncate">{org.org_name}</span>
+                    </div>
+                  ))}
+                  {selectedOrg && (
+                    <div className="p-2 text-xs text-muted-foreground border-t flex items-center gap-2">
+                      <Avatar className="h-4 w-4">
+                        <AvatarImage src={selectedOrg.profilePic || "/placeholder.svg"} alt={selectedOrg.org_name} />
+                        <AvatarFallback>{selectedOrg.org_name?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <span>Selected: {selectedOrg.org_name}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {selectedOrg && (
+              <div className="flex items-center gap-2 mt-1">
+                <Avatar className="h-4 w-4">
+                  <AvatarImage src={selectedOrg.profilePic || "/placeholder.svg"} alt={selectedOrg.org_name} />
+                  <AvatarFallback>{selectedOrg.org_name?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <span className="text-xs text-muted-foreground">Selected: {selectedOrg.org_name}</span>
+                <Button size="sm" variant="ghost" onClick={() => { setSelectedOrg(null); setOrgSearch(""); }}>
+                  Remove
+                </Button>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <UILable>Additional Founders</UILable>
@@ -738,7 +858,6 @@ export default function CreateLabPage() {
                 {selectedFounders.length}/3 selected
               </span>
             </div>
-            
             {selectedFounders.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {selectedFounders.map((founder) => (
@@ -748,10 +867,9 @@ export default function CreateLabPage() {
                     className="flex items-center gap-2 py-1 px-2"
                   >
                     <Avatar className="h-4 w-4">
-                      <AvatarImage src={founder.avatar} alt={founder.name} />
-                      <AvatarFallback>{founder.name.charAt(0)}</AvatarFallback>
+                      <AvatarFallback>{founder.username?.charAt(0) || "U"}</AvatarFallback>
                     </Avatar>
-                    <span>{founder.name}</span>
+                    <span>{founder.username}</span>
                     <button
                       onClick={() => handleRemoveFounder(founder.id)}
                       className="ml-1 hover:text-destructive"
@@ -762,34 +880,43 @@ export default function CreateLabPage() {
                 ))}
               </div>
             )}
-
             <div className="relative">
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search for users..."
-                  value={searchQuery}
-                  onChange={(e) => handleSearch(e.target.value)}
+                  value={founderSearch}
+                  onChange={e => setFounderSearch(e.target.value)}
                   className="pl-8"
+                  autoComplete="off"
                 />
               </div>
-              
-              {searchResults.length > 0 && (
-                <div className="absolute mt-2 w-full bg-background border rounded-md shadow-lg z-10">
-                  {searchResults.map((user) => (
+              {(founderSearch.length >= 2 || founderResults.length > 0) && (
+                <div className="absolute mt-2 w-full bg-background border rounded-md shadow-lg z-10 max-h-48 overflow-auto">
+                  {founderSearchLoading && (
+                    <div className="p-2 text-center text-muted-foreground">Searching...</div>
+                  )}
+                  {!founderSearchLoading && founderResults.length === 0 && founderSearch.length >= 2 && (
+                    <div className="p-2 text-center text-muted-foreground">No users found. Try a different username.</div>
+                  )}
+                  {!founderSearchLoading && founderResults.map((user) => (
                     <button
-                      key={user.id}
-                      onClick={() => handleAddFounder(user)}
-                      disabled={selectedFounders.some(f => f.id === user.id) || selectedFounders.length >= 3}
+                      key={user.user_id}
+                      onClick={() => {
+                        if (selectedFounders.length < 3) {
+                          setSelectedFounders([...selectedFounders, { id: user.user_id, username: user.username }])
+                          setFounderSearch("")
+                          setFounderResults([])
+                        }
+                      }}
+                      disabled={selectedFounders.some(f => f.id === user.user_id) || selectedFounders.length >= 3}
                       className="w-full p-2 hover:bg-accent flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Avatar className="h-6 w-6">
-                        <AvatarImage src={user.avatar} alt={user.name} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{user.username?.charAt(0) || "U"}</AvatarFallback>
                       </Avatar>
                       <div className="text-left">
-                        <div className="font-medium">{user.name}</div>
-                        <div className="text-xs text-muted-foreground">{user.email}</div>
+                        <div className="font-medium">{user.username}</div>
                       </div>
                     </button>
                   ))}
@@ -884,11 +1011,12 @@ export default function CreateLabPage() {
     )
   }
 
- const renderInviteStep = () => {
+  // Render invite step
+  const renderInviteStep = () => {
     const inviteMessage = `Join my new lab: ${labDetails.name || "My Research Lab"} on HDX!`
     const inviteLink = "https://hdx.science/labs/join?token=abc123xyz456"
-
     const fullInviteMessage = `${inviteMessage}\n\nClick here to join: ${inviteLink}`
+    const template = getSelectedTemplate()
 
     const handleCopy = () => {
       navigator.clipboard.writeText(fullInviteMessage)
@@ -899,135 +1027,90 @@ export default function CreateLabPage() {
     return (
       <>
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold uppercase tracking-wide mb-2">Invite Collaborators</h1>
-          <p className="text-muted-foreground">Share your lab with colleagues and collaborators</p>
+          <h1 className="text-2xl font-bold uppercase tracking-wide mb-2">Lab Preview & Invite</h1>
+          <p className="text-muted-foreground">Review your lab and share it with collaborators</p>
         </div>
 
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-gradient-to-br from-science-ai/20 to-accent/10 rounded-xl p-8 mb-8 border border-accent/20">
-            <div className="text-center space-y-6">
-              <div className="inline-flex items-center justify-center p-2 rounded-full bg-accent/20 mb-2">
-                <Sparkles className="h-6 w-6 text-accent" />
-              </div>
-
-              <h2 className="text-2xl font-bold text-center">{inviteMessage}</h2>
-
-              <p className="text-muted-foreground max-w-md mx-auto">
-                Share this invitation with your colleagues to collaborate on your research together
-              </p>
-
-              <div className="flex flex-col items-center justify-center gap-4 mt-4">
-                <div className="relative w-full max-w-md">
-                  <div className="bg-background/80 backdrop-blur-sm border border-accent/20 rounded-lg p-4 text-sm font-mono break-all">
-                    {fullInviteMessage}
-                  </div>
-                  <Button className="absolute top-2 right-2 h-8 w-8 p-0" variant="ghost" onClick={handleCopy}>
-                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                </div>
-
-                <div className="flex gap-2 mt-2">
-                  <Button onClick={handleCopy} className="bg-accent text-primary-foreground hover:bg-accent/90">
-                    {copied ? "Copied!" : "Copy Invitation"}
-                  </Button>
-
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="flex gap-2 items-center">
-                      <Mail className="h-4 w-4" />
-                      <span className="hidden sm:inline">Email</span>
-                    </Button>
-                    <Button variant="outline" className="flex gap-2 items-center">
-                      <MessageSquare className="h-4 w-4" />
-                      <span className="hidden sm:inline">Message</span>
-                    </Button>
-                    <Button variant="outline" className="flex gap-2 items-center">
-                      <Share2 className="h-4 w-4" />
-                      <span className="hidden sm:inline">Share</span>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </>
-    )
-  }
-
-  // Render finalize step
-  const renderFinalizeStep = () => {
-    const template = getSelectedTemplate()
-
-    return (
-      <>
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold uppercase tracking-wide mb-2">Ready to Create Your Lab</h1>
-          <p className="text-muted-foreground">Review your lab details before creating</p>
-        </div>
-
-        <div className="max-w-2xl mx-auto">
-          <Card className="mb-6">
+        <div className="max-w-2xl mx-auto space-y-8">
+          {/* Lab Preview Card */}
+          <Card>
             <CardHeader>
-              <CardTitle>Lab Summary</CardTitle>
+              <CardTitle>Lab Preview</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start gap-4">
-                <div className={`p-4 rounded-md ${template?.color || "bg-secondary"}`}>
-                  {template && <template.icon className="h-10 w-10 text-primary-foreground" />}
+                <div className="flex flex-col items-center justify-center">
+                  <div className="relative w-16 h-16">
+                    <Image
+                      src={profilePic || "/placeholder.svg"}
+                      alt="Lab profile"
+                      fill
+                      className="rounded-full object-cover border-2 border-border"
+                    />
+                  </div>
                 </div>
                 <div className="flex-1">
                   <h3 className="text-lg font-medium">{labDetails.name}</h3>
                   <p className="text-muted-foreground">{labDetails.description}</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Team Members</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {invitedCollaborators.length > 0 ? (
-                <div className="space-y-3">
-                  {sampleCollaborators
-                    .filter((c) => invitedCollaborators.includes(c.id))
-                    .map((collaborator) => (
-                      <div key={collaborator.id} className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={collaborator.avatar} alt={collaborator.name} />
-                          <AvatarFallback>{collaborator.initials}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{collaborator.name}</p>
-                          <p className="text-xs text-muted-foreground">{collaborator.role}</p>
-                        </div>
-                      </div>
-                    ))}
+              {/* Categories */}
+              {selectedCategories.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {selectedCategories.map((category) => {
+                    const area = researchAreas.find((a) => a.value === category)
+                    return (
+                      <Badge key={category} variant="secondary">
+                        {area?.label}
+                      </Badge>
+                    )
+                  })}
                 </div>
-              ) : (
-                <p className="text-muted-foreground">No team members invited yet</p>
+              )}
+
+              {/* Founders */}
+              {selectedFounders.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium mb-2">Founders:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedFounders.map((founder) => (
+                      <Badge key={founder.id} variant="secondary" className="flex items-center gap-2">
+                        <Avatar className="h-4 w-4">
+                          <AvatarFallback>{founder.username?.charAt(0) || "U"}</AvatarFallback>
+                        </Avatar>
+                        <span>{founder.username}</span>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Organization */}
+              {selectedOrg && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium mb-2">Organization:</h4>
+                  <div className="flex items-center gap-2">
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={selectedOrg.profilePic || "/placeholder.svg"} alt={selectedOrg.org_name} />
+                      <AvatarFallback>{selectedOrg.org_name?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <span>{selectedOrg.org_name}</span>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
+        </div>
 
-          <div className="bg-secondary/30 rounded-md p-4 mb-6">
-            <h3 className="text-sm font-medium mb-2">What happens next?</h3>
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-start gap-2">
-                <Check className="h-4 w-4 text-accent mt-0.5" />
-                <span>Your lab will be created with the template and settings you've chosen</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-4 w-4 text-accent mt-0.5" />
-                <span>Invited collaborators will receive email invitations</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Check className="h-4 w-4 text-accent mt-0.5" />
-                <span>You'll be redirected to your new lab where you can start adding content</span>
-              </li>
-            </ul>
-          </div>
+        <div className="flex justify-end mt-8">
+          <Button
+            onClick={handleCreateLab}
+            className="bg-accent text-primary-foreground hover:bg-accent/90"
+            disabled={isLabCreating}
+          >
+            {isLabCreating ? "Creating..." : "Create Lab"}
+          </Button>
         </div>
       </>
     )
@@ -1046,42 +1129,51 @@ export default function CreateLabPage() {
       {step === "ai-description" && renderAiDescriptionStep()}
       {step === "details" && renderDetailsStep()}
       {step === "invite" && renderInviteStep()}
-      {step === "finalize" && renderFinalizeStep()}
 
       <div className="flex justify-between mt-8">
         <Button variant="outline" onClick={handlePreviousStep}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-
-        <Button
-          onClick={handleNextStep}
-          disabled={
-            (step === "template" && !selectedTemplate) ||
-            (step === "ai-description" && aiDescription.length < 50 && !isGenerating)
-          }
-          className="bg-accent text-primary-foreground hover:bg-accent/90"
-        >
-          {step === "finalize" ? (
-            isCreating ? (
-              "Creating..."
+        {step !== "invite" && (
+          <Button
+            onClick={handleNextStep}
+            disabled={
+              (step === "template" && !selectedTemplate) ||
+              (step === "ai-description" && aiDescription.length < 50 && !isGenerating)
+            }
+            className="bg-accent text-primary-foreground hover:bg-accent/90"
+          >
+            {step === "ai-description" ? (
+              isGenerating ? (
+                "Generating..."
+              ) : (
+                "Generate Lab"
+              )
             ) : (
-              "Create Lab"
-            )
-          ) : step === "ai-description" ? (
-            isGenerating ? (
-              "Generating..."
-            ) : (
-              "Generate Lab"
-            )
-          ) : (
-            <>
-              Next
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </>
-          )}
-        </Button>
+              <>
+                Next
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </>
+            )}
+          </Button>
+        )}
       </div>
+
+      {isLabCreating && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background transition-all duration-700">
+          <span className="text-3xl md:text-5xl font-mono animate-pulse">{typewriterText}<span className="animate-blink">|</span></span>
+          <style jsx>{`
+            @keyframes blink {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0; }
+            }
+            .animate-blink {
+              animation: blink 1s step-end infinite;
+            }
+          `}</style>
+        </div>
+      )}
     </div>
   )
 }

@@ -34,7 +34,6 @@ import { ContributionDialog } from "@/components/contribution-dialog"
 import {
   liveExperimentsData,
   notificationsData,
-  contributionsData,
 } from "@/components/lab-view/lab-data"
 
 // Add type for props
@@ -94,15 +93,13 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   const [localIsFollowing, setLocalIsFollowing] = useState(false)
 
   // Contributions state
-  const [contributions, setContributions] = useState(contributionsData)
+  const [contributions, setContributions] = useState<any[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
   const [selectedContribution, setSelectedContribution] = useState<Contribution | null>(null)
   const [contributionDetailOpen, setContributionDetailOpen] = useState(false)
   const [contributionFilter, setContributionFilter] = useState("all")
   const [contributionSearch, setContributionSearch] = useState("")
   const [activeSettingsTab, setActiveSettingsTab] = useState("general")
-
-  const pendingContributions = contributions.filter((c) => c.status === "pending")
-  const pendingCount = pendingContributions.length
 
   const [experiments, setExperiments] = useState<any[]>([])
   const [filesCount, setFilesCount] = useState(0)
@@ -127,6 +124,9 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
 
   // --- Members breakdown state ---
   const [membersBreakdown, setMembersBreakdown] = useState<{ total: number, founders: number, admins: number, donors: number, contributors: number }>({ total: 0, founders: 0, admins: 0, donors: 0, contributors: 0 });
+
+  // --- Organization Info state ---
+  const [orgInfo, setOrgInfo] = useState<{ org_name: string; profilePic?: string } | null>(null)
 
   // Helper to refetch lab data (including funding_setup)
   const refetchLab = async () => {
@@ -353,6 +353,42 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
     }
     fetchMembersBreakdown();
   }, [lab?.labId]);
+
+  // Fetch contributions from contribution_requests for this lab
+  useEffect(() => {
+    if (!lab?.labId) return;
+    const fetchContributions = async () => {
+      const { data, error } = await supabase
+        .from('contribution_requests')
+        .select('*')
+        .eq('labFrom', lab.labId)
+      if (!error && data) {
+        setContributions(data)
+        setPendingCount(data.filter((c: any) => c.status === 'pending').length)
+      } else {
+        setContributions([])
+        setPendingCount(0)
+      }
+    }
+    fetchContributions()
+  }, [lab?.labId])
+
+  useEffect(() => {
+    async function fetchOrgInfo() {
+      if (lab?.org_id) {
+        const { data, error } = await supabase
+          .from('organizations')
+          .select('org_name, profilePic')
+          .eq('org_id', lab.org_id)
+          .single();
+        if (!error && data) setOrgInfo(data)
+        else setOrgInfo(null)
+      } else {
+        setOrgInfo(null)
+      }
+    }
+    fetchOrgInfo()
+  }, [lab?.org_id])
 
   const handleTabChange = (value: string) => {
     setLocalActiveTab(value)
@@ -609,6 +645,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
           membersCount={membersBreakdown.total}
           membersBreakdown={membersBreakdown}
           onOpenContributeDialog={() => setContributionDialogOpen(true)}
+          orgInfo={orgInfo}
         />
       </div>
 

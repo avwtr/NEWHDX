@@ -418,12 +418,31 @@ export default function LandingPage() {
               { id: "create", label: "CREATE YOUR OWN LAB" },
               { id: "explore", label: "EXPLORE AND CONTRIBUTE" },
             ]}
-            defaultTabId="create"
+            defaultTabId={user ? "create" : "explore"}
             onChange={setActiveTab}
             className="mb-8"
           />
 
-          <div id="explore-section">{activeTab === "create" ? <CreateLab /> : <ExploreContribute />}</div>
+          <div id="explore-section">
+            {activeTab === "create" ? (
+              user ? (
+                <CreateLab />
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground mb-4">Please sign in to create a lab</p>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push("/signup")}
+                    style={{ borderColor: CUSTOM_GREEN, color: CUSTOM_GREEN }}
+                  >
+                    Create Account
+                  </Button>
+                </div>
+              )
+            ) : (
+              <ExploreContribute />
+            )}
+          </div>
         </div>
       </section>
 

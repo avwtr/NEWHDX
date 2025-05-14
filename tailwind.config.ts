@@ -9,6 +9,23 @@ const config: Config = {
     "./src/**/*.{ts,tsx}",
     "*.{js,ts,jsx,tsx,mdx}",
   ],
+  safelist: [
+    "bg-science-neuroscience",
+    "bg-science-ai",
+    "bg-science-biology",
+    "bg-science-chemistry",
+    "bg-science-physics",
+    "bg-science-medicine",
+    "bg-science-psychology",
+    "bg-science-engineering",
+    "bg-science-mathematics",
+    "bg-science-environmental",
+    "bg-science-astronomy",
+    "bg-science-geology",
+    "bg-science-default",
+    "text-white",
+    "text-black"
+  ],
   theme: {
     container: {
       center: true,

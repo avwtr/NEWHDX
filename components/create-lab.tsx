@@ -2,9 +2,11 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Beaker, Sparkles, FlaskRoundIcon as Flask, DollarSign, Upload, Globe, Activity } from "lucide-react"
 import { LabPreview } from "@/components/lab-preview"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
 
 // Custom color
 const CUSTOM_GREEN = "#A0FFDD"
@@ -59,6 +61,7 @@ export function CreateLab() {
   })
   const [invitedCollaborators, setInvitedCollaborators] = useState<number[]>([])
   const [isCreating, setIsCreating] = useState(false)
+  const { user } = useAuth()
 
   // Handle template selection
   const handleSelectTemplate = (templateId: string) => {
@@ -189,8 +192,14 @@ export function CreateLab() {
   const handleCreateLab = () => {
     setIsCreating(true)
     // Simulate API call
-    setTimeout(() => {
+    setTimeout(async () => {
       setIsCreating(false)
+      // Insert lab with org_id if selected
+      // (Replace this with your actual API call)
+      const labPayload = {
+        ...labDetails,
+      }
+      // Example: await supabase.from("labs").insert(labPayload)
       // Redirect to the new lab page
       window.location.href = "/"
     }, 2000)
@@ -253,6 +262,24 @@ export function CreateLab() {
             title="TRACK LAB ACTIVITY"
             description="All lab activity is tracked and visualized so you can better understand your end-to-end scientific process."
           />
+        </div>
+
+        {/* Lab Details Fields */}
+        <div className="space-y-4">
+          <div className="mb-4">
+            <label htmlFor="lab-description" className="block text-sm font-bold mb-2">
+              Description
+            </label>
+            <textarea
+              id="lab-description"
+              name="description"
+              value={labDetails.description}
+              onChange={handleInputChange}
+              className="w-full border rounded px-3 py-2 bg-background text-foreground"
+              rows={4}
+              placeholder="Describe your lab's mission and research focus..."
+            />
+          </div>
         </div>
       </div>
     </div>

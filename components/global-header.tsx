@@ -110,7 +110,11 @@ export function GlobalHeader() {
           {/* Create New Dropdown - Simplified */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-foreground hover:bg-secondary hover:text-accent">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-foreground hover:bg-secondary hover:text-accent"
+              >
                 <Plus className="h-5 w-5" />
                 <span className="sr-only">Create new</span>
               </Button>
@@ -118,24 +122,29 @@ export function GlobalHeader() {
             <DropdownMenuContent align="end" className="w-[200px]">
               <DropdownMenuLabel className="uppercase text-xs tracking-wide">Create New</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem disabled={!user} className={!user ? "opacity-50 cursor-not-allowed" : ""}>
                 <Link href="/create-lab" className="flex w-full items-center">
                   <FileText className="h-4 w-4 mr-2" />
                   Lab
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Link href="/create-organization" className="flex w-full items-center">
+              <DropdownMenuItem disabled={!user} className={!user ? "opacity-50 cursor-not-allowed" : ""}>
+                <Link href="/orgCreate" className="flex w-full items-center">
                   <Building2 className="h-4 w-4 mr-2" />
                   Organization
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem disabled={!user} className={!user ? "opacity-50 cursor-not-allowed" : ""}>
                 <Link href="/create-grant" className="flex w-full items-center">
                   <Award className="h-4 w-4 mr-2" />
                   Grant
                 </Link>
               </DropdownMenuItem>
+              {!user && (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                  Please sign in to create content
+                </div>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
