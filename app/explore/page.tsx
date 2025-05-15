@@ -25,6 +25,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Progress } from "@/components/ui/progress"
 import { supabase } from "@/lib/supabase"
 import { researchAreas } from "@/lib/research-areas"
+import { useAuth } from "@/components/auth-provider"
 
 // Sample data for live experiments
 const experimentsData = [
@@ -203,7 +204,6 @@ const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
   "computer-science": { bg: "bg-[#3A86FF]", text: "text-white" },
   "climate-science": { bg: "bg-[#2DC653]", text: "text-white" },
   "data-analysis": { bg: "bg-[#7209B7]", text: "text-white" },
-  "molecular-biology": { bg: "bg-[#38B000]", text: "text-white" },
   biochemistry: { bg: "bg-[#FF5400]", text: "text-white" },
   astrophysics: { bg: "bg-[#3F37C9]", text: "text-white" },
   cosmology: { bg: "bg-[#3F37C9]", text: "text-white" },
@@ -226,8 +226,6 @@ const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
   "public-perception": { bg: "bg-[#FB5607]", text: "text-white" },
   "citizen-science": { bg: "bg-[#6C757D]", text: "text-white" },
   "bias-studies": { bg: "bg-[#3A86FF]", text: "text-white" },
-  // --- Extended from researchAreas ---
-  "molecular-biology": { bg: "bg-[#38B000]", text: "text-white" },
   "cell-biology": { bg: "bg-[#38B000]", text: "text-white" },
   "genetics": { bg: "bg-[#38B000]", text: "text-white" },
   "proteomics": { bg: "bg-[#38B000]", text: "text-white" },
@@ -308,6 +306,8 @@ export default function ExplorePage() {
   const [grantsData, setGrantsData] = useState<any[]>([])
   const [grantsLoading, setGrantsLoading] = useState(false)
 
+  const { user } = useAuth();
+
   // Fetch grants from DB when grants tab is active
   useEffect(() => {
     if (activeTab === "grants") {
@@ -365,6 +365,7 @@ export default function ExplorePage() {
               creatorUsername: profileMap[g.created_by]?.username || "",
               orgName: orgMap[g.org_id]?.org_name || "",
               orgProfilePic: orgMap[g.org_id]?.profilePic || "",
+              created_by: g.created_by,
             }))
           )
           setGrantsLoading(false)
@@ -896,54 +897,59 @@ export default function ExplorePage() {
                 <div className="text-center py-8">Loading grants…</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredData.map((grant: any) => (
-                    <Card key={grant.id} className="overflow-hidden relative">
-                      <CardContent className="p-0">
-                        <Link href={`/grants/${grant.id}`} className="block p-4 hover:bg-secondary/50 relative">
-                          {/* Top right: Org and user info */}
-                          <div className="absolute top-4 right-4 flex flex-col items-end gap-1 z-10">
-                            {grant.orgName && (
-                              <div className="flex items-center gap-1 mb-0.5">
-                                <img
-                                  src={grant.orgProfilePic || "/placeholder.svg"}
-                                  alt={grant.orgName}
-                                  className="h-6 w-6 rounded-full object-cover border"
-                                />
-                                <span className="text-xs font-medium text-muted-foreground truncate max-w-[100px]">{grant.orgName}</span>
-                              </div>
-                            )}
-                            {grant.creatorUsername && (
-                              <span className="text-[11px] text-muted-foreground font-normal mt-0.5">@{grant.creatorUsername}</span>
-                            )}
-                          </div>
-                          <div className="space-y-1">
-                            <h3 className="font-medium text-accent">{grant.name}</h3>
-                            <p className="text-sm text-muted-foreground line-clamp-2">{grant.description}</p>
-                          </div>
-                          <div className="mt-3 flex items-center justify-between">
-                            <Badge variant="outline" className="text-xs font-semibold">
-                              {grant.amount}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">Deadline: {formatDate(grant.deadline)}</span>
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-1">
-                            {grant.categories.slice(0, 3).map((category: string) => {
-                              const color = getCategoryBadgeColors(category)
-                              return (
-                                <Badge key={category} className={`text-xs ${color.bg} ${color.text}`}>
-                                  {getCategoryLabel(category)}
-                                </Badge>
-                              )
-                            })}
-                          </div>
-                          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                            <span>{grant.funder}</span>
-                            <span>{grant.lastUpdated}</span>
-                          </div>
-                        </Link>
-                      </CardContent>
-                    </Card>
-                  ))}
+                  {filteredData.map((grant: any) => {
+                    // Route to review page if user is creator
+                    const isCreator = user && grant.created_by && user.id === grant.created_by;
+                    const grantUrl = isCreator ? `/grants/review/${grant.id}` : `/grants/${grant.id}`;
+                    return (
+                      <Card key={grant.id} className="overflow-hidden relative">
+                        <CardContent className="p-0">
+                          <Link href={grantUrl} className="block p-4 hover:bg-secondary/50 relative">
+                            {/* Top right: Org and user info */}
+                            <div className="absolute top-4 right-4 flex flex-col items-end gap-1 z-10">
+                              {grant.orgName && (
+                                <div className="flex items-center gap-1 mb-0.5">
+                                  <img
+                                    src={grant.orgProfilePic || "/placeholder.svg"}
+                                    alt={grant.orgName}
+                                    className="h-6 w-6 rounded-full object-cover border"
+                                  />
+                                  <span className="text-xs font-medium text-muted-foreground truncate max-w-[100px]">{grant.orgName}</span>
+                                </div>
+                              )}
+                              {grant.creatorUsername && (
+                                <span className="text-[11px] text-muted-foreground font-normal mt-0.5">@{grant.creatorUsername}</span>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <h3 className="font-medium text-accent">{grant.name}</h3>
+                              <p className="text-sm text-muted-foreground line-clamp-2">{grant.description}</p>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                              <Badge variant="outline" className="text-xs font-semibold">
+                                {grant.amount}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">Deadline: {formatDate(grant.deadline)}</span>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              {grant.categories.slice(0, 3).map((category: string) => {
+                                const color = getCategoryBadgeColors(category)
+                                return (
+                                  <Badge key={category} className={`text-xs ${color.bg} ${color.text}`}>
+                                    {getCategoryLabel(category)}
+                                  </Badge>
+                                )
+                              })}
+                            </div>
+                            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                              <span>{grant.funder}</span>
+                              <span>{grant.lastUpdated}</span>
+                            </div>
+                          </Link>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
                 </div>
               )}
             </TabsContent>
