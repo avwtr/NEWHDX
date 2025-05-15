@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -23,6 +23,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Progress } from "@/components/ui/progress"
+import { supabase } from "@/lib/supabase"
+import { researchAreas } from "@/lib/research-areas"
 
 // Sample data for live experiments
 const experimentsData = [
@@ -177,176 +179,122 @@ const labsData = [
   },
 ]
 
-// Sample data for open grants
-const grantsData = [
-  {
-    id: 1,
-    name: "Neuroscience Innovation Grant",
-    description: "Funding for innovative approaches in neuroscience research",
-    categories: ["neuroscience", "innovation", "research-funding"],
-    funder: "National Science Foundation",
-    amount: "$250,000",
-    deadline: "2024-09-30",
-    eligibility: "PhD researchers and institutions",
-    applicationProcess: "Competitive proposal review",
-    lastUpdated: "1 week ago",
-  },
-  {
-    id: 2,
-    name: "Quantum Computing Research Grant",
-    description: "Support for quantum computing research and applications",
-    categories: ["physics", "quantum-mechanics", "computing"],
-    funder: "Department of Energy",
-    amount: "$500,000",
-    deadline: "2024-08-15",
-    eligibility: "Research institutions and private companies",
-    applicationProcess: "Two-stage review process",
-    lastUpdated: "2 weeks ago",
-  },
-  {
-    id: 3,
-    name: "Genomic Diversity Research Fund",
-    description: "Funding for research on genomic diversity and implications",
-    categories: ["biology", "genomics", "diversity-studies"],
-    funder: "National Institutes of Health",
-    amount: "$350,000",
-    deadline: "2024-10-15",
-    eligibility: "Academic researchers and medical institutions",
-    applicationProcess: "Peer review panel",
-    lastUpdated: "5 days ago",
-  },
-  {
-    id: 4,
-    name: "AI Ethics and Governance Grant",
-    description: "Support for research on ethical AI development and governance",
-    categories: ["ai", "ethics", "governance"],
-    funder: "Technology Ethics Foundation",
-    amount: "$200,000",
-    deadline: "2024-11-01",
-    eligibility: "Multidisciplinary research teams",
-    applicationProcess: "Proposal and interview",
-    lastUpdated: "3 days ago",
-  },
-  {
-    id: 5,
-    name: "Climate Change Mitigation Research",
-    description: "Funding for research on climate change mitigation strategies",
-    categories: ["environmental", "climate-science", "mitigation"],
-    funder: "Global Climate Initiative",
-    amount: "$400,000",
-    deadline: "2024-12-15",
-    eligibility: "International research collaborations",
-    applicationProcess: "Open application with quarterly reviews",
-    lastUpdated: "1 day ago",
-  },
-]
-
-// Science categories with their corresponding badge classes
-const scienceCategories = {
-  neuroscience: "badge-neuroscience",
-  ai: "badge-ai",
-  biology: "badge-biology",
-  chemistry: "badge-chemistry",
-  physics: "badge-physics",
-  medicine: "badge-medicine",
-  psychology: "badge-psychology",
-  engineering: "badge-engineering",
-  mathematics: "badge-mathematics",
-  environmental: "badge-environmental",
-  astronomy: "badge-astronomy",
-  geology: "badge-geology",
-  "brain-mapping": "badge-neuroscience",
-  "cognitive-science": "badge-psychology",
-  "quantum-mechanics": "badge-physics",
-  "particle-physics": "badge-physics",
-  genomics: "badge-biology",
-  bioinformatics: "badge-biology",
-  ethics: "badge-psychology",
-  "computer-science": "badge-ai",
-  "climate-science": "badge-environmental",
-  "data-analysis": "badge-mathematics",
-  "molecular-biology": "badge-biology",
-  biochemistry: "badge-chemistry",
-  astrophysics: "badge-astronomy",
-  cosmology: "Cosmology",
-  "clinical-research": "badge-medicine",
-  biotechnology: "Biotechnology",
-  "medical-imaging": "badge-medicine",
-  meteorology: "badge-environmental",
-  "machine-learning": "Machine Learning",
-  optimization: "badge-mathematics",
-  "data-processing": "Data Processing",
-  "data-visualization": "Data Visualization",
-  methodology: "badge-default",
-  computing: "badge-ai",
-  evaluation: "badge-default",
-  innovation: "badge-default",
-  "research-funding": "badge-default",
-  governance: "badge-default",
-  mitigation: "badge-environmental",
-  "diversity-studies": "badge-default",
-  "public-perception": "badge-psychology",
-  "citizen-science": "badge-default",
-  "bias-studies": "badge-ai",
-}
-
-// Category labels
-const categoryLabels: Record<string, string> = {
-  neuroscience: "Neuroscience",
-  ai: "AI",
-  biology: "Biology",
-  chemistry: "Chemistry",
-  physics: "Physics",
-  medicine: "Medicine",
-  psychology: "Psychology",
-  engineering: "Engineering",
-  mathematics: "Mathematics",
-  environmental: "Environmental",
-  astronomy: "Astronomy",
-  geology: "Geology",
-  "brain-mapping": "Brain Mapping",
-  "cognitive-science": "Cognitive Science",
-  "quantum-mechanics": "Quantum Mechanics",
-  "particle-physics": "Particle Physics",
-  genomics: "Genomics",
-  bioinformatics: "Bioinformatics",
-  ethics: "Ethics",
-  "computer-science": "Computer Science",
-  "climate-science": "Climate Science",
-  "data-analysis": "Data Analysis",
-  "molecular-biology": "Molecular Biology",
-  biochemistry: "Biochemistry",
-  astrophysics: "Astrophysics",
-  cosmology: "Cosmology",
-  "clinical-research": "Clinical Research",
-  biotechnology: "Biotechnology",
-  "medical-imaging": "Medical Imaging",
-  meteorology: "Meteorology",
-  "machine-learning": "Machine Learning",
-  optimization: "Optimization",
-  "data-processing": "Data Processing",
-  "data-visualization": "Data Visualization",
-  methodology: "Methodology",
-  computing: "Computing",
-  evaluation: "Evaluation",
-  innovation: "Innovation",
-  "research-funding": "Research Funding",
-  governance: "Governance",
-  mitigation: "Mitigation",
-  "diversity-studies": "Diversity Studies",
-  "public-perception": "Public Perception",
-  "citizen-science": "Citizen Science",
-  "bias-studies": "Bias Studies",
-}
-
-const getSortOptions = () => {
-  return [
-    { value: "recent", label: "Most Recent" },
-    { value: "deadline", label: "Deadline (Soonest)" },
-    { value: "funding", label: "Funding Progress" },
-    { value: "amount", label: "Amount (Highest)" },
-    { value: "participation", label: "Needs Participants" },
-  ]
+// Copy scienceCategoryColors from lab-profile.tsx
+const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
+  neuroscience: { bg: "bg-[#9D4EDD]", text: "text-white" },
+  ai: { bg: "bg-[#3A86FF]", text: "text-white" },
+  biology: { bg: "bg-[#38B000]", text: "text-white" },
+  chemistry: { bg: "bg-[#FF5400]", text: "text-white" },
+  physics: { bg: "bg-[#FFD60A]", text: "text-black" },
+  medicine: { bg: "bg-[#FF0054]", text: "text-white" },
+  psychology: { bg: "bg-[#FB5607]", text: "text-white" },
+  engineering: { bg: "bg-[#4361EE]", text: "text-white" },
+  mathematics: { bg: "bg-[#7209B7]", text: "text-white" },
+  environmental: { bg: "bg-[#2DC653]", text: "text-white" },
+  astronomy: { bg: "bg-[#3F37C9]", text: "text-white" },
+  geology: { bg: "bg-[#AA6C25]", text: "text-white" },
+  "brain-mapping": { bg: "bg-[#9D4EDD]", text: "text-white" },
+  "cognitive-science": { bg: "bg-[#FB5607]", text: "text-white" },
+  "quantum-mechanics": { bg: "bg-[#FFD60A]", text: "text-black" },
+  "particle-physics": { bg: "bg-[#FFD60A]", text: "text-black" },
+  genomics: { bg: "bg-[#38B000]", text: "text-white" },
+  bioinformatics: { bg: "bg-[#38B000]", text: "text-white" },
+  ethics: { bg: "bg-[#FB5607]", text: "text-white" },
+  "computer-science": { bg: "bg-[#3A86FF]", text: "text-white" },
+  "climate-science": { bg: "bg-[#2DC653]", text: "text-white" },
+  "data-analysis": { bg: "bg-[#7209B7]", text: "text-white" },
+  "molecular-biology": { bg: "bg-[#38B000]", text: "text-white" },
+  biochemistry: { bg: "bg-[#FF5400]", text: "text-white" },
+  astrophysics: { bg: "bg-[#3F37C9]", text: "text-white" },
+  cosmology: { bg: "bg-[#3F37C9]", text: "text-white" },
+  "clinical-research": { bg: "bg-[#FF0054]", text: "text-white" },
+  biotechnology: { bg: "bg-[#38B000]", text: "text-white" },
+  "medical-imaging": { bg: "bg-[#FF0054]", text: "text-white" },
+  meteorology: { bg: "bg-[#2DC653]", text: "text-white" },
+  "machine-learning": { bg: "bg-[#3A86FF]", text: "text-white" },
+  optimization: { bg: "bg-[#7209B7]", text: "text-white" },
+  "data-processing": { bg: "bg-[#7209B7]", text: "text-white" },
+  "data-visualization": { bg: "bg-[#7209B7]", text: "text-white" },
+  methodology: { bg: "bg-[#6C757D]", text: "text-white" },
+  computing: { bg: "bg-[#3A86FF]", text: "text-white" },
+  evaluation: { bg: "bg-[#6C757D]", text: "text-white" },
+  innovation: { bg: "bg-[#6C757D]", text: "text-white" },
+  "research-funding": { bg: "bg-[#6C757D]", text: "text-white" },
+  governance: { bg: "bg-[#6C757D]", text: "text-white" },
+  mitigation: { bg: "bg-[#2DC653]", text: "text-white" },
+  "diversity-studies": { bg: "bg-[#6C757D]", text: "text-white" },
+  "public-perception": { bg: "bg-[#FB5607]", text: "text-white" },
+  "citizen-science": { bg: "bg-[#6C757D]", text: "text-white" },
+  "bias-studies": { bg: "bg-[#3A86FF]", text: "text-white" },
+  // --- Extended from researchAreas ---
+  "molecular-biology": { bg: "bg-[#38B000]", text: "text-white" },
+  "cell-biology": { bg: "bg-[#38B000]", text: "text-white" },
+  "genetics": { bg: "bg-[#38B000]", text: "text-white" },
+  "proteomics": { bg: "bg-[#38B000]", text: "text-white" },
+  "microbiology": { bg: "bg-[#38B000]", text: "text-white" },
+  "virology": { bg: "bg-[#38B000]", text: "text-white" },
+  "immunology": { bg: "bg-[#38B000]", text: "text-white" },
+  "developmental-biology": { bg: "bg-[#38B000]", text: "text-white" },
+  "evolutionary-biology": { bg: "bg-[#38B000]", text: "text-white" },
+  "ecology": { bg: "bg-[#2DC653]", text: "text-white" },
+  "marine-biology": { bg: "bg-[#2DC653]", text: "text-white" },
+  "botany": { bg: "bg-[#2DC653]", text: "text-white" },
+  "zoology": { bg: "bg-[#2DC653]", text: "text-white" },
+  "organic-chemistry": { bg: "bg-[#FF5400]", text: "text-white" },
+  "inorganic-chemistry": { bg: "bg-[#FF5400]", text: "text-white" },
+  "physical-chemistry": { bg: "bg-[#FF5400]", text: "text-white" },
+  "analytical-chemistry": { bg: "bg-[#FF5400]", text: "text-white" },
+  "medicinal-chemistry": { bg: "bg-[#FF5400]", text: "text-white" },
+  "polymer-chemistry": { bg: "bg-[#FF5400]", text: "text-white" },
+  "materials-chemistry": { bg: "bg-[#FF5400]", text: "text-white" },
+  "computational-chemistry": { bg: "bg-[#3A86FF]", text: "text-white" },
+  "environmental-chemistry": { bg: "bg-[#2DC653]", text: "text-white" },
+  "quantum-physics": { bg: "bg-[#FFD60A]", text: "text-black" },
+  "nuclear-physics": { bg: "bg-[#FFD60A]", text: "text-black" },
+  "condensed-matter-physics": { bg: "bg-[#FFD60A]", text: "text-black" },
+  "optics": { bg: "bg-[#FFD60A]", text: "text-black" },
+  "thermodynamics": { bg: "bg-[#FFD60A]", text: "text-black" },
+  "fluid-dynamics": { bg: "bg-[#FFD60A]", text: "text-black" },
+  "plasma-physics": { bg: "bg-[#FFD60A]", text: "text-black" },
+  "biophysics": { bg: "bg-[#38B000]", text: "text-white" },
+  "geophysics": { bg: "bg-[#AA6C25]", text: "text-white" },
+  "geochemistry": { bg: "bg-[#AA6C25]", text: "text-white" },
+  "climatology": { bg: "bg-[#2DC653]", text: "text-white" },
+  "oceanography": { bg: "bg-[#2DC653]", text: "text-white" },
+  "hydrology": { bg: "bg-[#2DC653]", text: "text-white" },
+  "seismology": { bg: "bg-[#AA6C25]", text: "text-white" },
+  "volcanology": { bg: "bg-[#AA6C25]", text: "text-white" },
+  "paleontology": { bg: "bg-[#AA6C25]", text: "text-white" },
+  "anatomy": { bg: "bg-[#FF0054]", text: "text-white" },
+  "physiology": { bg: "bg-[#FF0054]", text: "text-white" },
+  "pathology": { bg: "bg-[#FF0054]", text: "text-white" },
+  "pharmacology": { bg: "bg-[#FF0054]", text: "text-white" },
+  "toxicology": { bg: "bg-[#FF0054]", text: "text-white" },
+  "epidemiology": { bg: "bg-[#FF0054]", text: "text-white" },
+  "public-health": { bg: "bg-[#FF0054]", text: "text-white" },
+  "cardiology": { bg: "bg-[#FF0054]", text: "text-white" },
+  "neurology": { bg: "bg-[#9D4EDD]", text: "text-white" },
+  "oncology": { bg: "bg-[#FF0054]", text: "text-white" },
+  "pediatrics": { bg: "bg-[#FF0054]", text: "text-white" },
+  "geriatrics": { bg: "bg-[#FF0054]", text: "text-white" },
+  "psychiatry": { bg: "bg-[#FB5607]", text: "text-white" },
+  "biomedical-engineering": { bg: "bg-[#4361EE]", text: "text-white" },
+  "chemical-engineering": { bg: "bg-[#4361EE]", text: "text-white" },
+  "civil-engineering": { bg: "bg-[#4361EE]", text: "text-white" },
+  "electrical-engineering": { bg: "bg-[#4361EE]", text: "text-white" },
+  "mechanical-engineering": { bg: "bg-[#4361EE]", text: "text-white" },
+  "artificial-intelligence": { bg: "bg-[#3A86FF]", text: "text-white" },
+  "robotics": { bg: "bg-[#3A86FF]", text: "text-white" },
+  "nanotechnology": { bg: "bg-[#3A86FF]", text: "text-white" },
+  "materials-science": { bg: "bg-[#FF5400]", text: "text-white" },
+  "systems-biology": { bg: "bg-[#38B000]", text: "text-white" },
+  "synthetic-biology": { bg: "bg-[#38B000]", text: "text-white" },
+  "computational-biology": { bg: "bg-[#38B000]", text: "text-white" },
+  "quantum-computing": { bg: "bg-[#FFD60A]", text: "text-black" },
+  "renewable-energy": { bg: "bg-[#2DC653]", text: "text-white" },
+  "sustainable-development": { bg: "bg-[#2DC653]", text: "text-white" },
+  "data-science": { bg: "bg-[#7209B7]", text: "text-white" },
+  "astrobiology": { bg: "bg-[#3F37C9]", text: "text-white" },
 }
 
 export default function ExplorePage() {
@@ -355,6 +303,182 @@ export default function ExplorePage() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [sortOption, setSortOption] = useState("recent")
   const [showFilters, setShowFilters] = useState(true)
+
+  // Move grants state and fetching logic here
+  const [grantsData, setGrantsData] = useState<any[]>([])
+  const [grantsLoading, setGrantsLoading] = useState(false)
+
+  // Fetch grants from DB when grants tab is active
+  useEffect(() => {
+    if (activeTab === "grants") {
+      setGrantsLoading(true)
+      // 1. Fetch grants (no join)
+      supabase
+        .from("grants")
+        .select("grant_id, grant_name, grant_description, grant_categories, grant_amount, deadline, created_at, created_by, org_id")
+        .order("created_at", { ascending: false })
+        .then(async ({ data: grants, error }) => {
+          if (error || !grants) {
+            setGrantsData([])
+            setGrantsLoading(false)
+            return
+          }
+          // 2. Collect unique user IDs
+          const userIds = [...new Set(grants.map(g => g.created_by).filter(Boolean))]
+          // 3. Fetch profiles
+          let profileMap: Record<string, any> = {}
+          if (userIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from("profiles")
+              .select("user_id, username")
+              .in("user_id", userIds)
+            if (profiles) {
+              profiles.forEach(p => { profileMap[p.user_id] = p })
+            }
+          }
+          // 4. Collect unique org IDs
+          const orgIds = [...new Set(grants.map(g => g.org_id).filter(Boolean))]
+          // 5. Fetch organizations
+          let orgMap: Record<string, any> = {}
+          if (orgIds.length > 0) {
+            const { data: orgs } = await supabase
+              .from("organizations")
+              .select("org_id, org_name, profilePic")
+              .in("org_id", orgIds)
+            if (orgs) {
+              orgs.forEach(o => { orgMap[o.org_id] = o })
+            }
+          }
+          // 6. Merge usernames and org info into grants
+          setGrantsData(
+            grants.map((g: any) => ({
+              id: g.grant_id || `temp-${g.created_at}`,
+              name: g.grant_name,
+              description: g.grant_description,
+              categories: g.grant_categories || [],
+              funder: "",
+              amount: g.grant_amount ? `$${g.grant_amount.toLocaleString()}` : "",
+              deadline: g.deadline,
+              eligibility: "",
+              applicationProcess: "",
+              lastUpdated: g.created_at ? `${Math.round((Date.now() - new Date(g.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
+              creatorUsername: profileMap[g.created_by]?.username || "",
+              orgName: orgMap[g.org_id]?.org_name || "",
+              orgProfilePic: orgMap[g.org_id]?.profilePic || "",
+            }))
+          )
+          setGrantsLoading(false)
+        })
+    }
+  }, [activeTab])
+
+  // Science categories with their corresponding badge classes
+  const scienceCategories = {
+    neuroscience: "badge-neuroscience",
+    ai: "badge-ai",
+    biology: "badge-biology",
+    chemistry: "badge-chemistry",
+    physics: "badge-physics",
+    medicine: "badge-medicine",
+    psychology: "badge-psychology",
+    engineering: "badge-engineering",
+    mathematics: "badge-mathematics",
+    environmental: "badge-environmental",
+    astronomy: "badge-astronomy",
+    geology: "badge-geology",
+    "brain-mapping": "badge-neuroscience",
+    "cognitive-science": "badge-psychology",
+    "quantum-mechanics": "badge-physics",
+    "particle-physics": "badge-physics",
+    genomics: "badge-biology",
+    bioinformatics: "badge-biology",
+    ethics: "badge-psychology",
+    "computer-science": "badge-ai",
+    "climate-science": "badge-environmental",
+    "data-analysis": "badge-mathematics",
+    "molecular-biology": "badge-biology",
+    biochemistry: "badge-chemistry",
+    astrophysics: "badge-astronomy",
+    cosmology: "Cosmology",
+    "clinical-research": "badge-medicine",
+    biotechnology: "Biotechnology",
+    "medical-imaging": "badge-medicine",
+    meteorology: "badge-environmental",
+    "machine-learning": "Machine Learning",
+    optimization: "badge-mathematics",
+    "data-processing": "Data Processing",
+    "data-visualization": "Data Visualization",
+    methodology: "badge-default",
+    computing: "badge-ai",
+    evaluation: "badge-default",
+    innovation: "badge-default",
+    "research-funding": "badge-default",
+    governance: "badge-default",
+    mitigation: "badge-environmental",
+    "diversity-studies": "badge-default",
+    "public-perception": "badge-psychology",
+    "citizen-science": "badge-default",
+    "bias-studies": "badge-ai",
+  }
+
+  // Category labels
+  const categoryLabels: Record<string, string> = {
+    neuroscience: "Neuroscience",
+    ai: "AI",
+    biology: "Biology",
+    chemistry: "Chemistry",
+    physics: "Physics",
+    medicine: "Medicine",
+    psychology: "Psychology",
+    engineering: "Engineering",
+    mathematics: "Mathematics",
+    environmental: "Environmental",
+    astronomy: "Astronomy",
+    geology: "Geology",
+    "brain-mapping": "Brain Mapping",
+    "cognitive-science": "Cognitive Science",
+    "quantum-mechanics": "Quantum Mechanics",
+    "particle-physics": "Particle Physics",
+    genomics: "Genomics",
+    bioinformatics: "Bioinformatics",
+    ethics: "Ethics",
+    "computer-science": "Computer Science",
+    "climate-science": "Climate Science",
+    "data-analysis": "Data Analysis",
+    "molecular-biology": "Molecular Biology",
+    biochemistry: "Biochemistry",
+    astrophysics: "Astrophysics",
+    cosmology: "Cosmology",
+    "clinical-research": "Clinical Research",
+    biotechnology: "Biotechnology",
+    "medical-imaging": "Medical Imaging",
+    meteorology: "Meteorology",
+    "machine-learning": "Machine Learning",
+    optimization: "Optimization",
+    "data-processing": "Data Processing",
+    "data-visualization": "Data Visualization",
+    methodology: "Methodology",
+    computing: "Computing",
+    evaluation: "Evaluation",
+    innovation: "Innovation",
+    "research-funding": "Research Funding",
+    governance: "Governance",
+    mitigation: "Mitigation",
+    "diversity-studies": "Diversity Studies",
+    "public-perception": "Public Perception",
+    "citizen-science": "Citizen Science",
+    "bias-studies": "Bias Studies",
+  }
+
+  const getSortOptions = () => {
+    return [
+      { value: "recent", label: "Most Recent" },
+      { value: "deadline", label: "Deadline (Soonest)" },
+      { value: "funding", label: "Funding Progress" },
+      { value: "amount", label: "Amount (Highest)" },
+      { value: "participation", label: "Needs Participants" },
+    ]
+  }
 
   // Get data for the current tab
   const getCurrentData = () => {
@@ -479,12 +603,18 @@ export default function ExplorePage() {
 
   // Get badge class for a category
   const getBadgeClass = (category: string) => {
-    return scienceCategories[category as keyof typeof scienceCategories] || "badge-default"
+    const area = researchAreas.find(a => a.value === category)
+    if (!area) return "badge-default"
+    
+    // Map the category to a base category for consistent styling
+    const baseCategory = area.value.split('-')[0]
+    return `badge-${baseCategory}`
   }
 
   // Get label for a category
   const getCategoryLabel = (category: string) => {
-    return categoryLabels[category] || category
+    const area = researchAreas.find(a => a.value === category)
+    return area?.label || category
   }
 
   // Format date to readable format
@@ -500,6 +630,11 @@ export default function ExplorePage() {
     const diffTime = deadline.getTime() - today.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     return diffDays
+  }
+
+  // Helper to get badge color for a category (matches lab-profile.tsx)
+  const getCategoryBadgeColors = (category: string) => {
+    return scienceCategoryColors[category] || { bg: "bg-[#6C757D]", text: "text-white" }
   }
 
   return (
@@ -738,8 +873,7 @@ export default function ExplorePage() {
                           {lab.categories.slice(0, 3).map((category: string) => (
                             <Badge
                               key={category}
-                              className={`${getBadgeClass(category)} text-xs  => (
-                            <Badge key={category} className={\`${getBadgeClass(category)} text-xs`}
+                              className={`${getBadgeClass(category)} text-xs`}
                             >
                               {getCategoryLabel(category)}
                             </Badge>
@@ -758,40 +892,60 @@ export default function ExplorePage() {
             </TabsContent>
 
             <TabsContent value="grants" className="mt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredData.map((grant: any) => (
-                  <Card key={grant.id} className="overflow-hidden">
-                    <CardContent className="p-0">
-                      <Link href={`/grants/${grant.id}`} className="block p-4 hover:bg-secondary/50">
-                        <div className="space-y-1">
-                          <h3 className="font-medium text-accent">{grant.name}</h3>
-                          <p className="text-sm text-muted-foreground line-clamp-2">{grant.description}</p>
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-between">
-                          <Badge variant="outline" className="text-xs font-semibold">
-                            {grant.amount}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">Deadline: {formatDate(grant.deadline)}</span>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {grant.categories.slice(0, 3).map((category: string) => (
-                            <Badge key={category} className={`${getBadgeClass(category)} text-xs`}>
-                              {getCategoryLabel(category)}
+              {grantsLoading ? (
+                <div className="text-center py-8">Loading grants…</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredData.map((grant: any) => (
+                    <Card key={grant.id} className="overflow-hidden relative">
+                      <CardContent className="p-0">
+                        <Link href={`/grants/${grant.id}`} className="block p-4 hover:bg-secondary/50 relative">
+                          {/* Top right: Org and user info */}
+                          <div className="absolute top-4 right-4 flex flex-col items-end gap-1 z-10">
+                            {grant.orgName && (
+                              <div className="flex items-center gap-1 mb-0.5">
+                                <img
+                                  src={grant.orgProfilePic || "/placeholder.svg"}
+                                  alt={grant.orgName}
+                                  className="h-6 w-6 rounded-full object-cover border"
+                                />
+                                <span className="text-xs font-medium text-muted-foreground truncate max-w-[100px]">{grant.orgName}</span>
+                              </div>
+                            )}
+                            {grant.creatorUsername && (
+                              <span className="text-[11px] text-muted-foreground font-normal mt-0.5">@{grant.creatorUsername}</span>
+                            )}
+                          </div>
+                          <div className="space-y-1">
+                            <h3 className="font-medium text-accent">{grant.name}</h3>
+                            <p className="text-sm text-muted-foreground line-clamp-2">{grant.description}</p>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between">
+                            <Badge variant="outline" className="text-xs font-semibold">
+                              {grant.amount}
                             </Badge>
-                          ))}
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                          <span>{grant.funder}</span>
-                          <span>{grant.lastUpdated}</span>
-                        </div>
-                      </Link>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                            <span className="text-xs text-muted-foreground">Deadline: {formatDate(grant.deadline)}</span>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-1">
+                            {grant.categories.slice(0, 3).map((category: string) => {
+                              const color = getCategoryBadgeColors(category)
+                              return (
+                                <Badge key={category} className={`text-xs ${color.bg} ${color.text}`}>
+                                  {getCategoryLabel(category)}
+                                </Badge>
+                              )
+                            })}
+                          </div>
+                          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                            <span>{grant.funder}</span>
+                            <span>{grant.lastUpdated}</span>
+                          </div>
+                        </Link>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
           </div>
         </div>

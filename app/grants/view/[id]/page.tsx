@@ -37,6 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { supabase } from "@/lib/supabase"
 
 interface GrantViewPageProps {
   params: {
@@ -54,6 +55,8 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
   const [wordCount, setWordCount] = useState(0)
   const [selectedLab, setSelectedLab] = useState<string>("")
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [grant, setGrant] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
 
   // Mock user data - in a real app, this would come from your auth context
   const userData = {
@@ -86,52 +89,25 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
     ],
   }
 
-  // Mock grant data - in a real app, this would be fetched from your database
-  const grant = {
-    id: params.id,
-    name: "Neuroscience Research Fellowship",
-    amount: 35000,
-    deadline: "2024-01-14",
-    categories: ["Neuroscience", "Medicine", "Biology"],
-    description: `
-      Fellowship for early-career researchers in neuroscience, focusing on:
-      
-      - Neural circuit mapping
-      - Brain-computer interfaces
-      - Neurological disorder treatments
-      - Cognitive function studies
-      
-      ## Eligibility
-      * Postdoctoral researchers within 5 years of PhD completion
-      * Must be affiliated with a research institution
-      * Interdisciplinary approaches are encouraged
-    `,
-    questions: [
-      {
-        id: 1,
-        text: "Describe your neuroscience research background and experience.",
-        type: "shortAnswer",
-        characterLimit: 500,
-      },
-      {
-        id: 2,
-        text: "What is your primary research area?",
-        type: "multipleChoice",
-        options: ["Clinical neuroscience", "Cognitive neuroscience", "Computational neuroscience"],
-      },
-      {
-        id: 3,
-        text: "How will your research contribute to understanding or treating neurological disorders?",
-        type: "shortAnswer",
-        characterLimit: 750,
-      },
-      {
-        id: 4,
-        text: "What brain imaging techniques will you use in your research?",
-        type: "multipleChoice",
-        options: ["fMRI", "EEG", "Other/Multiple"],
-      },
-    ],
+  useEffect(() => {
+    const fetchGrant = async () => {
+      setLoading(true)
+      const { data: grantData, error } = await supabase
+        .from("grants")
+        .select("*, questions:grant_questions(*)")
+        .eq("grant_id", params.id)
+        .single()
+      setGrant(grantData)
+      setLoading(false)
+    }
+    fetchGrant()
+  }, [params.id])
+
+  if (loading) {
+    return <div className="container py-8 max-w-4xl text-center">Loading grant…</div>
+  }
+  if (!grant) {
+    return <div className="container py-8 max-w-4xl text-center text-destructive">Grant not found.</div>
   }
 
   // Function to render markdown-like formatting
@@ -196,30 +172,38 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
     }
   }
 
+  // Map questions from Supabase to expected structure
+  const questions = (grant.questions || []).map((q: any) => ({
+    id: q.id,
+    text: q.question_text,
+    type: q.question_type,
+    options: q.options || [],
+    characterLimit: q.character_limit || 500,
+  }))
+
+  // Use mapped questions throughout
+  const currentQuestion = questions[currentQuestionIndex]
+  const isLastQuestion = currentQuestionIndex === questions.length - 1
+  const isFirstQuestion = currentQuestionIndex === 0
+
+  // Update answer logic to use mapped questions
   const handleAnswerChange = (value: string) => {
     setAnswers({
       ...answers,
-      [grant.questions[currentQuestionIndex].id]: value,
+      [currentQuestion.id]: value,
     })
-
-    // Update word count for short answer questions
-    if (grant.questions[currentQuestionIndex].type === "shortAnswer") {
+    if (currentQuestion.type === "shortAnswer") {
       const words = value.trim() ? value.trim().split(/\s+/).length : 0
       setWordCount(words)
     }
   }
 
   const handleSubmit = () => {
-    // Check if all questions are answered
-    const allAnswered = grant.questions.every((q) => answers[q.id])
-
+    const allAnswered = questions.every((q) => answers[q.id])
     if (!allAnswered) {
       alert("Please answer all questions before submitting.")
       return
     }
-
-    console.log("Submitted answers:", answers)
-    console.log("Selected lab:", selectedLab)
     setSubmitted(true)
   }
 
@@ -236,18 +220,13 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
     router.push("/login")
   }
 
-  // Reset word count when changing questions
   useEffect(() => {
-    const currentAnswer = answers[grant.questions[currentQuestionIndex]?.id] || ""
-    if (grant.questions[currentQuestionIndex]?.type === "shortAnswer") {
+    const currentAnswer = answers[currentQuestion?.id] || ""
+    if (currentQuestion?.type === "shortAnswer") {
       const words = currentAnswer.trim() ? currentAnswer.trim().split(/\s+/).length : 0
       setWordCount(words)
     }
   }, [currentQuestionIndex, answers])
-
-  const currentQuestion = grant.questions[currentQuestionIndex]
-  const isLastQuestion = currentQuestionIndex === grant.questions.length - 1
-  const isFirstQuestion = currentQuestionIndex === 0
 
   return (
     <div className="container max-w-4xl py-8 px-4">
@@ -265,7 +244,7 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
               </div>
               <h2 className="text-2xl font-bold mb-2">Application Submitted!</h2>
               <p className="text-muted-foreground mb-6">
-                Thank you for applying to the {grant.name}. We'll review your application and get back to you soon.
+                Thank you for applying to the {grant.grant_name}. We'll review your application and get back to you soon.
               </p>
               <Button onClick={() => router.push("/grants")}>Return to Grants</Button>
             </div>
@@ -278,26 +257,23 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
             <CardHeader className="bg-muted/50 pb-4">
               <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                 <div>
-                  <CardTitle className="text-2xl">{grant.name}</CardTitle>
+                  <CardTitle className="text-2xl">{grant.grant_name}</CardTitle>
                   <CardDescription className="mt-2">
                     <div className="flex flex-wrap gap-4">
                       <div className="flex items-center text-sm">
                         <DollarSign className="h-4 w-4 mr-1 text-muted-foreground" />
-                        <span className="font-medium">${grant.amount.toLocaleString()}</span>
+                        <span className="font-medium">${grant.grant_amount?.toLocaleString()}</span>
                       </div>
                       <div className="flex items-center text-sm">
                         <Clock className="h-4 w-4 mr-1 text-muted-foreground" />
-                        <span>Deadline: {new Date(grant.deadline).toLocaleDateString()}</span>
+                        <span>Deadline: {grant.deadline ? new Date(grant.deadline).toLocaleDateString() : "N/A"}</span>
                       </div>
                     </div>
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {grant.categories.map((category) => (
-                    <Badge
-                      key={category}
-                      className="bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20"
-                    >
+                  {grant.grant_categories?.map((category: string) => (
+                    <Badge key={category} className="bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20">
                       {category}
                     </Badge>
                   ))}
@@ -305,7 +281,7 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
               </div>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="prose prose-sm dark:prose-invert max-w-none">{renderDescription(grant.description)}</div>
+              <div className="prose prose-sm dark:prose-invert max-w-none">{renderDescription(grant.grant_description)}</div>
             </CardContent>
           </Card>
 
@@ -318,7 +294,7 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
             <p className="text-muted-foreground">
               {currentStep === "userConfirmation"
                 ? "Please confirm your details before proceeding with the application."
-                : `Please answer all ${grant.questions.length} questions to complete your application.`}
+                : `Please answer all ${questions.length} questions to complete your application.`}
             </p>
           </div>
 
@@ -470,23 +446,23 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm text-muted-foreground">
-                    Question {currentQuestionIndex + 1} of {grant.questions.length}
+                    Question {currentQuestionIndex + 1} of {questions.length}
                   </span>
                   <span className="text-sm font-medium">
-                    {Math.round(((currentQuestionIndex + 1) / grant.questions.length) * 100)}% Complete
+                    {Math.round(((currentQuestionIndex + 1) / questions.length) * 100)}% Complete
                   </span>
                 </div>
                 <div className="w-full bg-muted h-2 rounded-full">
                   <div
                     className="bg-primary h-2 rounded-full transition-all duration-300 ease-in-out"
-                    style={{ width: `${((currentQuestionIndex + 1) / grant.questions.length) * 100}%` }}
+                    style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
                   ></div>
                 </div>
               </div>
 
               {/* Question Navigation */}
               <div className="flex gap-2 mb-4 overflow-x-auto py-2 px-1">
-                {grant.questions.map((question, index) => (
+                {questions.map((question, index) => (
                   <button
                     key={question.id}
                     onClick={() => setCurrentQuestionIndex(index)}
@@ -539,7 +515,7 @@ export default function GrantViewPage({ params }: GrantViewPageProps) {
                       onValueChange={handleAnswerChange}
                       className="space-y-3"
                     >
-                      {currentQuestion.options?.map((option, i) => (
+                      {currentQuestion.options?.map((option: string, i: number) => (
                         <div key={i} className="flex items-center space-x-2 rounded-md border p-3 hover:bg-muted/50">
                           <RadioGroupItem value={option} id={`option-${i}`} />
                           <Label htmlFor={`option-${i}`} className="flex-grow cursor-pointer">

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,11 +12,17 @@ import { Badge } from "@/components/ui/badge"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns"
-import { Plus, X, DollarSign, FileText, Tag, HelpCircle, Clock, CheckCircle2 } from "lucide-react"
+import { Plus, X, DollarSign, FileText, Tag, HelpCircle, Clock, CheckCircle2, Check, Search } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { supabase } from "@/lib/supabase"
+import { v4 as uuidv4 } from 'uuid'
+import { useAuth } from '@/components/auth-provider'
+import { researchAreas } from "@/lib/research-areas"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function NewGrantPage() {
   const router = useRouter()
+  const { user } = useAuth()
 
   // Form state - all initialized as empty
   const [name, setName] = useState("")
@@ -38,6 +44,9 @@ export default function NewGrantPage() {
       characterLimit?: number
     }[]
   >([])
+
+  // Grant creation loading and success animation
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
 
   // Add a category
   const addCategory = () => {
@@ -150,7 +159,7 @@ export default function NewGrantPage() {
   }
 
   // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!validateForm()) {
@@ -158,16 +167,65 @@ export default function NewGrantPage() {
       return
     }
 
-    console.log({
-      name,
-      amount: Number.parseFloat(amount),
-      description,
-      deadline: date,
-      categories,
-      questions,
-    })
-    alert("Grant created successfully!")
-    router.push("/grants")
+    setLoading(true)
+    setShowSuccessAnimation(false)
+    try {
+      // Generate a UUID for this grant
+      const newGrantId = uuidv4();
+
+      // Insert grant into Supabase
+      const { data: grant, error: grantError } = await supabase
+        .from("grants")
+        .insert({
+          grant_id: newGrantId,
+          grant_name: name,
+          grant_description: description,
+          grant_amount: Number.parseFloat(amount),
+          grant_categories: categories,
+          created_at: new Date().toISOString(),
+          deadline: date ? date.toISOString() : null,
+          org_id: selectedOrg ? selectedOrg.org_id : null,
+          created_by: user?.id || null,
+        })
+        .select()
+        .single()
+
+      if (grantError || !grant) {
+        setLoading(false)
+        alert("Error creating grant: " + (grantError?.message || "Unknown error"))
+        return
+      }
+
+      // Insert questions into Supabase
+      for (const q of questions) {
+        const { error: questionError } = await supabase
+          .from("grant_questions")
+          .insert({
+            question_id: uuidv4(),
+            grant_id: newGrantId, // Use the generated UUID
+            question_text: q.text,
+            question_type: q.type,
+            answer_choices: q.options || null,
+            character_limit: q.characterLimit !== undefined && q.characterLimit !== null ? parseInt(q.characterLimit as any, 10) : null,
+            created_by: user?.id || null,
+            created_at: new Date().toISOString(),
+          })
+        if (questionError) {
+          setLoading(false)
+          alert("Error creating question: " + questionError.message)
+          return
+        }
+      }
+
+      setShowSuccessAnimation(true)
+      setTimeout(() => {
+        setLoading(false)
+        router.push("/grants")
+      }, 1800)
+    } catch (error) {
+      setLoading(false)
+      alert("Failed to create grant. Please try again.")
+    }
   }
 
   // Get progress percentage
@@ -207,6 +265,75 @@ export default function NewGrantPage() {
 
     return Math.round((completed / total) * 100)
   }
+
+  // Fetch user's organizations
+  const [organizations, setOrganizations] = useState<any[]>([])
+  const [selectedOrg, setSelectedOrg] = useState<{ org_id: string; org_name: string; profilePic?: string } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const fetchOrganizations = async () => {
+      if (!user) return
+      // Fetch orgs where the current user is the creator
+      const { data: orgs, error: orgsError } = await supabase
+        .from("organizations")
+        .select("org_id, org_name")
+        .eq("created_by", user.id)
+      if (!orgsError && orgs) {
+        setOrganizations(orgs)
+      }
+    }
+    fetchOrganizations()
+  }, [user])
+
+  // Handle category selection
+  const handleCategoryClick = (value: string) => {
+    setCategories((prev) => {
+      const newCategories = prev.includes(value) 
+        ? prev.filter((category) => category !== value)
+        : prev.length < 3 
+          ? [...prev, value]
+          : prev
+      return newCategories
+    })
+  }
+
+  // Handle removing a category
+  const handleRemoveCategory = (e: React.MouseEvent, value: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCategories((prev) => prev.filter((category) => category !== value))
+  }
+
+  // --- Science categories dropdown logic (like create-lab) ---
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false)
+  const [categorySearchTerm, setCategorySearchTerm] = useState("")
+  const filteredAreas = categorySearchTerm
+    ? researchAreas.filter((area) => area.label.toLowerCase().includes(categorySearchTerm.toLowerCase()))
+    : researchAreas
+
+  // --- Organization search and selection logic (like create-lab) ---
+  const [orgSearch, setOrgSearch] = useState("")
+  const [orgOptions, setOrgOptions] = useState<{ org_id: string; org_name: string; profilePic?: string }[]>([])
+  const [orgSearchLoading, setOrgSearchLoading] = useState(false)
+  const [orgDropdownOpen, setOrgDropdownOpen] = useState(false)
+
+  useEffect(() => {
+    if (orgSearch.length < 1) {
+      setOrgOptions([])
+      return
+    }
+    setOrgSearchLoading(true)
+    supabase
+      .from("organizations")
+      .select("org_id, org_name, profilePic")
+      .ilike("org_name", `%${orgSearch}%`)
+      .limit(10)
+      .then(({ data, error }) => {
+        if (!error && data) setOrgOptions(data)
+        setOrgSearchLoading(false)
+      })
+  }, [orgSearch])
 
   return (
     <div className="container max-w-4xl py-8 px-4">
@@ -307,6 +434,76 @@ export default function NewGrantPage() {
           </CardContent>
         </Card>
 
+        {/* Associated Organization */}
+        <Card>
+          <CardHeader className="bg-muted/50">
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Associate with Organization (optional)
+            </CardTitle>
+            <CardDescription>Search and select an organization to associate with this grant</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="org-search">Organization</Label>
+              <div className="relative">
+                <Input
+                  id="org-search"
+                  placeholder="Search organizations by name..."
+                  value={selectedOrg ? selectedOrg.org_name : orgSearch}
+                  onChange={e => {
+                    setSelectedOrg(null)
+                    setOrgSearch(e.target.value)
+                    setOrgDropdownOpen(true)
+                  }}
+                  onFocus={() => setOrgDropdownOpen(true)}
+                  autoComplete="off"
+                />
+                {orgDropdownOpen && (orgSearch.length > 0 || orgOptions.length > 0) && (
+                  <div className="absolute z-20 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-auto">
+                    {orgSearchLoading && (
+                      <div className="p-2 text-center text-muted-foreground">Searching...</div>
+                    )}
+                    {!orgSearchLoading && orgOptions.length === 0 && orgSearch.length > 0 && (
+                      <div className="p-2 text-center text-muted-foreground">No organizations found</div>
+                    )}
+                    {!orgSearchLoading && orgOptions.map(org => (
+                      <div
+                        key={org.org_id}
+                        className="p-2 hover:bg-accent cursor-pointer flex items-center gap-2"
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => {
+                          setSelectedOrg(org)
+                          setOrgSearch(org.org_name)
+                          setOrgDropdownOpen(false)
+                        }}
+                      >
+                        <img src={org.profilePic || "/placeholder.svg"} alt={org.org_name} className="h-6 w-6 rounded-full object-cover border" />
+                        <span className="truncate">{org.org_name}</span>
+                      </div>
+                    ))}
+                    {selectedOrg && (
+                      <div className="p-2 text-xs text-muted-foreground border-t flex items-center gap-2">
+                        <img src={selectedOrg.profilePic || "/placeholder.svg"} alt={selectedOrg.org_name} className="h-4 w-4 rounded-full object-cover border" />
+                        <span>Selected: {selectedOrg.org_name}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {selectedOrg && (
+                <div className="flex items-center gap-2 mt-1">
+                  <img src={selectedOrg.profilePic || "/placeholder.svg"} alt={selectedOrg.org_name} className="h-4 w-4 rounded-full object-cover border" />
+                  <span className="text-xs text-muted-foreground">Selected: {selectedOrg.org_name}</span>
+                  <Button size="sm" variant="ghost" onClick={() => { setSelectedOrg(null); setOrgSearch(""); }}>
+                    Remove
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Categories */}
         <Card>
           <CardHeader className="bg-muted/50">
@@ -317,47 +514,80 @@ export default function NewGrantPage() {
             <CardDescription>Select up to 3 scientific fields relevant to your grant</CardDescription>
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
-            <div className="flex flex-wrap gap-2 mb-4 min-h-[40px]">
-              {categories.map((category) => (
-                <Badge
-                  key={category}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20"
-                >
-                  {category}
-                  <button
-                    type="button"
-                    onClick={() => removeCategory(category)}
-                    className="ml-1 h-4 w-4 rounded-full flex items-center justify-center hover:bg-primary/20"
-                  >
-                    <X className="h-3 w-3" />
-                    <span className="sr-only">Remove {category}</span>
-                  </button>
-                </Badge>
-              ))}
-              {categories.length === 0 && (
-                <p className="text-sm text-muted-foreground italic">No categories selected yet</p>
+            <div className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-between"
+                onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
+              >
+                {categories.length > 0
+                  ? `${categories.length} selected`
+                  : "Select science categories..."}
+              </Button>
+
+              {isCategoryDropdownOpen && (
+                <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg">
+                  <div className="flex items-center border-b p-2">
+                    <Search className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search science categories..."
+                      value={categorySearchTerm}
+                      onChange={(e) => setCategorySearchTerm(e.target.value)}
+                      className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    />
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto p-1">
+                    {filteredAreas.length === 0 ? (
+                      <div className="py-2 px-3 text-sm text-muted-foreground">No categories found</div>
+                    ) : (
+                      filteredAreas.map((area) => {
+                        const isSelected = categories.includes(area.value)
+                        return (
+                          <div
+                            key={area.value}
+                            className={`flex items-center px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer ${
+                              isSelected ? "bg-accent/50" : ""
+                            }`}
+                            onClick={() => handleCategoryClick(area.value)}
+                          >
+                            <div className="mr-2 h-4 w-4 flex items-center justify-center border rounded">
+                              {isSelected && <Check className="h-3 w-3" />}
+                            </div>
+                            {area.label}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 
-            <div className="flex gap-2">
-              <Input
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                placeholder="e.g., Neuroscience, Biology, Chemistry"
-                className="flex-1 border-muted-foreground/20 focus:border-primary"
-              />
-              <Button
-                type="button"
-                onClick={addCategory}
-                disabled={!newCategory || categories.length >= 3}
-                className="gap-1"
-              >
-                <Plus className="h-4 w-4" />
-                Add
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {categories.length}/3 categories selected. Choose categories that best represent your grant's focus area.
+            {categories.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {categories.map((category) => {
+                  const area = researchAreas.find((a) => a.value === category)
+                  return (
+                    <Badge key={category} variant="secondary" className="flex items-center gap-1">
+                      {area?.label}
+                      <button
+                        type="button"
+                        className="h-4 w-4 p-0 hover:bg-transparent rounded-full flex items-center justify-center"
+                        onClick={(e) => handleRemoveCategory(e, category)}
+                      >
+                        <X className="h-3 w-3" />
+                        <span className="sr-only">Remove {area?.label}</span>
+                      </button>
+                    </Badge>
+                  )
+                })}
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground mt-1">
+              Select up to 3 science categories ({categories.length}/3 selected)
             </p>
           </CardContent>
         </Card>
@@ -519,14 +749,80 @@ export default function NewGrantPage() {
               <Button type="button" variant="outline" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" className="gap-2">
-                <CheckCircle2 className="h-4 w-4" />
+              <Button type="submit" className="gap-2" disabled={!name || !description || !amount || !date || categories.length === 0 || loading}>
+                {loading ? "Creating..." : <CheckCircle2 className="h-4 w-4" />}
                 Create Grant
               </Button>
             </div>
           </CardContent>
         </Card>
       </form>
+
+      {/* Grant creation loading/success animation overlay */}
+      {(loading || showSuccessAnimation) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-8 flex flex-col items-center animate-fade-in min-w-[320px]">
+            {!showSuccessAnimation ? (
+              <div className="mb-4">
+                {/* Spinner */}
+                <svg className="animate-spin h-16 w-16 text-accent" viewBox="0 0 50 50">
+                  <circle className="opacity-20" cx="25" cy="25" r="20" stroke="currentColor" strokeWidth="5" fill="none" />
+                  <circle className="opacity-80" cx="25" cy="25" r="20" stroke="currentColor" strokeWidth="5" fill="none" strokeDasharray="100" strokeDashoffset="60" />
+                </svg>
+              </div>
+            ) : (
+              <div className="mb-4">
+                {/* Checkmark animation */}
+                <svg className="w-16 h-16 text-green-500 animate-pop-in" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="32" cy="32" r="30" stroke="currentColor" strokeWidth="4" fill="none" className="animate-circular-stroke" />
+                  <path d="M20 34L29 43L44 25" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="animate-checkmark" />
+                </svg>
+              </div>
+            )}
+            <div className="text-lg font-semibold text-accent text-center">
+              {!showSuccessAnimation ? "Creating grant..." : "Grant created successfully!"}
+            </div>
+            {showSuccessAnimation && (
+              <div className="text-sm text-muted-foreground text-center mt-1">Redirecting…</div>
+            )}
+          </div>
+          <style jsx global>{`
+            @keyframes fade-in {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            .animate-fade-in {
+              animation: fade-in 0.3s ease;
+            }
+            @keyframes pop-in {
+              0% { transform: scale(0.5); opacity: 0; }
+              80% { transform: scale(1.1); opacity: 1; }
+              100% { transform: scale(1); opacity: 1; }
+            }
+            .animate-pop-in {
+              animation: pop-in 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+            }
+            @keyframes circular-stroke {
+              0% { stroke-dasharray: 0 188.4; }
+              100% { stroke-dasharray: 188.4 0; }
+            }
+            .animate-circular-stroke {
+              stroke-dasharray: 188.4 0;
+              stroke-dashoffset: 0;
+              animation: circular-stroke 0.7s ease-out;
+            }
+            @keyframes checkmark {
+              0% { stroke-dasharray: 0 36; }
+              100% { stroke-dasharray: 36 0; }
+            }
+            .animate-checkmark {
+              stroke-dasharray: 36 0;
+              stroke-dashoffset: 0;
+              animation: checkmark 0.4s 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            }
+          `}</style>
+        </div>
+      )}
     </div>
   )
 }

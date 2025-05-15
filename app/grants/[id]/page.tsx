@@ -1,139 +1,67 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CalendarIcon, DollarSign, ArrowLeft, FileText } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
-interface GrantDetailPageProps {
-  params: {
-    id: string
+export default function GrantDetailPage() {
+  const params = useParams();
+  const grantId = params.id as string;
+  const [grant, setGrant] = useState<any>(null)
+  const [questions, setQuestions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showQuestions, setShowQuestions] = useState(false)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [submitted, setSubmitted] = useState(false)
+
+  useEffect(() => {
+    if (!grantId) return;
+    const fetchGrantAndQuestions = async () => {
+      setLoading(true)
+      const { data: grant, error: grantError } = await supabase
+        .from("grants")
+        .select("*")
+        .eq("grant_id", grantId)
+        .single()
+      if (grant) {
+        const { data: questionsData, error: questionsError } = await supabase
+          .from("grant_questions")
+          .select("*")
+          .eq("grant_id", grant.grant_id)
+        setQuestions(questionsData || [])
+      } else {
+        setQuestions([])
+      }
+      setGrant(grant)
+      setLoading(false)
+    }
+    fetchGrantAndQuestions()
+  }, [grantId])
+
+  if (loading) {
+    return <div className="container py-8 max-w-4xl text-center">Loading grant…</div>
   }
-}
-
-export default function GrantDetailPage({ params }: GrantDetailPageProps) {
-  // In a real app, you would fetch this data from your database
-  const grant = {
-    id: params.id,
-    name:
-      params.id === "1"
-        ? "Climate Research Initiative 2023"
-        : params.id === "2"
-          ? "Quantum Computing Innovation Grant"
-          : "Neuroscience Research Fellowship",
-    categories:
-      params.id === "1"
-        ? ["Environmental Science", "Earth Science"]
-        : params.id === "2"
-          ? ["Computer Science", "Physics"]
-          : ["Neuroscience", "Medicine", "Biology"],
-    amount: params.id === "1" ? 50000 : params.id === "2" ? 75000 : 35000,
-    deadline: params.id === "1" ? "2023-12-31" : params.id === "2" ? "2023-11-15" : "2024-01-15",
-    description:
-      params.id === "1"
-        ? `**Climate Research Initiative 2023**
-
-This grant supports innovative research addressing climate change challenges. We're looking for projects that:
-
-- Develop new technologies for carbon capture
-- Create sustainable energy solutions
-- Improve climate modeling and prediction
-- Design adaptation strategies for vulnerable communities
-
-## Eligibility
-* Researchers affiliated with accredited institutions
-* Early-career scientists are especially encouraged to apply
-* International collaborations welcome
-
-1. Applications must include preliminary data
-2. Projects should have clear deliverables
-3. Budget justification is required`
-        : params.id === "2"
-          ? `**Quantum Computing Innovation Grant**
-
-Supporting breakthrough research in quantum computing applications. This grant focuses on:
-
-- Quantum algorithm development
-- Error correction techniques
-- Quantum hardware innovations
-- Practical applications in cryptography, optimization, and simulation
-
-## Eligibility
-* PhD-level researchers in computer science, physics, or related fields
-* Both academic and industry researchers may apply
-* Collaborative projects between institutions are encouraged`
-          : `**Neuroscience Research Fellowship**
-
-Fellowship for early-career researchers in neuroscience, focusing on:
-
-- Neural circuit mapping
-- Brain-computer interfaces
-- Neurological disorder treatments
-- Cognitive function studies
-
-## Eligibility
-* Postdoctoral researchers within 5 years of PhD completion
-* Must be affiliated with a research institution
-* Interdisciplinary approaches are encouraged`,
-    questions:
-      params.id === "1"
-        ? [
-            { id: "1", type: "shortAnswer", text: "Describe your research methodology and approach." },
-            { id: "2", type: "shortAnswer", text: "How does your project address climate change challenges?" },
-            {
-              id: "3",
-              type: "multipleChoice",
-              text: "What is your primary research focus?",
-              options: ["Mitigation", "Adaptation", "Both equally"],
-            },
-          ]
-        : params.id === "2"
-          ? [
-              { id: "1", type: "shortAnswer", text: "Describe your experience with quantum computing research." },
-              {
-                id: "2",
-                type: "shortAnswer",
-                text: "What specific quantum computing challenge does your project address?",
-              },
-              {
-                id: "3",
-                type: "multipleChoice",
-                text: "What quantum computing platform does your research target?",
-                options: ["Superconducting qubits", "Trapped ions", "Photonic systems"],
-              },
-              { id: "4", type: "shortAnswer", text: "How will your research advance the field of quantum computing?" },
-              {
-                id: "5",
-                type: "multipleChoice",
-                text: "Is your approach primarily theoretical or experimental?",
-                options: ["Theoretical", "Experimental", "Both equally"],
-              },
-            ]
-          : [
-              { id: "1", type: "shortAnswer", text: "Describe your neuroscience research background." },
-              {
-                id: "2",
-                type: "multipleChoice",
-                text: "What is your primary research area?",
-                options: ["Clinical neuroscience", "Cognitive neuroscience", "Computational neuroscience"],
-              },
-              {
-                id: "3",
-                type: "shortAnswer",
-                text: "How will your research contribute to understanding or treating neurological disorders?",
-              },
-              {
-                id: "4",
-                type: "multipleChoice",
-                text: "What brain imaging techniques will you use?",
-                options: ["fMRI", "EEG", "Other/Multiple"],
-              },
-            ],
+  if (!grant) {
+    return <div className="container py-8 max-w-4xl text-center text-destructive">Grant not found.</div>
   }
+
+  // Map questions to expected structure
+  const mappedQuestions = (questions || []).map((q: any) => ({
+    id: q.id,
+    text: q.question_text,
+    type: q.question_type,
+    options: q.options || [],
+    characterLimit: q.character_limit || 500,
+  }))
 
   // Function to render markdown-like formatting
   const renderDescription = (text: string) => {
     return text.split("\n\n").map((paragraph, i) => {
-      // Handle headings
       if (paragraph.startsWith("## ")) {
         return (
           <h2 key={i} className="text-xl font-bold mt-4 mb-2">
@@ -141,8 +69,6 @@ Fellowship for early-career researchers in neuroscience, focusing on:
           </h2>
         )
       }
-
-      // Handle lists
       if (paragraph.includes("\n- ")) {
         const [listTitle, ...items] = paragraph.split("\n- ")
         return (
@@ -156,8 +82,6 @@ Fellowship for early-career researchers in neuroscience, focusing on:
           </div>
         )
       }
-
-      // Handle numbered lists
       if (paragraph.includes("\n1. ")) {
         const [listTitle, ...items] = paragraph.split("\n")
         return (
@@ -171,8 +95,6 @@ Fellowship for early-career researchers in neuroscience, focusing on:
           </div>
         )
       }
-
-      // Handle bullet lists with *
       if (paragraph.includes("\n* ")) {
         const [listTitle, ...items] = paragraph.split("\n* ")
         return (
@@ -186,14 +108,22 @@ Fellowship for early-career researchers in neuroscience, focusing on:
           </div>
         )
       }
-
-      // Handle bold and italic
       let formattedText = paragraph
       formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
       formattedText = formattedText.replace(/\*(.*?)\*/g, "<em>$1</em>")
-
       return <p key={i} className="my-3" dangerouslySetInnerHTML={{ __html: formattedText }} />
     })
+  }
+
+  // Handler for answer changes
+  const handleAnswerChange = (id: string, value: string) => {
+    setAnswers((prev) => ({ ...prev, [id]: value }))
+  }
+
+  // Handler for form submission
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitted(true)
   }
 
   return (
@@ -206,75 +136,108 @@ Fellowship for early-career researchers in neuroscience, focusing on:
           </Button>
         </Link>
       </div>
-
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">{grant.name}</CardTitle>
+            <CardTitle className="text-2xl">{grant.grant_name}</CardTitle>
             <CardDescription>
               <div className="flex flex-wrap gap-4 mt-2">
                 <div className="flex items-center">
                   <DollarSign className="h-5 w-5 mr-1" />
-                  <span className="text-lg">${grant.amount.toLocaleString()}</span>
+                  <span className="text-lg">${grant.grant_amount?.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center">
                   <CalendarIcon className="h-5 w-5 mr-1" />
-                  <span>Deadline: {new Date(grant.deadline).toLocaleDateString()}</span>
+                  <span>Deadline: {grant.deadline ? new Date(grant.deadline).toLocaleDateString() : "N/A"}</span>
                 </div>
               </div>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              {grant.categories.map((category) => (
+              {grant.grant_categories?.map((category: string) => (
                 <Badge key={category} variant="secondary">
                   {category}
                 </Badge>
               ))}
             </div>
-
-            <div className="prose prose-sm dark:prose-invert max-w-none">{renderDescription(grant.description)}</div>
+            <div className="prose prose-sm dark:prose-invert max-w-none">{renderDescription(grant.grant_description)}</div>
           </CardContent>
           <CardFooter>
-            <Link href={`/grants/${params.id}/apply`} className="w-full">
-              <Button className="w-full">Apply for this Grant</Button>
-            </Link>
+            {!showQuestions && !submitted && (
+              <Button className="w-full" onClick={() => setShowQuestions(true)}>
+                Apply for this Grant
+              </Button>
+            )}
           </CardFooter>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <FileText className="mr-2 h-5 w-5" />
-              Application Questions
-            </CardTitle>
-            <CardDescription>Your application will need to answer the following questions:</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {grant.questions.map((question, index) => (
-                <div key={question.id} className="border-b pb-4 last:border-0">
-                  <h3 className="font-medium mb-2">
-                    Question {index + 1}: {question.text}
-                  </h3>
-                  {question.type === "multipleChoice" && question.options && (
-                    <div className="ml-6 mt-2 space-y-2">
-                      <p className="text-sm text-muted-foreground">Options:</p>
-                      <ul className="list-disc pl-5 text-sm">
-                        {question.options.map((option, i) => (
-                          <li key={i}>{option}</li>
+        {showQuestions && !submitted && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <FileText className="mr-2 h-5 w-5" />
+                Application Questions
+              </CardTitle>
+              <CardDescription>Your application will need to answer the following questions:</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {mappedQuestions.map((question: any, index: number) => (
+                  <div key={question.id} className="border-b pb-4 last:border-0">
+                    <h3 className="font-medium mb-2">
+                      Question {index + 1}: {question.text}
+                    </h3>
+                    {question.type === "multipleChoice" && question.options && (
+                      <div className="ml-6 mt-2 space-y-2">
+                        {question.options.map((option: string, i: number) => (
+                          <label key={i} className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`question-${question.id}`}
+                              value={option}
+                              checked={answers[question.id] === option}
+                              onChange={() => handleAnswerChange(question.id, option)}
+                            />
+                            {option}
+                          </label>
                         ))}
-                      </ul>
-                    </div>
-                  )}
-                  {question.type === "shortAnswer" && (
-                    <p className="text-sm text-muted-foreground ml-6 mt-2">Short answer response required</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                      </div>
+                    )}
+                    {question.type === "shortAnswer" && (
+                      <textarea
+                        className="w-full border rounded p-2 mt-2"
+                        rows={4}
+                        value={answers[question.id] || ""}
+                        onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                        placeholder="Type your answer here..."
+                        required
+                      />
+                    )}
+                  </div>
+                ))}
+                <Button type="submit" className="w-full mt-4">
+                  Submit Application
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+        {submitted && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Application Submitted!</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="py-8 text-center">
+                <p className="text-lg mb-4">Thank you for applying to the {grant.grant_name}.</p>
+                <p className="text-muted-foreground">We'll review your application and get back to you soon.</p>
+                <Button className="mt-6" onClick={() => setShowQuestions(false)}>
+                  Back to Grant
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )

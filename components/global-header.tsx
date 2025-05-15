@@ -135,7 +135,7 @@ export function GlobalHeader() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem disabled={!user} className={!user ? "opacity-50 cursor-not-allowed" : ""}>
-                <Link href="/create-grant" className="flex w-full items-center">
+                <Link href="/grants/new" className="flex w-full items-center">
                   <Award className="h-4 w-4 mr-2" />
                   Grant
                 </Link>
