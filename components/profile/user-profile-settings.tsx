@@ -21,6 +21,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 
 interface UserProfileSettingsProps {
   onClose: () => void
+  defaultTab?: string
 }
 
 // Initialize Stripe
@@ -89,12 +90,13 @@ function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
+export function UserProfileSettings({ onClose, defaultTab = "profile" }: UserProfileSettingsProps & { defaultTab?: string }) {
   const { user } = useAuth()
   const [name, setName] = useState("")
   const [username, setUsername] = useState("")
   const [bio, setBio] = useState("")
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
+  const [tab, setTab] = useState(defaultTab)
 
   // Mock data for science categories
   const allScienceCategories = [
@@ -397,7 +399,7 @@ export function UserProfileSettings({ onClose }: UserProfileSettingsProps) {
         <Button onClick={onClose}>Save Changes</Button>
       </div>
 
-      <Tabs defaultValue="profile" className="w-full">
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="profile">Profile Information</TabsTrigger>
           <TabsTrigger value="interests">Research Interests</TabsTrigger>

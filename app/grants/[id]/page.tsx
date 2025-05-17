@@ -5,9 +5,10 @@ import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CalendarIcon, DollarSign, ArrowLeft, FileText } from "lucide-react"
+import { CalendarIcon, DollarSign, ArrowLeft, FileText, Banknote, Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAuth } from "@/components/auth-provider"
 
 export default function GrantPreviewPage() {
   const params = useParams();
@@ -19,6 +20,17 @@ export default function GrantPreviewPage() {
   const [org, setOrg] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [questionsLoading, setQuestionsLoading] = useState(false)
+  const { user } = useAuth();
+  const [userApplication, setUserApplication] = useState<any>(null);
+  const [userAnswers, setUserAnswers] = useState<any[]>([]);
+  const [answersLoading, setAnswersLoading] = useState(false);
+  const [awardedUser, setAwardedUser] = useState<string | null>(null);
+  const [bankInfo, setBankInfo] = useState<any>(null);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankError, setBankError] = useState<string | null>(null);
+  const [showConnectBank, setShowConnectBank] = useState(false);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutSuccess, setPayoutSuccess] = useState(false);
 
   useEffect(() => {
     if (!grantId) return;
@@ -69,6 +81,131 @@ export default function GrantPreviewPage() {
     }
     fetchGrant()
   }, [grantId])
+
+  useEffect(() => {
+    if (!grantId || !user?.id) return;
+    const fetchUserApplicationAndAnswers = async () => {
+      setAnswersLoading(true);
+      // 1. Check if user has applied
+      const { data: application, error: appError } = await supabase
+        .from("grant_applicants")
+        .select("*")
+        .eq("grant_id", grantId)
+        .eq("completed_by", user.id)
+        .single();
+      setUserApplication(application);
+      if (application) {
+        // 2. Fetch answers
+        const { data: answers, error: answersError } = await supabase
+          .from("grant_answers")
+          .select("*")
+          .eq("grant_id", grantId)
+          .eq("answered_by", user.id);
+        // 3. Map answers to questions
+        const questionMap: Record<string, any> = {};
+        (questions || []).forEach((q: any) => {
+          questionMap[String(q.question_id)] = q;
+        });
+        setUserAnswers(
+          (answers || []).map(ans => ({
+            question_id: String(ans.question_id),
+            question: questionMap[String(ans.question_id)]?.question_text,
+            answer: ans.answer_text,
+            type: questionMap[String(ans.question_id)]?.question_type,
+            options: questionMap[String(ans.question_id)]?.answer_choices || [],
+          }))
+        );
+      } else {
+        setUserAnswers([]);
+      }
+      setAnswersLoading(false);
+    };
+    fetchUserApplicationAndAnswers();
+  }, [grantId, user, questions]);
+
+  // Fetch awarded user's username if awarded
+  useEffect(() => {
+    if (grant && grant.closure_status === "AWARDED" && grant.user_accepted) {
+      (async () => {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("user_id", grant.user_accepted)
+          .single();
+        setAwardedUser(profile?.username || null);
+      })();
+    } else {
+      setAwardedUser(null);
+    }
+  }, [grant]);
+
+  // Fetch user's payout bank info
+  useEffect(() => {
+    if (!user?.id) return;
+    setBankLoading(true);
+    setBankError(null);
+    (async () => {
+      try {
+        // 1. Fetch funding_id from profiles
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('funding_id')
+          .eq('user_id', user.id)
+          .single();
+        if (error || !profile?.funding_id) {
+          setBankInfo(null);
+          setBankLoading(false);
+          return;
+        }
+        // 2. Fetch bank info using funding_id
+        const res = await fetch('/api/stripe/get-funding-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ funding_id: profile.funding_id }),
+        });
+        const data = await res.json();
+        if (data.error) setBankError(data.error);
+        else setBankInfo(data);
+      } catch (err) {
+        setBankError('Failed to fetch bank info');
+      } finally {
+        setBankLoading(false);
+      }
+    })();
+  }, [user?.id, payoutSuccess]);
+
+  // Payout handler
+  const handlePayout = async () => {
+    if (!user?.id) return;
+    setPayoutLoading(true);
+    setPayoutSuccess(false);
+    try {
+      const res = await fetch('/api/stripe/send-payout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': user.id },
+        body: JSON.stringify({ grant_id: grantId }),
+      });
+      const data = await res.json();
+      if (!data.error) {
+        setPayoutSuccess(true);
+        // Refresh grant data to get updated stripe_id
+        const { data: updatedGrant } = await supabase
+          .from("grants")
+          .select("*")
+          .eq("grant_id", grantId)
+          .single();
+        if (updatedGrant) {
+          setGrant(updatedGrant);
+        }
+      } else {
+        setBankError(data.error);
+      }
+    } catch (err) {
+      setBankError('Failed to send payout');
+    } finally {
+      setPayoutLoading(false);
+    }
+  }
 
   // Markdown-like description renderer
   const renderDescription = (text: string) => {
@@ -132,6 +269,24 @@ export default function GrantPreviewPage() {
       {/* Grant Details Section */}
       <Card className="mb-8">
         <CardHeader className="bg-muted/50 pb-4">
+          {/* Status Badge Row */}
+          <div className="flex items-center gap-3 mb-2">
+            {user && userApplication && (
+              <Badge className="bg-blue-100 text-blue-800">APPLIED</Badge>
+            )}
+            {grant.closure_status === "AWARDED" && grant.user_accepted ? (
+              <Badge className="bg-green-100 text-green-800">
+                {user && user.id === grant.user_accepted
+                  ? "GRANT AWARDED TO YOU"
+                  : awardedUser
+                  ? `GRANT AWARDED TO ${awardedUser}`
+                  : "GRANT AWARDED"}
+              </Badge>
+            ) : (
+              <Badge className="bg-yellow-100 text-yellow-800">GRANT NOT YET AWARDED</Badge>
+            )}
+          </div>
+          {/* End Status Badge Row */}
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
             <div>
               <CardTitle className="text-2xl">{grant.grant_name}</CardTitle>
@@ -183,47 +338,138 @@ export default function GrantPreviewPage() {
         </CardHeader>
         <CardContent className="pt-6">
           <div className="prose prose-sm dark:prose-invert max-w-none mb-8">{renderDescription(grant.grant_description)}</div>
-
-          {/* Application Questions Preview */}
-          <div className="mt-8">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="h-5 w-5 text-muted-foreground" />
-              <span className="text-lg font-bold">Application Questions</span>
-            </div>
-            {questionsLoading ? (
-              <div className="text-muted-foreground text-sm">Loading questions…</div>
-            ) : questions.length === 0 ? (
-              <div className="text-muted-foreground text-sm">No application questions for this grant.</div>
-            ) : (
-              <ol className="space-y-4 list-decimal ml-6">
-                {questions.map((q, i) => (
-                  <li key={q.id || q.question_id} className="">
-                    <div className="font-medium">{q.question_text}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {q.question_type === "shortAnswer"
-                        ? `Short answer${q.character_limit ? ` (limit: ${q.character_limit} words)` : ""}`
-                        : q.question_type === "multipleChoice"
-                        ? `Multiple choice: ${Array.isArray(q.answer_choices) ? q.answer_choices.join(", ") : ""}`
-                        : q.question_type}
+          {/* If user has applied, show their answers instead of the apply button */}
+          {user && userApplication && grant.closure_status === "AWARDED" && grant.user_accepted === user.id && (
+            <>
+              <div className="mb-6 p-4 rounded-lg bg-green-50 border border-green-200 flex items-center gap-3">
+                <Banknote className="h-6 w-6 text-green-700" />
+                <div>
+                  <div className="font-bold text-green-900 text-lg">Congratulations! You have been awarded this grant.</div>
+                  <div className="text-green-800 text-sm">Please connect your payout bank account and claim your funds below.</div>
+                </div>
+              </div>
+              <div className="mb-8">
+                <div className="flex items-center gap-3 mb-2">
+                  <Banknote className="h-5 w-5 text-primary" />
+                  <span className="font-semibold">Your Payout Bank Account</span>
+                </div>
+                {grant.stripe_id ? (
+                  <div className="bg-muted/60 border border-muted-foreground/20 rounded p-4 flex flex-col items-center opacity-60 cursor-not-allowed select-none">
+                    <div className="flex items-center gap-3 mb-2">
+                      {bankInfo && bankInfo.last4 ? (
+                        <span className="text-sm">{bankInfo.bankName || bankInfo.bank_name} ••••{bankInfo.last4}</span>
+                      ) : (
+                        <span className="text-muted-foreground">No payout bank account connected.</span>
+                      )}
                     </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
+                    <Button variant="outline" size="sm" disabled>Change</Button>
+                    <Button className="mt-2" disabled>Payout has been issued</Button>
+                    <div className="mt-4 text-center text-sm text-muted-foreground font-semibold">
+                      PAYOUT HAS BEEN ISSUED TO YOUR CONNECTED PAYOUT ACCOUNT.<br />
+                      PLEASE CONTACT US: <a href="mailto:contact@heterodoxlabs.com" className="underline">contact@heterodoxlabs.com</a> if you experience any issues.
+                    </div>
+                  </div>
+                ) : bankLoading ? (
+                  <div className="text-muted-foreground">Loading bank info…</div>
+                ) : bankInfo && bankInfo.last4 ? (
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-sm">{bankInfo.bankName || bankInfo.bank_name} ••••{bankInfo.last4}</span>
+                    <Button variant="outline" size="sm" onClick={() => setShowConnectBank(true)}>Change</Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-muted-foreground">No payout bank account connected.</span>
+                    <Button variant="outline" size="sm" onClick={() => router.push('/profile?tab=bank')}>Connect Bank</Button>
+                  </div>
+                )}
+                {bankInfo && bankInfo.last4 && !grant.stripe_id && (
+                  <Button 
+                    className="mt-2" 
+                    onClick={handlePayout} 
+                    disabled={payoutLoading || payoutSuccess}
+                  >
+                    {payoutLoading ? (
+                      <span className="flex items-center gap-2"><Loader2 className="animate-spin h-4 w-4" /> Processing…</span>
+                    ) : payoutSuccess ? (
+                      'Payout has been issued!'
+                    ) : (
+                      'Receive Grant Payout'
+                    )}
+                  </Button>
+                )}
+                {bankError && <div className="text-red-600 mt-2">{bankError}</div>}
+                {/* Modal or dialog for connecting bank can be implemented here if needed */}
+              </div>
+            </>
+          )}
+          {user && userApplication ? (
+            <div className="mt-8">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-5 w-5 text-muted-foreground" />
+                <span className="text-lg font-bold">Your Application Responses</span>
+              </div>
+              {answersLoading ? (
+                <div className="text-muted-foreground text-sm">Loading your responses…</div>
+              ) : userAnswers.length === 0 ? (
+                <div className="text-muted-foreground text-sm">No responses found for your application.</div>
+              ) : (
+                <ol className="space-y-4 list-decimal ml-6">
+                  {userAnswers.map((response, i) => (
+                    <li key={response.question_id || i} className="">
+                      <div className="font-medium">{response.question || <span className="text-destructive">No matching question found</span>}</div>
+                      <div className="bg-muted p-4 rounded-md mt-1">{response.answer}</div>
+                      {response.type === "multiple_choice" && (
+                        <div className="text-xs text-muted-foreground">Options: {response.options.join(", ")}</div>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          ) : (
+            // Show application questions preview and apply button if not applied
+            <>
+              {/* Application Questions Preview */}
+              <div className="mt-8">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-lg font-bold">Application Questions</span>
+                </div>
+                {questionsLoading ? (
+                  <div className="text-muted-foreground text-sm">Loading questions…</div>
+                ) : questions.length === 0 ? (
+                  <div className="text-muted-foreground text-sm">No application questions for this grant.</div>
+                ) : (
+                  <ol className="space-y-4 list-decimal ml-6">
+                    {questions.map((q, i) => (
+                      <li key={q.id || q.question_id} className="">
+                        <div className="font-medium">{q.question_text}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {q.question_type === "shortAnswer"
+                            ? `Short answer${q.character_limit ? ` (limit: ${q.character_limit} words)` : ""}`
+                            : q.question_type === "multipleChoice"
+                            ? `Multiple choice: ${Array.isArray(q.answer_choices) ? q.answer_choices.join(", ") : ""}`
+                            : q.question_type}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+              {/* Apply Button */}
+              <div className="flex justify-center mt-8">
+                <Button 
+                  size="lg" 
+                  className="px-8 py-6 text-lg"
+                  onClick={() => router.push(`/grants/${grantId}/apply`)}
+                >
+                  Apply for this Grant
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
-
-      {/* Apply Button */}
-      <div className="flex justify-center">
-        <Button 
-          size="lg" 
-          className="px-8 py-6 text-lg"
-          onClick={() => router.push(`/grants/${grantId}/apply`)}
-        >
-          Apply for this Grant
-        </Button>
-      </div>
     </div>
   )
 }

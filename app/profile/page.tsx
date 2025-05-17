@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -14,10 +14,19 @@ import { UserPublications } from "@/components/profile/user-publications"
 import { UserProfileSettings } from "@/components/profile/user-profile-settings"
 import { Settings } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
+import { useSearchParams } from "next/navigation"
 
 export default function ProfilePage() {
   const [showSettings, setShowSettings] = useState(false)
   const { user, isLoading } = useAuth()
+  const searchParams = useSearchParams();
+  const defaultTab = searchParams.get("tab") || "profile";
+
+  useEffect(() => {
+    if (searchParams.get("tab")) {
+      setShowSettings(true);
+    }
+  }, [searchParams]);
 
   // Simple loading state
   if (isLoading) {
@@ -59,7 +68,7 @@ export default function ProfilePage() {
   }
 
   if (showSettings) {
-    return <UserProfileSettings user={userData} onClose={() => setShowSettings(false)} />
+    return <UserProfileSettings user={userData} onClose={() => setShowSettings(false)} defaultTab={defaultTab} />
   }
 
   return (

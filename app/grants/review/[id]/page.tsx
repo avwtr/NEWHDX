@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
+import GrantReviewLoading from "./loading"
 
 export default function GrantReviewPage() {
   const router = useRouter()
@@ -44,6 +45,12 @@ export default function GrantReviewPage() {
   const [applications, setApplications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [bankInfo, setBankInfo] = useState<any>(null);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankError, setBankError] = useState<string | null>(null);
+  const [authorizeChecked, setAuthorizeChecked] = useState(false);
+  const [isAwarding, setIsAwarding] = useState(false);
+  const [awardedUser, setAwardedUser] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -189,6 +196,44 @@ export default function GrantReviewPage() {
     }
   }, [grant, user]);
 
+  // Fetch grant creator's payment method (card) using /api/stripe/get-payment-info and user ID
+  useEffect(() => {
+    if (!grant?.created_by) return;
+    setBankLoading(true);
+    setBankError(null);
+    (async () => {
+      try {
+        const res = await fetch('/api/stripe/get-payment-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-user-id': grant.created_by },
+        });
+        const data = await res.json();
+        if (data.error) setBankError(data.error);
+        else setBankInfo(data);
+      } catch (err) {
+        setBankError('Failed to fetch payment info');
+      } finally {
+        setBankLoading(false);
+      }
+    })();
+  }, [grant?.created_by]);
+
+  // Fetch awarded user's username if awarded
+  useEffect(() => {
+    if (grant && grant.closure_status === "AWARDED" && grant.user_accepted) {
+      (async () => {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("user_id", grant.user_accepted)
+          .single();
+        setAwardedUser(profile?.username || null);
+      })();
+    } else {
+      setAwardedUser(null);
+    }
+  }, [grant]);
+
   if (error) {
     return <div className="container py-8 text-center text-destructive">{error}</div>;
   }
@@ -227,13 +272,31 @@ export default function GrantReviewPage() {
     setSelectedApplication(null)
   }
 
-  const handleAwardGrant = async (applicationId: string) => {
+  const handleAwardGrant = async (applicationId: string, applicantUserId: string) => {
+    setIsAwarding(true);
+    // 1. Update the applicant's acceptance_status
     await supabase
       .from("grant_applicants")
       .update({ acceptance_status: "awarded" })
       .eq("id", applicationId)
-    setApplications(applications.map(a => a.id === applicationId ? { ...a, acceptance_status: "awarded" } : a))
+    // 2. Update the grant's user_accepted and closure_status only
+    await supabase
+      .from("grants")
+      .update({
+        user_accepted: applicantUserId,
+        closure_status: "AWARDED"
+      })
+      .eq("grant_id", grantId)
+    // Refetch grant to get updated status and awarded user
+    const { data: updatedGrant } = await supabase
+      .from("grants")
+      .select("*")
+      .eq("grant_id", grantId)
+      .single();
+    setGrant(updatedGrant);
+    setApplications((applications: any[]) => applications.map((a: any) => a.id === applicationId ? { ...a, acceptance_status: "awarded" } : a))
     setConfirmAwardDialog({ open: false, applicationId: "" })
+    setIsAwarding(false);
   }
 
   const handleDeleteGrant = async () => {
@@ -268,6 +331,56 @@ export default function GrantReviewPage() {
   // Find the selected application
   const selectedApp = applications.find((app) => app.id === selectedApplication)
 
+  if (isAwarding) {
+    return <GrantReviewLoading />;
+  }
+
+  if (grant?.closure_status === "AWARDED" && awardedUser) {
+    const isWinner = user?.id === grant.user_accepted;
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center z-10 bg-background">
+        <div className="w-full max-w-xl">
+          <div className="flex flex-col items-center mb-8">
+            <Badge variant="secondary" className="bg-primary/10 text-primary text-lg px-6 py-3 mb-4 shadow-md rounded-full border border-primary">
+              <Award className="h-5 w-5 mr-2 text-primary" /> AWARDED to {awardedUser}
+            </Badge>
+            {isWinner && (
+              <>
+                <h2 className="text-2xl font-bold text-primary mb-2 tracking-tight">Congratulations!</h2>
+                <p className="text-muted-foreground text-center max-w-md">You have been awarded this grant. See the details below.</p>
+              </>
+            )}
+          </div>
+          <Card className="shadow-lg border-2 border-primary/20">
+            <CardHeader>
+              <CardTitle className="text-3xl font-bold text-center">{grant.grant_name}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="text-lg text-muted-foreground text-center">{grant.grant_description}</div>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {Array.isArray(grant.grant_categories) && grant.grant_categories.map((cat: string) => (
+                  <Badge key={cat} variant="outline">{cat}</Badge>
+                ))}
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-8 mt-4">
+                <div className="flex items-center">
+                  <DollarSign className="h-5 w-5 mr-2 text-primary" />
+                  <span className="font-semibold text-xl text-primary">
+                    {typeof grant.grant_amount === "number" ? `$${grant.grant_amount.toLocaleString()}` : ""}
+                  </span>
+                </div>
+                <div className="flex items-center">
+                  <Calendar className="h-5 w-5 mr-2 text-primary" />
+                  <span className="text-lg text-primary">Deadline: {grant.deadline ? new Date(grant.deadline).toLocaleDateString() : ""}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container py-8">
       <div className="mb-8">
@@ -276,7 +389,7 @@ export default function GrantReviewPage() {
             <Link href="/grants" className="text-sm text-muted-foreground hover:underline mb-2 inline-block">
               ← Back to Grants
             </Link>
-            <h1 className="text-3xl font-bold">{grant?.name || 'Grant'}</h1>
+            <h1 className="text-3xl font-bold">{grant?.grant_name || 'Grant'}</h1>
             <div className="flex items-center gap-4 mt-2">
               <div className="flex items-center">
                 <DollarSign className="h-4 w-4 mr-1 text-muted-foreground" />
@@ -579,15 +692,46 @@ export default function GrantReviewPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Award Grant</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to award this grant? This action will notify the applicant and cannot be undone.
-            </DialogDescription>
           </DialogHeader>
+          {/* Payment method info and authorization (not inside DialogDescription) */}
+          <div className="mb-2 text-sm text-muted-foreground">
+            Are you sure you want to award this grant to this applicant? This action will notify the applicant and cannot be undone.
+          </div>
+          <div className="mb-4">
+            <div className="font-semibold mb-1">Your Payment Method on File:</div>
+            {bankLoading ? (
+              <div className="text-muted-foreground">Loading payment method…</div>
+            ) : bankError ? (
+              <div className="text-red-600">{bankError}</div>
+            ) : bankInfo && bankInfo.type === 'card' ? (
+              <div className="flex items-center gap-3">
+                <span className="text-sm">{bankInfo.brand?.toUpperCase()} ••••{bankInfo.last4}</span>
+                {/* Add change/remove logic as needed */}
+              </div>
+            ) : (
+              <div className="text-muted-foreground">No payment method connected.</div>
+            )}
+          </div>
+          <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded text-yellow-900 text-sm">
+            <strong>Payment Authorization:</strong> By confirming, you authorize us to charge your connected payment source for the grant amount (${grant?.grant_amount?.toLocaleString() || ""}) <b>only if the winner claims the payout</b>.
+          </div>
+          <div className="flex items-center gap-2 mb-4">
+            <input type="checkbox" id="authorize" checked={authorizeChecked} onChange={e => setAuthorizeChecked(e.target.checked)} />
+            <label htmlFor="authorize" className="text-sm">I authorize this charge if the winner claims the payout.</label>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmAwardDialog({ open: false, applicationId: "" })}>
               Cancel
             </Button>
-            <Button onClick={() => handleAwardGrant(confirmAwardDialog.applicationId)}>Confirm Award</Button>
+            <Button
+              onClick={() => {
+                const app = applications.find(a => a.id === confirmAwardDialog.applicationId);
+                if (app) handleAwardGrant(confirmAwardDialog.applicationId, app.completed_by);
+              }}
+              disabled={!authorizeChecked || bankLoading || !bankInfo}
+            >
+              Confirm & Authorize Award
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

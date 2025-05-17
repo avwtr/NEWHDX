@@ -385,12 +385,20 @@ export default function NewGrantPage() {
                     id="amount"
                     type="number"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="e.g., 25000"
+                    onChange={(e) => {
+                      const value = Math.min(Number(e.target.value), 5000);
+                      setAmount(value.toString());
+                    }}
+                    placeholder="e.g., 5000"
                     className="pl-10 border-muted-foreground/20 focus:border-primary"
+                    min="0"
+                    max="5000"
                     required
                   />
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Maximum grant amount is $5,000. This is a micro-grant platform.
+                </p>
               </div>
             </div>
 

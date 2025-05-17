@@ -3,7 +3,7 @@ import Stripe from "stripe";
 
 // Use your secret key from environment variables
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: '2023-10-16',
+  apiVersion: '2025-04-30.basil',
 });
 
 export async function POST(req: NextRequest) {
@@ -21,6 +21,10 @@ export async function POST(req: NextRequest) {
       type: 'express',
       business_type: businessType,
       email: 'user@example.com', // Replace with user's email
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
     });
     stripeAccountId = account.id;
     // TODO: Save stripeAccountId to your DB for this user!
