@@ -18,6 +18,8 @@ import {
   X,
   ArrowUpDown,
   FlaskRoundIcon as Flask,
+  Users,
+  DollarSign,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -26,161 +28,9 @@ import { Progress } from "@/components/ui/progress"
 import { supabase } from "@/lib/supabase"
 import { researchAreas } from "@/lib/research-areas"
 import { useAuth } from "@/components/auth-provider"
+import { createPortal } from "react-dom"
 
-// Sample data for live experiments
-const experimentsData = [
-  {
-    id: 1,
-    name: "Cognitive Response Patterns",
-    description: "Collecting data on cognitive responses to visual stimuli across different demographics",
-    categories: ["neuroscience", "cognitive-science", "psychology"],
-    lab: "Neuroscience Lab",
-    institution: "University Research Center",
-    participantsNeeded: 500,
-    participantsCurrent: 213,
-    deadline: "2024-08-15",
-    compensation: "$25 per session",
-    timeCommitment: "30 minutes",
-    lastUpdated: "2 days ago",
-  },
-  {
-    id: 2,
-    name: "Quantum Computing Perception",
-    description: "Survey on public understanding and perception of quantum computing applications",
-    categories: ["physics", "quantum-mechanics", "public-perception"],
-    lab: "Quantum Physics Lab",
-    institution: "National Physics Institute",
-    participantsNeeded: 1000,
-    participantsCurrent: 456,
-    deadline: "2024-07-30",
-    compensation: "$15 per survey",
-    timeCommitment: "15 minutes",
-    lastUpdated: "5 days ago",
-  },
-  {
-    id: 3,
-    name: "Genomic Data Collection",
-    description: "Collecting anonymous genomic data for diversity research in genetics",
-    categories: ["biology", "genomics", "diversity-studies"],
-    lab: "Genomics Research Group",
-    institution: "Biotech University",
-    participantsNeeded: 2000,
-    participantsCurrent: 879,
-    deadline: "2024-09-30",
-    compensation: "$50 per sample",
-    timeCommitment: "1 hour",
-    lastUpdated: "1 week ago",
-  },
-  {
-    id: 4,
-    name: "AI Bias Detection",
-    description: "Crowdsourced identification of bias in AI-generated content",
-    categories: ["ai", "ethics", "bias-studies"],
-    lab: "AI Ethics Lab",
-    institution: "Tech Institute",
-    participantsNeeded: 5000,
-    participantsCurrent: 2145,
-    deadline: "2024-10-15",
-    compensation: "$0.50 per review",
-    timeCommitment: "5 minutes per review",
-    lastUpdated: "3 days ago",
-  },
-  {
-    id: 5,
-    name: "Climate Change Observations",
-    description: "Citizen science project collecting local climate observations",
-    categories: ["environmental", "climate-science", "citizen-science"],
-    lab: "Climate Science Center",
-    institution: "Environmental Research Institute",
-    participantsNeeded: 10000,
-    participantsCurrent: 4567,
-    deadline: "2024-12-31",
-    compensation: "Non-paid volunteer",
-    timeCommitment: "5 minutes daily",
-    lastUpdated: "1 day ago",
-  },
-]
-
-// Sample data for labs to fund
-const labsData = [
-  {
-    id: 1,
-    name: "Neuroscience Lab",
-    description: "Research on neural networks and brain mapping technologies",
-    categories: ["neuroscience", "brain-mapping", "cognitive-science"],
-    pi: "Dr. Sarah Johnson",
-    institution: "University Research Center",
-    members: 18,
-    fundingGoal: 150000,
-    fundingCurrent: 87500,
-    projects: 5,
-    publications: 12,
-    lastUpdated: "2 days ago",
-    image: "/placeholder.svg?height=80&width=80",
-  },
-  {
-    id: 2,
-    name: "Quantum Physics Lab",
-    description: "Exploring quantum mechanics and particle physics",
-    categories: ["physics", "quantum-mechanics", "particle-physics"],
-    pi: "Dr. Michael Chen",
-    institution: "National Physics Institute",
-    members: 12,
-    fundingGoal: 200000,
-    fundingCurrent: 65000,
-    projects: 3,
-    publications: 8,
-    lastUpdated: "1 week ago",
-    image: "/placeholder.svg?height=80&width=80",
-  },
-  {
-    id: 3,
-    name: "Genomics Research Group",
-    description: "Studying gene expression and DNA sequencing",
-    categories: ["biology", "genomics", "bioinformatics"],
-    pi: "Dr. Emily Rodriguez",
-    institution: "Biotech University",
-    members: 15,
-    fundingGoal: 175000,
-    fundingCurrent: 120000,
-    projects: 4,
-    publications: 15,
-    lastUpdated: "3 days ago",
-    image: "/placeholder.svg?height=80&width=80",
-  },
-  {
-    id: 4,
-    name: "AI Ethics Lab",
-    description: "Researching ethical implications of artificial intelligence",
-    categories: ["ai", "ethics", "computer-science"],
-    pi: "Dr. James Wilson",
-    institution: "Tech Institute",
-    members: 9,
-    fundingGoal: 100000,
-    fundingCurrent: 45000,
-    projects: 2,
-    publications: 6,
-    lastUpdated: "5 days ago",
-    image: "/placeholder.svg?height=80&width=80",
-  },
-  {
-    id: 5,
-    name: "Climate Science Center",
-    description: "Analyzing climate data and environmental impacts",
-    categories: ["environmental", "climate-science", "data-analysis"],
-    pi: "Dr. Lisa Park",
-    institution: "Environmental Research Institute",
-    members: 21,
-    fundingGoal: 250000,
-    fundingCurrent: 180000,
-    projects: 7,
-    publications: 23,
-    lastUpdated: "1 day ago",
-    image: "/placeholder.svg?height=80&width=80",
-  },
-]
-
-// Copy scienceCategoryColors from lab-profile.tsx
+// Add this after imports, before the ExplorePage component
 const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
   neuroscience: { bg: "bg-[#9D4EDD]", text: "text-white" },
   ai: { bg: "bg-[#3A86FF]", text: "text-white" },
@@ -293,7 +143,136 @@ const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
   "sustainable-development": { bg: "bg-[#2DC653]", text: "text-white" },
   "data-science": { bg: "bg-[#7209B7]", text: "text-white" },
   "astrobiology": { bg: "bg-[#3F37C9]", text: "text-white" },
-}
+};
+
+// Sample data for live experiments
+const experimentsData = [
+  {
+    id: 1,
+    name: "Cognitive Response Patterns",
+    description: "Collecting data on cognitive responses to visual stimuli across different demographics",
+    categories: ["neuroscience", "cognitive-science", "psychology"],
+    lab: "Neuroscience Lab",
+    institution: "University Research Center",
+    participantsNeeded: 500,
+    participantsCurrent: 213,
+    deadline: "2024-08-15",
+    compensation: "$25 per session",
+    timeCommitment: "30 minutes",
+    lastUpdated: "2 days ago",
+  },
+  {
+    id: 2,
+    name: "Quantum Computing Perception",
+    description: "Survey on public understanding and perception of quantum computing applications",
+    categories: ["physics", "quantum-mechanics", "public-perception"],
+    lab: "Quantum Physics Lab",
+    institution: "National Physics Institute",
+    participantsNeeded: 1000,
+    participantsCurrent: 456,
+    deadline: "2024-07-30",
+    compensation: "$15 per survey",
+    timeCommitment: "15 minutes",
+    lastUpdated: "5 days ago",
+  },
+  {
+    id: 3,
+    name: "Genomic Data Collection",
+    description: "Collecting anonymous genomic data for diversity research in genetics",
+    categories: ["biology", "genomics", "diversity-studies"],
+    lab: "Genomics Research Group",
+    institution: "Biotech University",
+    participantsNeeded: 2000,
+    participantsCurrent: 879,
+    deadline: "2024-09-30",
+    compensation: "$50 per sample",
+    timeCommitment: "1 hour",
+    lastUpdated: "1 week ago",
+  },
+  {
+    id: 4,
+    name: "AI Bias Detection",
+    description: "Crowdsourced identification of bias in AI-generated content",
+    categories: ["ai", "ethics", "bias-studies"],
+    lab: "AI Ethics Lab",
+    institution: "Tech Institute",
+    participantsNeeded: 5000,
+    participantsCurrent: 2145,
+    deadline: "2024-10-15",
+    compensation: "$0.50 per review",
+    timeCommitment: "5 minutes per review",
+    lastUpdated: "3 days ago",
+  },
+  {
+    id: 5,
+    name: "Climate Change Observations",
+    description: "Citizen science project collecting local climate observations",
+    categories: ["environmental", "climate-science", "citizen-science"],
+    lab: "Climate Science Center",
+    institution: "Environmental Research Institute",
+    participantsNeeded: 10000,
+    participantsCurrent: 4567,
+    deadline: "2024-12-31",
+    compensation: "Non-paid volunteer",
+    timeCommitment: "5 minutes daily",
+    lastUpdated: "1 day ago",
+  },
+]
+
+// Add this new component before ExplorePage
+const ExpandButton = ({ 
+  id, 
+  expandedIds, 
+  setExpandedIds, 
+  position 
+}: { 
+  id: string; 
+  expandedIds: string[]; 
+  setExpandedIds: (fn: (ids: string[]) => string[]) => void;
+  position: { top: number; right: number; }
+}) => {
+  const [mounted, setMounted] = useState(false);
+  const [isExpanding, setIsExpanding] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted) return null;
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsExpanding(true);
+    // Add a small delay before updating the expanded state
+    setTimeout(() => {
+      setExpandedIds(ids => [...ids, id]);
+    }, 100);
+  };
+
+  return createPortal(
+    <div 
+      style={{
+        position: 'absolute',
+        top: position.top,
+        right: position.right,
+        zIndex: 9999,
+        pointerEvents: isExpanding ? 'none' : 'auto'
+      }}
+    >
+      <button
+        type="button"
+        className="text-xs text-muted-foreground font-bold px-2 py-1 rounded hover:bg-accent cursor-pointer"
+        onClick={handleClick}
+        title="View all categories"
+      >
+        ...
+      </button>
+    </div>,
+    document.body
+  );
+};
 
 export default function ExplorePage() {
   const [activeTab, setActiveTab] = useState("experiments")
@@ -301,10 +280,149 @@ export default function ExplorePage() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [sortOption, setSortOption] = useState("recent")
   const [showFilters, setShowFilters] = useState(true)
+  const [isCategoriesOpen, setIsCategoriesOpen] = useState(true)
 
   // Move grants state and fetching logic here
   const [grantsData, setGrantsData] = useState<any[]>([])
   const [grantsLoading, setGrantsLoading] = useState(false)
+
+  // --- Move labs state and fetching logic here ---
+  const [labsData, setLabsData] = useState<any[]>([]);
+  const [labsLoading, setLabsLoading] = useState(false);
+  const [labsError, setLabsError] = useState<any>(null);
+  const [expandedLabIds, setExpandedLabIds] = useState<string[]>([]);
+  const [expandedExperimentIds, setExpandedExperimentIds] = useState<string[]>([]);
+  const [expandedGrantIds, setExpandedGrantIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (activeTab === "labs") {
+      setLabsLoading(true);
+      setLabsError(null);
+      (async () => {
+        // 1. Fetch labs (without researchAreas)
+        const { data: labs, error: labsErrorObj } = await supabase
+          .from("labs")
+          .select("labId, labName, description, profilePic, org_id, createdBy, created_at")
+          .order("created_at", { ascending: false });
+        console.log('[Labs Fetch] labs:', labs);
+        console.log('[Labs Fetch] labsError:', labsErrorObj);
+        if (labsErrorObj || !labs) {
+          setLabsError(labsErrorObj);
+          setLabsData([]);
+          setLabsLoading(false);
+          return;
+        }
+        // 2. Fetch categories for all labs
+        const labIds = labs.map(l => l.labId);
+        let categoriesMap: Record<string, string[]> = {};
+        let labCategories = [];
+        if (labIds.length > 0) {
+          const { data: fetchedLabCategories, error: catError } = await supabase
+            .from("labCategories")
+            .select("lab_id, category");
+          labCategories = fetchedLabCategories || [];
+          console.log('[Labs Fetch] labCategories:', labCategories);
+          if (catError) console.log('[Labs Fetch] labCategories error:', catError);
+          if (labCategories) {
+            labCategories.forEach(cat => {
+              if (!categoriesMap[cat.lab_id]) categoriesMap[cat.lab_id] = [];
+              categoriesMap[cat.lab_id].push(cat.category);
+            });
+          }
+        }
+        console.log('[Labs Fetch] categoriesMap:', categoriesMap);
+        // 3. Fetch org info
+        const orgIds = [...new Set(labs.map(l => l.org_id).filter(Boolean))];
+        let orgMap: Record<string, any> = {};
+        if (orgIds.length > 0) {
+          const { data: orgs } = await supabase
+            .from("organizations")
+            .select("org_id, org_name, profilePic, slug")
+            .in("org_id", orgIds);
+          if (orgs) {
+            orgs.forEach(o => { orgMap[o.org_id] = o });
+          }
+        }
+        // 4. Fetch members count for each lab
+        let membersMap: Record<string, number> = {};
+        if (labIds.length > 0) {
+          const { data: members } = await supabase
+            .from("labMembers")
+            .select("lab_id")
+            .in("lab_id", labIds);
+          if (members) {
+            members.forEach(m => {
+              membersMap[m.lab_id] = (membersMap[m.lab_id] || 0) + 1;
+            });
+          }
+        }
+        // 5. Fetch funding info for each lab
+        let fundingMap: Record<string, { goal: number, raised: number }> = {};
+        if (labIds.length > 0) {
+          const { data: fundingGoals } = await supabase
+            .from("funding_goals")
+            .select("lab_id, amount_contributed, goal_amount");
+          if (fundingGoals) {
+            fundingGoals.forEach(fg => {
+              if (!fundingMap[fg.lab_id]) fundingMap[fg.lab_id] = { goal: 0, raised: 0 };
+              fundingMap[fg.lab_id].goal += fg.goal_amount || 0;
+              fundingMap[fg.lab_id].raised += fg.amount_contributed || 0;
+            });
+          }
+        }
+        // 6. Fetch experiments count for each lab
+        let experimentsMap: Record<string, number> = {};
+        if (labIds.length > 0) {
+          const { data: experiments } = await supabase
+            .from("experiments")
+            .select("lab_id");
+          if (experiments) {
+            experiments.forEach(e => {
+              experimentsMap[e.lab_id] = (experimentsMap[e.lab_id] || 0) + 1;
+            });
+          }
+        }
+        // 7. Fetch files count for each lab
+        let filesMap: Record<string, number> = {};
+        if (labIds.length > 0) {
+          const { data: files } = await supabase
+            .from("files")
+            .select("labID, fileTag");
+          if (files) {
+            files.forEach(f => {
+              if (f.fileTag !== 'folder') {
+                filesMap[f.labID] = (filesMap[f.labID] || 0) + 1;
+              }
+            });
+          }
+        }
+        // 8. Map labs to display model, using all metrics
+        const mappedLabs = labs.map(lab => ({
+          id: lab.labId,
+          name: lab.labName,
+          description: lab.description,
+          categories: categoriesMap[lab.labId] || [],
+          pi: '', // Optionally fetch PI/creator username if needed
+          creatorId: lab.createdBy,
+          institution: orgMap[lab.org_id]?.org_name || '',
+          orgProfilePic: orgMap[lab.org_id]?.profilePic || '',
+          org_id: lab.org_id,
+          org_slug: orgMap[lab.org_id]?.slug || '',
+          members: membersMap[lab.labId] || 0,
+          files: filesMap[lab.labId] || 0,
+          fundingGoal: fundingMap[lab.labId]?.goal || 0,
+          fundingCurrent: fundingMap[lab.labId]?.raised || 0,
+          projects: experimentsMap[lab.labId] || 0,
+          publications: 0, // Optionally fetch publications if available
+          lastUpdated: lab.created_at ? `${Math.round((Date.now() - new Date(lab.created_at).getTime()) / (1000*60*60*24))} days ago` : '',
+          image: lab.profilePic || '/placeholder.svg?height=80&width=80',
+        }));
+        console.log('[Labs Fetch] mappedLabs:', mappedLabs);
+        setLabsData(mappedLabs);
+        setLabsLoading(false);
+      })();
+    }
+  }, [activeTab]);
 
   const { user } = useAuth();
 
@@ -505,9 +623,10 @@ export default function ExplorePage() {
           item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           item.description.toLowerCase().includes(searchQuery.toLowerCase())
 
-        // Category filter
+        // Category filter (show labs with no categories if no filter is selected)
         const matchesCategory =
-          selectedCategories.length === 0 || item.categories.some((cat: string) => selectedCategories.includes(cat))
+          selectedCategories.length === 0 ||
+          (item.categories && item.categories.length > 0 && item.categories.some((cat: string) => selectedCategories.includes(cat)))
 
         return matchesSearch && matchesCategory
       })
@@ -589,18 +708,24 @@ export default function ExplorePage() {
   // Get unique categories for the current tab
   const getUniqueCategories = useCallback(() => {
     const data = getCurrentData()
+    console.log('[Categories] Current data:', data)
     const categories = new Set<string>()
 
     data.forEach((item) => {
-      item.categories.forEach((cat: string) => categories.add(cat))
+      if (item.categories && Array.isArray(item.categories)) {
+        item.categories.forEach((cat: string) => categories.add(cat))
+      }
     })
 
-    return Array.from(categories).sort()
+    const uniqueCats = Array.from(categories).sort()
+    console.log('[Categories] Unique categories:', uniqueCats)
+    return uniqueCats
   }, [activeTab])
 
   const currentData = getCurrentData()
   const filteredData = sortData(filterData(currentData))
   const uniqueCategories = getUniqueCategories()
+  console.log('[Categories] Final unique categories:', uniqueCategories)
 
   // Get badge class for a category
   const getBadgeClass = (category: string) => {
@@ -663,49 +788,31 @@ export default function ExplorePage() {
             <SlidersHorizontal className="h-4 w-4 mr-2" />
             Filters
           </Button>
-
-          <Select value={sortOption} onValueChange={setSortOption}>
-            <SelectTrigger className="w-[180px] bg-secondary border-secondary">
-              <SelectValue>
-                <div className="flex items-center">
-                  <ArrowUpDown className="h-4 w-4 mr-2" />
-                  {getSortOptions().find((option) => option.value === sortOption)?.label || "Sort By"}
-                </div>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="recent">Most Recent</SelectItem>
-              <SelectItem value="deadline">Deadline (Soonest)</SelectItem>
-              <SelectItem value="funding">Funding Progress</SelectItem>
-              <SelectItem value="amount">Amount (Highest)</SelectItem>
-              <SelectItem value="participation">Needs Participants</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
-      <Tabs defaultValue="experiments" value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs defaultValue="experiments" value={activeTab} onValueChange={setActiveTab} className="w-full mt-8">
         <TabsList className="grid grid-cols-3 w-full bg-secondary">
           <TabsTrigger
             value="experiments"
             className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
           >
             <Flask className="h-4 w-4 mr-2" />
-            Live Experiments
+            EXPERIMENTS
           </TabsTrigger>
           <TabsTrigger
             value="labs"
             className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
           >
             <Building2 className="h-4 w-4 mr-2" />
-            Labs to Fund
+            LABS
           </TabsTrigger>
           <TabsTrigger
             value="grants"
             className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
           >
             <FileText className="h-4 w-4 mr-2" />
-            Open Grants
+            OPEN GRANTS
           </TabsTrigger>
         </TabsList>
 
@@ -727,10 +834,10 @@ export default function ExplorePage() {
             </div>
 
             <div className="space-y-4">
-              <Collapsible defaultOpen>
+              <Collapsible open={isCategoriesOpen} onOpenChange={setIsCategoriesOpen}>
                 <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-xs font-medium uppercase tracking-wide">
                   Categories
-                  <ChevronDown className="h-4 w-4" />
+                  <ChevronDown className={`h-4 w-4 transition-transform ${isCategoriesOpen ? 'rotate-180' : ''}`} />
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <ScrollArea className="h-[300px] pr-4">
@@ -747,7 +854,6 @@ export default function ExplorePage() {
                             htmlFor={`category-${category}`}
                             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
                           >
-                            <Badge className={`${getBadgeClass(category)} mr-2`}>&nbsp;</Badge>
                             {getCategoryLabel(category)}
                           </label>
                         </div>
@@ -798,10 +904,53 @@ export default function ExplorePage() {
                 {filteredData.map((experiment: any) => (
                   <Card key={experiment.id} className="overflow-hidden">
                     <CardContent className="p-0">
-                      <Link href={`/experiments/view?id=${experiment.id}`} className="block p-4 hover:bg-secondary/50">
+                      <div 
+                        className="block p-4 hover:bg-secondary/50 cursor-pointer"
+                        onClick={(e) => {
+                          // Check if the click was in the categories area
+                          const target = e.target as HTMLElement;
+                          const categoriesArea = target.closest('.categories-area');
+                          if (categoriesArea) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                          }
+                          // If not in categories area, navigate to experiment
+                          window.location.href = `/experiments/view?id=${experiment.id}`;
+                        }}
+                      >
                         <div className="space-y-1">
-                          <h3 className="font-medium text-accent">{experiment.name}</h3>
-                          <p className="text-sm text-muted-foreground line-clamp-2">{experiment.description}</p>
+                          <h3 className="font-medium text-accent">
+                            {experiment.name}
+                          </h3>
+                          {/* Science categories as colored badges, up to 3, with ellipsis if more */}
+                          <div 
+                            className="flex flex-wrap gap-1 mt-2 relative categories-area"
+                          >
+                            {(expandedExperimentIds.includes(experiment.id) ? experiment.categories : experiment.categories.slice(0, 3)).map((category: string) => (
+                              <Badge
+                                key={category}
+                                variant={category as any}
+                                className="mr-2 mb-2 text-xs"
+                              >
+                                {getCategoryLabel(category)}
+                              </Badge>
+                            ))}
+                            {experiment.categories.length > 3 && !expandedExperimentIds.includes(experiment.id) && (
+                              <button
+                                type="button"
+                                className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setExpandedExperimentIds(ids => [...ids, experiment.id]);
+                                }}
+                                title="View all categories"
+                              >
+                                ...
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="mt-3">
@@ -819,19 +968,11 @@ export default function ExplorePage() {
                           />
                         </div>
 
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {experiment.categories.slice(0, 3).map((category: string) => (
-                            <Badge key={category} className={`${getBadgeClass(category)} text-xs`}>
-                              {getCategoryLabel(category)}
-                            </Badge>
-                          ))}
-                        </div>
-
                         <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                           <span>{experiment.lab}</span>
                           <span>{experiment.lastUpdated}</span>
                         </div>
-                      </Link>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -839,57 +980,110 @@ export default function ExplorePage() {
             </TabsContent>
 
             <TabsContent value="labs" className="mt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredData.map((lab: any) => (
-                  <Card key={lab.id} className="overflow-hidden">
-                    <CardContent className="p-0">
-                      <Link href={`/lab/guest`} className="block p-4 hover:bg-secondary/50">
-                        <div className="flex items-start gap-3">
-                          <Avatar className="h-12 w-12">
-                            <AvatarImage src={lab.image || "/placeholder.svg"} alt={lab.name} />
-                            <AvatarFallback>{lab.name.substring(0, 2)}</AvatarFallback>
-                          </Avatar>
-                          <div className="space-y-1">
-                            <h3 className="font-medium text-accent">{lab.name}</h3>
-                            <p className="text-sm text-muted-foreground line-clamp-2">{lab.description}</p>
-                          </div>
-                        </div>
-
-                        <div className="mt-3">
-                          <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                            <span>
-                              Funding: $
-                              {typeof lab.fundingCurrent === "number" ? lab.fundingCurrent.toLocaleString() : "0"} / $
-                              {typeof lab.fundingGoal === "number" ? lab.fundingGoal.toLocaleString() : "0"}
-                            </span>
-                            <span>{Math.round(((lab.fundingCurrent || 0) / (lab.fundingGoal || 1)) * 100)}%</span>
-                          </div>
-                          <Progress
-                            value={((lab.fundingCurrent || 0) / (lab.fundingGoal || 1)) * 100}
-                            className="h-2"
-                          />
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {lab.categories.slice(0, 3).map((category: string) => (
-                            <Badge
-                              key={category}
-                              className={`${getBadgeClass(category)} text-xs`}
-                            >
-                              {getCategoryLabel(category)}
-                            </Badge>
-                          ))}
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                          <span>PI: {lab.pi}</span>
-                          <span>{lab.lastUpdated}</span>
-                        </div>
-                      </Link>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              {labsLoading ? (
+                <div className="text-center py-8">Loading labs…</div>
+              ) : (
+                <>
+                  {labsError && (
+                    <div className="text-red-500 text-sm mb-4">Error fetching labs: {labsError.message || String(labsError)}</div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredData.map((lab: any) => (
+                      <Card key={lab.id} className="overflow-hidden relative">
+                        <CardContent className="p-0">
+                          {/* Org info in top-right corner, outside the Link to avoid nested <a> */}
+                          {lab.institution && lab.org_slug && (
+                            <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
+                              {lab.orgProfilePic && (
+                                <img src={lab.orgProfilePic} alt={lab.institution} className="h-5 w-5 rounded-full object-cover border" />
+                              )}
+                              <a
+                                href={`/orgs/${lab.org_slug}`}
+                                className="text-xs font-medium text-primary hover:underline truncate max-w-[100px]"
+                                onClick={e => e.stopPropagation()}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {lab.institution}
+                              </a>
+                            </div>
+                          )}
+                          <Link href={`/lab/${lab.id}`} className="block p-4 hover:bg-secondary/50">
+                            <div className="flex items-start gap-3">
+                              <Avatar className="h-12 w-12">
+                                <AvatarImage src={lab.image || "/placeholder.svg"} alt={lab.name} />
+                                <AvatarFallback>{lab.name.substring(0, 2)}</AvatarFallback>
+                              </Avatar>
+                              <div className="space-y-1 flex-1">
+                                <h3 className="font-medium text-accent">{lab.name}</h3>
+                                {/* Science categories as colored badges, up to 3, with ellipsis if more */}
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {(expandedLabIds.includes(lab.id) ? lab.categories : lab.categories.slice(0, 3)).map((category: string) => (
+                                    <Badge
+                                      key={category}
+                                      variant={category as any}
+                                      className="mr-2 mb-2 text-xs"
+                                    >
+                                      {getCategoryLabel(category)}
+                                    </Badge>
+                                  ))}
+                                  {lab.categories.length > 3 && !expandedLabIds.includes(lab.id) && (
+                                    <button
+                                      type="button"
+                                      className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
+                                      style={{ minWidth: 24 }}
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        setExpandedLabIds(ids => [...ids, lab.id]);
+                                      }}
+                                      title="View all categories"
+                                    >
+                                      ...
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            {/* Compact metrics row */}
+                            <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <FileText className="h-4 w-4" />
+                                <span>{lab.files}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Flask className="h-4 w-4" />
+                                <span>{lab.projects}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Users className="h-4 w-4" />
+                                <span>{lab.members}</span>
+                              </div>
+                              {lab.fundingGoal > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <DollarSign className="h-4 w-4" />
+                                  <span>${typeof lab.fundingCurrent === "number" ? lab.fundingCurrent.toLocaleString() : "0"}</span>
+                                </div>
+                              )}
+                            </div>
+                            {/* Funding progress bar */}
+                            {lab.fundingGoal > 0 && (
+                              <div className="mt-2">
+                                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                                  <span>Goal: ${typeof lab.fundingGoal === "number" ? lab.fundingGoal.toLocaleString() : "0"}</span>
+                                  <span>{Math.round((lab.fundingCurrent / lab.fundingGoal) * 100)}%</span>
+                                </div>
+                                <Progress value={(lab.fundingCurrent / lab.fundingGoal) * 100} className="h-2" />
+                              </div>
+                            )}
+                            {/* Last updated */}
+                            <div className="mt-2 text-xs text-muted-foreground">{lab.lastUpdated}</div>
+                          </Link>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="grants" className="mt-0">
@@ -923,23 +1117,41 @@ export default function ExplorePage() {
                             </div>
                             <div className="space-y-1">
                               <h3 className="font-medium text-accent">{grant.name}</h3>
-                              <p className="text-sm text-muted-foreground line-clamp-2">{grant.description}</p>
+                              {/* Science categories as colored badges, up to 3, with ellipsis if more */}
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {(expandedGrantIds.includes(grant.id) ? grant.categories : grant.categories.slice(0, 3)).map((category: string) => {
+                                  const color = getCategoryBadgeColors(category)
+                                  return (
+                                    <Badge
+                                      key={category}
+                                      variant={category as any}
+                                      className="mr-2 mb-2 text-xs"
+                                    >
+                                      {getCategoryLabel(category)}
+                                    </Badge>
+                                  )
+                                })}
+                                {grant.categories.length > 3 && !expandedGrantIds.includes(grant.id) && (
+                                  <button
+                                    type="button"
+                                    className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
+                                    style={{ minWidth: 24 }}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      setExpandedGrantIds(ids => [...ids, grant.id]);
+                                    }}
+                                    title="View all categories"
+                                  >
+                                    ...
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             <div className="mt-3 flex items-center justify-between">
                               <Badge variant="outline" className="text-xs font-semibold">
                                 {grant.amount}
                               </Badge>
                               <span className="text-xs text-muted-foreground">Deadline: {formatDate(grant.deadline)}</span>
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-1">
-                              {grant.categories.slice(0, 3).map((category: string) => {
-                                const color = getCategoryBadgeColors(category)
-                                return (
-                                  <Badge key={category} className={`text-xs ${color.bg} ${color.text}`}>
-                                    {getCategoryLabel(category)}
-                                  </Badge>
-                                )
-                              })}
                             </div>
                             <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                               <span>{grant.funder}</span>
