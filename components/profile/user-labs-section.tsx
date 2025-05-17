@@ -1,93 +1,86 @@
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowRight, Beaker, Users, Plus } from "lucide-react"
 import Link from "next/link"
+import { supabase } from "@/lib/supabase"
 
-export function UserLabsSection() {
-  // Mock data - in a real app, this would come from an API
-  const foundedLabs = [
-    {
-      id: "lab-1",
-      name: "Genomic Data Analysis Lab",
-      description: "Research on novel genomic data analysis techniques",
-      members: 8,
-      activity: "High",
-      lastActive: "2 hours ago",
-    },
-  ]
+interface UserLabsSectionProps {
+  userId: string
+  onLabsCountChange?: (count: number) => void
+}
 
-  const memberLabs = [
-    {
-      id: "lab-2",
-      name: "Protein Folding Simulation",
-      description: "Computational approaches to protein folding prediction",
-      members: 12,
-      activity: "Medium",
-      lastActive: "Yesterday",
-    },
-    {
-      id: "lab-3",
-      name: "Neural Network Applications in Biology",
-      description: "Applying deep learning to biological problems",
-      members: 15,
-      activity: "High",
-      lastActive: "3 hours ago",
-    },
-  ]
+export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionProps) {
+  const [foundedLabs, setFoundedLabs] = useState<any[]>([])
+  const [memberLabs, setMemberLabs] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const followingLabs = [
-    {
-      id: "lab-4",
-      name: "CRISPR Gene Editing Research",
-      description: "Exploring novel applications of CRISPR technology",
-      members: 23,
-      activity: "Medium",
-      lastActive: "2 days ago",
-    },
-    {
-      id: "lab-5",
-      name: "Molecular Dynamics Simulation",
-      description: "Advanced simulation techniques for molecular interactions",
-      members: 9,
-      activity: "Low",
-      lastActive: "1 week ago",
-    },
-    {
-      id: "lab-6",
-      name: "Bioinformatics Tools Development",
-      description: "Creating new software tools for bioinformatics research",
-      members: 17,
-      activity: "High",
-      lastActive: "5 hours ago",
-    },
-  ]
+  useEffect(() => {
+    if (!userId) return
+    setLoading(true)
+    setError(null)
+    // Fetch labs founded by user
+    const foundedPromise = supabase
+      .from('labs')
+      .select('*')
+      .eq('createdBy', userId)
 
-  const renderLabCard = (lab, role) => (
-    <Card key={lab.id} className="mb-4">
+    // Fetch lab memberships, then fetch labs by those IDs
+    const memberPromise = supabase
+      .from('labMembers')
+      .select('lab_id')
+      .eq('user', userId)
+      .then(async (res) => {
+        if (res.error) return { data: [], error: res.error }
+        const labIds = (res.data || [])
+          .map((m: any) => m.lab_id)
+          .filter((id: string | null | undefined) => !!id && id !== "null");
+        if (!labIds.length) return { data: [], error: null }
+        const labsRes = await supabase
+          .from('labs')
+          .select('*')
+          .in('labId', labIds)
+        return labsRes
+      })
+
+    Promise.all([foundedPromise, memberPromise]).then(([foundedRes, memberRes]) => {
+      if (foundedRes.error) setError(foundedRes.error.message)
+      if (memberRes.error) setError(memberRes.error.message)
+      setFoundedLabs(foundedRes.data || [])
+      setMemberLabs(memberRes.data || [])
+      setLoading(false)
+      if (onLabsCountChange) {
+        onLabsCountChange((foundedRes.data?.length || 0) + (memberRes.data?.length || 0))
+      }
+    })
+  }, [userId, onLabsCountChange])
+
+  const renderLabCard = (lab: any, role: string) => (
+    <Card key={lab.labId} className="mb-4">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle className="text-lg">{lab.name}</CardTitle>
+            <CardTitle className="text-lg">{lab.labName || lab.name}</CardTitle>
             <CardDescription className="mt-1">{lab.description}</CardDescription>
           </div>
           {role === "founded" && <Badge className="bg-primary text-primary-foreground">Founder</Badge>}
           {role === "member" && <Badge variant="secondary">Member</Badge>}
-          {role === "following" && <Badge variant="outline">Following</Badge>}
         </div>
       </CardHeader>
       <CardContent className="pb-2">
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center">
             <Users className="h-4 w-4 mr-1 text-muted-foreground" />
-            <span>{lab.members} members</span>
+            <span>{lab.members || 0} members</span>
           </div>
           <div className="flex items-center">
             <Beaker className="h-4 w-4 mr-1 text-muted-foreground" />
-            <span>Activity: {lab.activity}</span>
+            <span>Activity: {lab.activity || "-"}</span>
           </div>
-          <div className="text-muted-foreground text-xs">Last active: {lab.lastActive}</div>
+          <div className="text-muted-foreground text-xs">Last active: {lab.lastActive || "-"}</div>
         </div>
       </CardContent>
       <CardFooter>
@@ -100,12 +93,18 @@ export function UserLabsSection() {
     </Card>
   )
 
+  if (loading) {
+    return <div className="py-8 text-center">Loading labs...</div>
+  }
+  if (error) {
+    return <div className="py-8 text-center text-red-500">{error}</div>
+  }
+
   return (
     <Tabs defaultValue="founded" className="w-full">
-      <TabsList className="grid w-full grid-cols-3 mb-6">
+      <TabsList className="grid w-full grid-cols-2 mb-6">
         <TabsTrigger value="founded">Founded ({foundedLabs.length})</TabsTrigger>
         <TabsTrigger value="member">Member ({memberLabs.length})</TabsTrigger>
-        <TabsTrigger value="following">Following ({followingLabs.length})</TabsTrigger>
       </TabsList>
 
       <TabsContent value="founded">
@@ -116,17 +115,12 @@ export function UserLabsSection() {
             Create New Lab
           </Button>
         </div>
-        {foundedLabs.map((lab) => renderLabCard(lab, "founded"))}
+        {foundedLabs.length === 0 ? <div className="text-muted-foreground">No labs founded yet.</div> : foundedLabs.map((lab) => renderLabCard(lab, "founded"))}
       </TabsContent>
 
       <TabsContent value="member">
         <h3 className="text-lg font-medium mb-4">Labs You're a Member Of</h3>
-        {memberLabs.map((lab) => renderLabCard(lab, "member"))}
-      </TabsContent>
-
-      <TabsContent value="following">
-        <h3 className="text-lg font-medium mb-4">Labs You're Following</h3>
-        {followingLabs.map((lab) => renderLabCard(lab, "following"))}
+        {memberLabs.length === 0 ? <div className="text-muted-foreground">No memberships yet.</div> : memberLabs.map((lab) => renderLabCard(lab, "member"))}
       </TabsContent>
     </Tabs>
   )

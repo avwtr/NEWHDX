@@ -15,21 +15,58 @@ import { UserProfileSettings } from "@/components/profile/user-profile-settings"
 import { Settings } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { useSearchParams } from "next/navigation"
+import { supabase } from "@/lib/supabase"
+
+// Add a type for the profile object
+interface Profile {
+  user_id: string;
+  full_name?: string;
+  username?: string;
+  avatar_url?: string;
+  bio?: string;
+  created_at?: string;
+  research_interests?: string[];
+  contributions_count?: number;
+  labs_count?: number;
+  following_count?: number;
+}
 
 export default function ProfilePage() {
   const [showSettings, setShowSettings] = useState(false)
   const { user, isLoading } = useAuth()
   const searchParams = useSearchParams();
-  const defaultTab = searchParams.get("tab") || "profile";
+  const defaultTab = searchParams?.get("tab") || "profile";
+
+  // New: state for profile data
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(true)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [labsCount, setLabsCount] = useState(0)
 
   useEffect(() => {
-    if (searchParams.get("tab")) {
+    if (searchParams && searchParams.get("tab")) {
       setShowSettings(true);
     }
   }, [searchParams]);
 
-  // Simple loading state
-  if (isLoading) {
+  // Fetch profile from Supabase
+  useEffect(() => {
+    if (!user) return;
+    setProfileLoading(true)
+    setProfileError(null)
+    supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .single()
+      .then(({ data, error }) => {
+        if (error) setProfileError(error.message)
+        setProfile(data as Profile)
+        setProfileLoading(false)
+      })
+  }, [user])
+
+  if (isLoading || profileLoading) {
     return (
       <div className="container py-8 flex items-center justify-center min-h-[50vh]">
         <div className="text-center">Loading profile...</div>
@@ -37,7 +74,6 @@ export default function ProfilePage() {
     )
   }
 
-  // Not logged in state
   if (!user) {
     return (
       <div className="container py-8 flex items-center justify-center min-h-[50vh]">
@@ -51,21 +87,31 @@ export default function ProfilePage() {
     )
   }
 
-  // Prepare user data
-  const userData = {
-    id: user.id,
-    name: user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
-    username: user.user_metadata?.username || user.email?.split("@")[0] || "user",
-    avatar: user.user_metadata?.avatar_url || "/placeholder.svg?height=100&width=100",
-    bio: user.user_metadata?.bio || "Computational biologist specializing in genomic data analysis and visualization.",
-    joinDate: new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-    interests: user.user_metadata?.research_interests || ["Genomics", "Machine Learning", "Bioinformatics"],
+  if (profileError) {
+    return (
+      <div className="container py-8 flex items-center justify-center min-h-[50vh]">
+        <div className="text-center text-red-500">{profileError}</div>
+      </div>
+    )
+  }
+
+  // Prepare user data from profile
+  const userData = profile && {
+    id: profile.user_id,
+    name: profile.full_name || user.email?.split("@")[0] || "User",
+    username: profile.username || user.email?.split("@")?.[0] || "user",
+    avatar: profile.avatar_url || "/placeholder.svg?height=100&width=100",
+    bio: profile.bio || "",
+    joinDate: profile.created_at ? new Date(profile.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "",
+    interests: profile.research_interests || [],
     stats: {
-      contributions: 127,
-      labs: 5,
-      following: 32,
+      contributions: profile.contributions_count || 0,
+      labs: profile.labs_count || 0,
+      following: profile.following_count || 0,
     },
   }
+
+  if (!userData) return null;
 
   if (showSettings) {
     return <UserProfileSettings user={userData} onClose={() => setShowSettings(false)} defaultTab={defaultTab} />
@@ -110,7 +156,7 @@ export default function ProfilePage() {
                   <div className="text-xs text-muted-foreground">Contributions</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{userData.stats.labs}</div>
+                  <div className="text-2xl font-bold">{labsCount}</div>
                   <div className="text-xs text-muted-foreground">Labs</div>
                 </div>
                 <div>
@@ -137,7 +183,7 @@ export default function ProfilePage() {
             </TabsList>
 
             <TabsContent value="labs" className="mt-6">
-              <UserLabsSection />
+              {userData && <UserLabsSection userId={userData.id} onLabsCountChange={setLabsCount} />}
             </TabsContent>
 
             <TabsContent value="publications" className="mt-6">

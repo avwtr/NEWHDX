@@ -275,7 +275,7 @@ const ExpandButton = ({
 };
 
 export default function ExplorePage() {
-  const [activeTab, setActiveTab] = useState("experiments")
+  const [activeTab, setActiveTab] = useState("labs")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [sortOption, setSortOption] = useState("recent")
@@ -791,15 +791,8 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      <Tabs defaultValue="experiments" value={activeTab} onValueChange={setActiveTab} className="w-full mt-8">
+      <Tabs defaultValue="labs" value={activeTab} onValueChange={setActiveTab} className="w-full mt-8">
         <TabsList className="grid grid-cols-3 w-full bg-secondary">
-          <TabsTrigger
-            value="experiments"
-            className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
-          >
-            <Flask className="h-4 w-4 mr-2" />
-            EXPERIMENTS
-          </TabsTrigger>
           <TabsTrigger
             value="labs"
             className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
@@ -813,6 +806,13 @@ export default function ExplorePage() {
           >
             <FileText className="h-4 w-4 mr-2" />
             OPEN GRANTS
+          </TabsTrigger>
+          <TabsTrigger
+            value="experiments"
+            className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
+          >
+            <Flask className="h-4 w-4 mr-2" />
+            EXPERIMENTS
           </TabsTrigger>
         </TabsList>
 

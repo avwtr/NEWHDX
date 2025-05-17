@@ -20,8 +20,22 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 interface UserProfileSettingsProps {
-  onClose: () => void
-  defaultTab?: string
+  user: {
+    id: string;
+    name: string;
+    username: string;
+    avatar: string;
+    bio: string;
+    joinDate: string;
+    interests: string[];
+    stats: {
+      contributions: number;
+      labs: number;
+      following: number;
+    };
+  };
+  onClose: () => void;
+  defaultTab?: string;
 }
 
 // Initialize Stripe
@@ -90,12 +104,11 @@ function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-export function UserProfileSettings({ onClose, defaultTab = "profile" }: UserProfileSettingsProps & { defaultTab?: string }) {
-  const { user } = useAuth()
-  const [name, setName] = useState("")
-  const [username, setUsername] = useState("")
-  const [bio, setBio] = useState("")
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([])
+export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: UserProfileSettingsProps) {
+  const [name, setName] = useState(user.name)
+  const [username, setUsername] = useState(user.username)
+  const [bio, setBio] = useState(user.bio)
+  const [selectedInterests, setSelectedInterests] = useState<string[]>(user.interests)
   const [tab, setTab] = useState(defaultTab)
 
   // Mock data for science categories
@@ -214,10 +227,10 @@ export function UserProfileSettings({ onClose, defaultTab = "profile" }: UserPro
   // Populate initial state from user when available
   useEffect(() => {
     if (user) {
-      setName(user.user_metadata?.name || "")
-      setUsername(user.user_metadata?.username || "")
-      setBio(user.user_metadata?.bio || "")
-      setSelectedInterests(user.user_metadata?.interests || [])
+      setName(user.name)
+      setUsername(user.username)
+      setBio(user.bio)
+      setSelectedInterests(user.interests)
     }
   }, [user])
 
@@ -419,8 +432,8 @@ export function UserProfileSettings({ onClose, defaultTab = "profile" }: UserPro
                 <Label htmlFor="avatar">Profile Picture</Label>
                 <div className="flex items-center gap-4">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src={user?.user_metadata?.avatar_url || "/placeholder.svg?height=80&width=80"} alt={user?.user_metadata?.name || user?.email || "User"} />
-                    <AvatarFallback>{(user?.user_metadata?.name?.charAt(0) || user?.email?.charAt(0) || "U")}</AvatarFallback>
+                    <AvatarImage src={user?.avatar || "/placeholder.svg?height=80&width=80"} alt={user?.name || "User"} />
+                    <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col gap-2">
                     <Button variant="outline" size="sm" className="w-fit">
