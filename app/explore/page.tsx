@@ -1095,8 +1095,10 @@ export default function ExplorePage() {
                     // Route to review page if user is creator
                     const isCreator = user && grant.created_by && user.id === grant.created_by;
                     const grantUrl = isCreator ? `/grants/review/${grant.id}` : `/grants/${grant.id}`;
+                    // Determine if the grant is closed/awarded
+                    const isClosed = grant.status === 'awarded' || grant.status === 'closed' || grant.award_made;
                     return (
-                      <Card key={grant.id} className="overflow-hidden relative">
+                      <Card key={grant.id} className={`overflow-hidden relative transition-all duration-200 ${isClosed ? 'opacity-60 grayscale hover:opacity-80 hover:grayscale-0 cursor-pointer' : ''}`}>
                         <CardContent className="p-0">
                           <Link href={grantUrl} className="block p-4 hover:bg-secondary/50 relative">
                             {/* Top right: Org and user info */}

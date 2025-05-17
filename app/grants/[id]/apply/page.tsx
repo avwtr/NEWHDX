@@ -370,8 +370,8 @@ export default function GrantApplyPage() {
               <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="h-6 w-6 text-green-600" />
               </div>
-              <h2 className="text-2xl font-bold mb-2">Application Submitted!</h2>
-              <p className="text-muted-foreground mb-6">
+              <h2 className="text-2xl font-bold mb-2 text-background">Application Submitted!</h2>
+              <p className="text-muted-foreground mb-6 text-background">
                 Thank you for applying to the {grant.grant_name}. We'll review your application and get back to you soon.
               </p>
               <Button onClick={() => router.push("/explore")}>Return to Grants</Button>
