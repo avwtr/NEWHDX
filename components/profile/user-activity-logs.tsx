@@ -43,13 +43,14 @@ export function UserActivityLogs({ userId, userName, userProfilePic }: UserActiv
         if (uniqueLabIds.length) {
           const { data: labs } = await supabase
             .from("labs")
-            .select("labId, labName, profilePic")
+            .select("labId, labName, profilePic, description")
             .in("labId", uniqueLabIds)
           if (labs) {
             labs.forEach((lab: any) => {
               labMap[lab.labId] = {
                 name: lab.labName,
-                profilePic: lab.profilePic || "/placeholder.svg"
+                profilePic: lab.profilePic || "/science-lab-setup.png",
+                description: lab.description
               }
             })
           }
@@ -143,17 +144,16 @@ export function UserActivityLogs({ userId, userName, userProfilePic }: UserActiv
                       <div className="flex flex-col">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
-                            <span className={`p-1.5 rounded-full ${getActivityTypeColor(activity.activity_type)}`}>{getActivityIcon(activity.activity_type)}</span>
                             <Link href={`/lab/${activity.lab_from || "#"}`} className="font-medium hover:underline flex items-center gap-2">
-                              <div className="relative h-6 w-6 rounded-full overflow-hidden border border-secondary">
+                              <div className="relative h-6 w-6 rounded-md overflow-hidden border border-secondary">
                                 <Image
-                                  src={labMap[activity.lab_from]?.profilePic || "/placeholder.svg"}
+                                  src={labMap[activity.lab_from]?.profilePic || "/science-lab-setup.png"}
                                   alt={labMap[activity.lab_from]?.name || "Lab"}
                                   fill
                                   className="object-cover"
                                 />
                               </div>
-                              {labName}
+                              {labMap[activity.lab_from]?.name || "Unknown Lab"}
                             </Link>
                           </div>
                           <span className="text-xs text-muted-foreground">
