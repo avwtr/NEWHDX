@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -33,13 +33,18 @@ interface UserProfileSettingsProps {
       labs: number;
       following: number;
     };
+    research_interests?: string[];
   };
   onClose: () => void;
   defaultTab?: string;
 }
 
-// Initialize Stripe
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+// Stripe initialization with robust key check
+const stripeKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+if (!stripeKey) {
+  console.error('Stripe publishable key is missing! Set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY in your .env.local file.')
+}
+const stripePromise = stripeKey ? loadStripe(stripeKey) : null
 
 // Payment Form Component
 function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
@@ -105,37 +110,18 @@ function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
 }
 
 export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: UserProfileSettingsProps) {
-  const [name, setName] = useState(user.name)
   const [username, setUsername] = useState(user.username)
   const [bio, setBio] = useState(user.bio)
   const [selectedInterests, setSelectedInterests] = useState<string[]>(user.interests)
   const [tab, setTab] = useState(defaultTab)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState(user.avatar)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Mock data for science categories
+  // Add a list of all possible science categories (can be imported or hardcoded)
   const allScienceCategories = [
-    "Genomics",
-    "Proteomics",
-    "Bioinformatics",
-    "Machine Learning",
-    "Neural Networks",
-    "Computational Biology",
-    "Molecular Biology",
-    "Structural Biology",
-    "Protein Folding",
-    "Gene Expression",
-    "Systems Biology",
-    "Synthetic Biology",
-    "Biostatistics",
-    "Evolutionary Biology",
-    "Immunology",
-    "Neuroscience",
-    "Cancer Research",
-    "Drug Discovery",
-    "Microbiology",
-    "Virology",
-    "Ecology",
-    "Climate Science",
-    "Quantum Computing",
+    "Neuroscience", "AI", "Biology", "Chemistry", "Physics", "Medicine", "Psychology", "Engineering", "Mathematics", "Environmental", "Astronomy", "Geology", "Brain Mapping", "Cognitive Science", "Quantum Mechanics", "Particle Physics", "Genomics", "Bioinformatics", "Ethics", "Computer Science", "Climate Science", "Data Analysis", "Molecular Biology", "Biochemistry", "Astrophysics", "Cosmology", "Clinical Research", "Biotechnology", "Medical Imaging", "Meteorology", "Machine Learning", "Optimization", "Data Processing", "Data Visualization", "Methodology", "Computing", "Evaluation", "Innovation", "Research Funding", "Governance", "Mitigation", "Diversity Studies", "Public Perception", "Citizen Science", "Bias Studies"
   ]
 
   // Mock data for user contributions
@@ -224,15 +210,8 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
   // Separate loading state for payment method
   const [loadingPayment, setLoadingPayment] = useState(false)
 
-  // Populate initial state from user when available
-  useEffect(() => {
-    if (user) {
-      setName(user.name)
-      setUsername(user.username)
-      setBio(user.bio)
-      setSelectedInterests(user.interests)
-    }
-  }, [user])
+  // Add state for research interests
+  const [researchInterests, setResearchInterests] = useState<string[]>(user.research_interests || [])
 
   // Fetch profile on mount
   useEffect(() => {
@@ -317,6 +296,21 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
     })();
   }, [user]);
 
+  // Fetch research_interests from Supabase on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('research_interests')
+        .eq('user_id', user.id)
+        .single();
+      if (!error && data?.research_interests) {
+        setResearchInterests(data.research_interests);
+      }
+    })();
+  }, [user?.id]);
+
   const handleStripeConnect = async () => {
     setLoading(true)
     try {
@@ -400,6 +394,99 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
     }
   };
 
+  // Handle file upload
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user.id) return
+    setUploading(true)
+    // Check Supabase auth before upload
+    const { data: authData, error: authError } = await supabase.auth.getUser()
+    if (authError || !authData?.user) {
+      setUploading(false)
+      alert('You must be logged in to upload a profile image.')
+      console.error('Supabase auth error or not logged in:', authError)
+      return
+    }
+    // Always use the same file path so it replaces the old image
+    const filePath = `${user.id}/profile-pic`
+    let uploadResponse
+    try {
+      uploadResponse = await supabase.storage
+        .from("user-profile-pics")
+        .upload(filePath, file, { upsert: true })
+    } catch (err) {
+      setUploading(false)
+      alert("Unexpected error during upload. Please try again.")
+      console.error("Upload threw error:", err)
+      return
+    }
+    const { data, error } = uploadResponse || {}
+    if (error || !data) {
+      setUploading(false)
+      if (error && typeof error.message === 'string' && error.message.trim().startsWith('<')) {
+        alert("Upload failed: received an HTML error page. Please check your login and bucket permissions.")
+        console.error("Upload error (HTML):", error.message)
+      } else {
+        alert("Failed to upload image. " + (error?.message || "Unknown error."))
+        console.error("Upload error:", error?.message || error, uploadResponse)
+      }
+      return
+    }
+    // Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from("user-profile-pics")
+      .getPublicUrl(filePath)
+    setAvatarUrl(
+      typeof publicUrlData?.publicUrl === 'string' && publicUrlData.publicUrl
+        ? publicUrlData.publicUrl
+        : "/placeholder.svg?height=80&width=80"
+    )
+    setAvatarFile(file)
+    setUploading(false)
+  }
+
+  // Save profile changes (bio and profilePic)
+  const handleSave = async () => {
+    setLoading(true)
+    const updates: any = {
+      bio,
+      research_interests: researchInterests,
+    }
+    if (avatarUrl) updates.profilePic = avatarUrl
+    const { error } = await supabase
+      .from("profiles")
+      .update(updates)
+      .eq("user_id", user.id)
+    setLoading(false)
+    if (error) {
+      alert("Failed to update profile")
+      console.error("Supabase update error:", error)
+    } else {
+      // Refetch research_interests after save
+      const { data: profileData, error: fetchError } = await supabase
+        .from("profiles")
+        .select("research_interests")
+        .eq("user_id", user.id)
+        .single();
+      if (!fetchError && profileData?.research_interests) {
+        setResearchInterests(profileData.research_interests);
+      }
+      onClose()
+    }
+  }
+
+  // Handler to add a new interest
+  const handleAddInterest = (interest: string) => {
+    if (!researchInterests.includes(interest)) {
+      setResearchInterests([...researchInterests, interest])
+    }
+  }
+
+  // Handler to remove an interest
+  const handleRemoveInterest = (interest: string) => {
+    setResearchInterests(researchInterests.filter(i => i !== interest))
+  }
+
   return (
     <div className="container py-8 max-w-6xl">
       <div className="flex items-center justify-between mb-6">
@@ -409,15 +496,12 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
           </Button>
           <h1 className="text-2xl font-bold">Profile Settings</h1>
         </div>
-        <Button onClick={onClose}>Save Changes</Button>
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="profile">Profile Information</TabsTrigger>
-          <TabsTrigger value="interests">Research Interests</TabsTrigger>
           <TabsTrigger value="contributions">My Contributions</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="bank">Bank Accounts</TabsTrigger>
         </TabsList>
 
@@ -432,30 +516,36 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
                 <Label htmlFor="avatar">Profile Picture</Label>
                 <div className="flex items-center gap-4">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src={user?.avatar || "/placeholder.svg?height=80&width=80"} alt={user?.name || "User"} />
+                    <AvatarImage src={avatarUrl || "/placeholder.svg?height=80&width=80"} alt={user?.username || "User"} />
                     <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col gap-2">
-                    <Button variant="outline" size="sm" className="w-fit">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      ref={fileInputRef}
+                      style={{ display: "none" }}
+                      onChange={handleFileChange}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-fit"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
                       <Upload className="mr-2 h-4 w-4" />
-                      Upload New Image
+                      {uploading ? "Uploading..." : "Upload New Image"}
                     </Button>
                     <span className="text-xs text-muted-foreground">JPG, PNG or GIF. 1MB max.</span>
                   </div>
                 </div>
               </div>
 
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="flex flex-col space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-                </div>
-
-                <div className="flex flex-col space-y-2">
-                  <Label htmlFor="username">Username</Label>
-                  <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} />
-                  <span className="text-xs text-muted-foreground">This will be displayed as @{username}</span>
-                </div>
+              <div className="flex flex-col space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input id="username" value={username} disabled readOnly />
+                <span className="text-xs text-muted-foreground">Your username is not editable.</span>
               </div>
 
               <div className="flex flex-col space-y-2">
@@ -471,77 +561,36 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
                   Brief description for your profile. Maximum 300 characters.
                 </span>
               </div>
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button>Save Changes</Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
 
-        <TabsContent value="interests" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Research Interests</CardTitle>
-              <CardDescription>
-                Select scientific categories that interest you. These will help personalize your experience and connect
-                you with relevant labs and researchers.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <Label className="text-base">Selected Interests</Label>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedInterests.length > 0 ? (
-                    selectedInterests.map((interest, index) => (
-                      <Badge key={index} variant="secondary" className="pl-2 pr-1 py-1">
-                        {interest}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-4 w-4 ml-1 hover:bg-transparent"
-                          onClick={() => toggleInterest(interest)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-sm text-muted-foreground">No interests selected yet</span>
+              <div className="flex flex-col space-y-2 mt-2">
+                <label className="font-semibold">Research Interests</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {researchInterests.length === 0 && (
+                    <span className="text-xs text-muted-foreground">No research interests selected.</span>
                   )}
+                  {researchInterests.map((interest, idx) => (
+                    <span key={idx} className="inline-flex items-center rounded-full bg-secondary px-2 py-1 text-xs font-medium">
+                      {interest}
+                      <button
+                        type="button"
+                        className="ml-1 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleRemoveInterest(interest)}
+                        aria-label={`Remove ${interest}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
                 </div>
               </div>
-
-              <Separator className="my-4" />
-
-              <div>
-                <Label className="text-base mb-2 block">Available Categories</Label>
-                <ScrollArea className="h-[300px] pr-4">
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {allScienceCategories
-                      .filter((category) => !selectedInterests.includes(category))
-                      .map((category, index) => (
-                        <Button
-                          key={index}
-                          variant="outline"
-                          className="justify-start h-auto py-2"
-                          onClick={() => toggleInterest(category)}
-                        >
-                          <Plus className="mr-2 h-4 w-4" />
-                          {category}
-                        </Button>
-                      ))}
-                  </div>
-                </ScrollArea>
-              </div>
             </CardContent>
             <CardFooter className="flex justify-between">
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outline" onClick={onClose} disabled={loading}>
                 Cancel
               </Button>
-              <Button>Save Changes</Button>
+              <Button onClick={handleSave} disabled={loading || uploading}>
+                {loading ? "Saving..." : "Save Changes"}
+              </Button>
             </CardFooter>
           </Card>
         </TabsContent>
@@ -580,114 +629,6 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
                 <Plus className="mr-2 h-4 w-4" />
                 Create New Contribution
               </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="notifications" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>Manage how and when you receive notifications</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <h3 className="text-lg font-medium mb-4">Email Notifications</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <Label htmlFor="email-lab-updates" className="font-normal">
-                        Lab updates and announcements
-                      </Label>
-                    </div>
-                    <Switch id="email-lab-updates" defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <Label htmlFor="email-contribution-updates" className="font-normal">
-                        Contribution status updates
-                      </Label>
-                    </div>
-                    <Switch id="email-contribution-updates" defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <Label htmlFor="email-new-followers" className="font-normal">
-                        New followers
-                      </Label>
-                    </div>
-                    <Switch id="email-new-followers" />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <Label htmlFor="email-newsletter" className="font-normal">
-                        Weekly newsletter and digest
-                      </Label>
-                    </div>
-                    <Switch id="email-newsletter" defaultChecked />
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div>
-                <h3 className="text-lg font-medium mb-4">In-App Notifications</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Bell className="h-4 w-4 text-muted-foreground" />
-                      <Label htmlFor="app-comments" className="font-normal">
-                        Comments on your contributions
-                      </Label>
-                    </div>
-                    <Switch id="app-comments" defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Bell className="h-4 w-4 text-muted-foreground" />
-                      <Label htmlFor="app-mentions" className="font-normal">
-                        Mentions and tags
-                      </Label>
-                    </div>
-                    <Switch id="app-mentions" defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Bell className="h-4 w-4 text-muted-foreground" />
-                      <Label htmlFor="app-lab-activity" className="font-normal">
-                        Lab activity updates
-                      </Label>
-                    </div>
-                    <Switch id="app-lab-activity" defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Bell className="h-4 w-4 text-muted-foreground" />
-                      <Label htmlFor="app-funding" className="font-normal">
-                        Funding opportunities
-                      </Label>
-                    </div>
-                    <Switch id="app-funding" />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button>Save Changes</Button>
             </CardFooter>
           </Card>
         </TabsContent>
@@ -842,7 +783,7 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
               Add a credit card or bank account for making payments.
             </DialogDescription>
           </DialogHeader>
-          {clientSecret && (
+          {clientSecret && stripePromise && (
             <Elements stripe={stripePromise} options={{ clientSecret }}>
               <PaymentForm onSuccess={() => {
                 setShowPaymentForm(false);

@@ -13,8 +13,7 @@ interface UserLabsSectionProps {
 }
 
 export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionProps) {
-  const [foundedLabs, setFoundedLabs] = useState<any[]>([])
-  const [memberLabs, setMemberLabs] = useState<any[]>([])
+  const [allLabs, setAllLabs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,19 +45,65 @@ export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionPr
         return labsRes
       })
 
-    Promise.all([foundedPromise, memberPromise]).then(([foundedRes, memberRes]) => {
+    // Fetch labs the user follows
+    const followerPromise = supabase
+      .from('labFollowers')
+      .select('labId')
+      .eq('userId', userId)
+      .then(async (res) => {
+        if (res.error) return { data: [], error: res.error }
+        const labIds = (res.data || [])
+          .map((m: any) => m.labId)
+          .filter((id: string | null | undefined) => !!id && id !== "null");
+        if (!labIds.length) return { data: [], error: null }
+        const labsRes = await supabase
+          .from('labs')
+          .select('*')
+          .in('labId', labIds)
+        return labsRes
+      })
+
+    Promise.all([foundedPromise, memberPromise, followerPromise]).then(([foundedRes, memberRes, followerRes]) => {
       if (foundedRes.error) setError(foundedRes.error.message)
       if (memberRes.error) setError(memberRes.error.message)
-      setFoundedLabs(foundedRes.data || [])
-      setMemberLabs(memberRes.data || [])
+      if (followerRes.error) setError(followerRes.error.message)
+      // Merge and dedupe labs, add role
+      const founded = (foundedRes.data || []).map((lab: any) => ({ ...lab, _role: 'Founder' }))
+      const member = (memberRes.data || []).map((lab: any) => ({ ...lab, _role: 'Member' }))
+      const follower = (followerRes.data || []).map((lab: any) => ({ ...lab, _role: 'Follower' }))
+      const all: Record<string, any> = {}
+      founded.forEach(lab => { all[lab.labId] = lab })
+      member.forEach(lab => {
+        if (all[lab.labId]) {
+          // If already founder, keep founder role
+        } else {
+          all[lab.labId] = lab
+        }
+      })
+      follower.forEach(lab => {
+        if (all[lab.labId]) {
+          // If already founder/member, keep higher role
+        } else {
+          all[lab.labId] = lab
+        }
+      })
+      // Sort by role precedence, then name
+      const roleOrder = { Founder: 0, Member: 1, Follower: 2 }
+      const labsList = Object.values(all).sort((a: any, b: any) => {
+        const roleA = roleOrder[a._role as keyof typeof roleOrder] ?? 99
+        const roleB = roleOrder[b._role as keyof typeof roleOrder] ?? 99
+        if (roleA !== roleB) return roleA - roleB
+        return (a.labName || a.name || '').localeCompare(b.labName || b.name || '')
+      })
+      setAllLabs(labsList)
       setLoading(false)
       if (onLabsCountChange) {
-        onLabsCountChange((foundedRes.data?.length || 0) + (memberRes.data?.length || 0))
+        onLabsCountChange(labsList.length)
       }
     })
   }, [userId, onLabsCountChange])
 
-  const renderLabCard = (lab: any, role: string) => (
+  const renderLabCard = (lab: any) => (
     <Card key={lab.labId} className="mb-4">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
@@ -66,8 +111,12 @@ export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionPr
             <CardTitle className="text-lg">{lab.labName || lab.name}</CardTitle>
             <CardDescription className="mt-1">{lab.description}</CardDescription>
           </div>
-          {role === "founded" && <Badge className="bg-primary text-primary-foreground">Founder</Badge>}
-          {role === "member" && <Badge variant="secondary">Member</Badge>}
+          <Badge
+            className={lab._role === "Founder" ? "bg-primary text-primary-foreground" : lab._role === "Follower" ? "bg-muted text-muted-foreground border" : ""}
+            variant={lab._role === "Member" ? "secondary" : undefined}
+          >
+            {lab._role}
+          </Badge>
         </div>
       </CardHeader>
       <CardContent className="pb-2">
@@ -101,27 +150,13 @@ export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionPr
   }
 
   return (
-    <Tabs defaultValue="founded" className="w-full">
-      <TabsList className="grid w-full grid-cols-2 mb-6">
-        <TabsTrigger value="founded">Founded ({foundedLabs.length})</TabsTrigger>
-        <TabsTrigger value="member">Member ({memberLabs.length})</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="founded">
-        <div className="mb-4 flex justify-between items-center">
-          <h3 className="text-lg font-medium">Labs You've Founded</h3>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Create New Lab
-          </Button>
-        </div>
-        {foundedLabs.length === 0 ? <div className="text-muted-foreground">No labs founded yet.</div> : foundedLabs.map((lab) => renderLabCard(lab, "founded"))}
-      </TabsContent>
-
-      <TabsContent value="member">
-        <h3 className="text-lg font-medium mb-4">Labs You're a Member Of</h3>
-        {memberLabs.length === 0 ? <div className="text-muted-foreground">No memberships yet.</div> : memberLabs.map((lab) => renderLabCard(lab, "member"))}
-      </TabsContent>
-    </Tabs>
+    <div className="w-full">
+      <h3 className="text-lg font-medium mb-4">Labs</h3>
+      {allLabs.length === 0 ? (
+        <div className="text-muted-foreground">No labs found.</div>
+      ) : (
+        allLabs.map((lab) => renderLabCard(lab))
+      )}
+    </div>
   )
 }

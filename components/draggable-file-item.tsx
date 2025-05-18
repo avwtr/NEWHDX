@@ -33,6 +33,7 @@ import { FileViewerDialog } from "@/components/file-viewer-dialog"
 import { Badge } from "@/components/ui/badge"
 import { downloadFile } from "./file-viewer-dialog" // adjust path if moved to utils
 import { supabase } from "@/lib/supabaseClient"
+import { useAuth } from "@/components/auth-provider"
 
 interface FileItemProps {
   id: string
@@ -135,6 +136,7 @@ export function DraggableFileItem({
   const [fileViewerOpen, setFileViewerOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const fileRef = useRef<HTMLDivElement>(null)
+  const { user } = useAuth();
 
   const lastUpdatedBy = file?.lastUpdatedBy;
   const lastUpdated = file?.lastUpdated || date;
@@ -276,13 +278,34 @@ export function DraggableFileItem({
     onDrop(e, id)
   }
 
-  const handleSaveToProfile = () => {
-    // In a real app, this would call an API to save the file to the user's profile
-    toast({
-      title: "File saved",
-      description: `${name} has been saved to your profile.`,
-    })
-    setSaveDialogOpen(false)
+  const handleSaveToProfile = async () => {
+    if (!user) {
+      toast({ title: "Not logged in", description: "Please log in to save files to your profile.", variant: "destructive" });
+      setSaveDialogOpen(false);
+      return;
+    }
+    try {
+      // Prevent duplicate saves
+      const { data: existing, error: fetchError } = await supabase
+        .from("saved_files")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("file_id", id)
+        .maybeSingle();
+      if (existing) {
+        toast({ title: "Already saved", description: "This file is already in your saved files.", variant: "default" });
+        setSaveDialogOpen(false);
+        return;
+      }
+      const { error } = await supabase.from("saved_files").insert([
+        { user_id: user.id, file_id: id, labId: labId }
+      ]);
+      if (error) throw error;
+      toast({ title: "File saved", description: `${name} has been saved to your profile.` });
+    } catch (err: any) {
+      toast({ title: "Error saving file", description: err.message || String(err), variant: "destructive" });
+    }
+    setSaveDialogOpen(false);
   }
 
   const handleOpenFile = () => {
