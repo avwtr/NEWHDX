@@ -6,6 +6,7 @@ import { Beaker, FileText, Database, MessageSquare, GitBranch, Calendar, Filter 
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import Image from "next/image"
 
 interface UserActivityLogsProps {
   userId: string
@@ -42,11 +43,14 @@ export function UserActivityLogs({ userId, userName, userProfilePic }: UserActiv
         if (uniqueLabIds.length) {
           const { data: labs } = await supabase
             .from("labs")
-            .select("labId, labName")
+            .select("labId, labName, profilePic")
             .in("labId", uniqueLabIds)
           if (labs) {
             labs.forEach((lab: any) => {
-              labMap[lab.labId] = lab.labName
+              labMap[lab.labId] = {
+                name: lab.labName,
+                profilePic: lab.profilePic || "/placeholder.svg"
+              }
             })
           }
         }
@@ -129,7 +133,7 @@ export function UserActivityLogs({ userId, userName, userProfilePic }: UserActiv
             <ScrollArea className="h-[500px] pr-4">
               <div className="relative pl-6 border-l">
                 {activities.map((activity, index) => {
-                  const labName = labMap[activity.lab_from] || `Lab ${activity.lab_from?.slice(0, 6) || "?"}`
+                  const labName = labMap[activity.lab_from]?.name || `Lab ${activity.lab_from?.slice(0, 6) || "?"}`
                   const avatar = userProfilePic || "/placeholder.svg?height=40&width=40"
                   return (
                     <div key={activity.id || activity.activity_id || activity.created_at || index} className="mb-6 relative">
@@ -140,7 +144,15 @@ export function UserActivityLogs({ userId, userName, userProfilePic }: UserActiv
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
                             <span className={`p-1.5 rounded-full ${getActivityTypeColor(activity.activity_type)}`}>{getActivityIcon(activity.activity_type)}</span>
-                            <Link href={`/labs/${activity.lab_from || "#"}`} className="font-medium hover:underline">
+                            <Link href={`/lab/${activity.lab_from || "#"}`} className="font-medium hover:underline flex items-center gap-2">
+                              <div className="relative h-6 w-6 rounded-full overflow-hidden border border-secondary">
+                                <Image
+                                  src={labMap[activity.lab_from]?.profilePic || "/placeholder.svg"}
+                                  alt={labMap[activity.lab_from]?.name || "Lab"}
+                                  fill
+                                  className="object-cover"
+                                />
+                              </div>
                               {labName}
                             </Link>
                           </div>

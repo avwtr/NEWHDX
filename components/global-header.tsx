@@ -32,10 +32,47 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/components/auth-provider"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 export function GlobalHeader() {
   const [searchQuery, setSearchQuery] = useState("")
   const { user, signOut, isLoading } = useAuth()
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [helpSubject, setHelpSubject] = useState("")
+  const [helpMessage, setHelpMessage] = useState("")
+  const [helpLoading, setHelpLoading] = useState(false)
+  const [helpSuccess, setHelpSuccess] = useState<string | null>(null)
+  const [helpError, setHelpError] = useState<string | null>(null)
+
+  const handleHelpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setHelpLoading(true)
+    setHelpSuccess(null)
+    setHelpError(null)
+    try {
+      const res = await fetch("/api/send-help-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: helpSubject,
+          message: helpMessage,
+          from: user?.email || "anonymous@hdx.com"
+        })
+      })
+      if (res.ok) {
+        setHelpSuccess("Your message has been sent! We'll get back to you soon.")
+        setHelpSubject("")
+        setHelpMessage("")
+      } else {
+        setHelpError("Failed to send message. Please try again later.")
+      }
+    } catch (err) {
+      setHelpError("Failed to send message. Please try again later.")
+    } finally {
+      setHelpLoading(false)
+    }
+  }
 
   // Get user initials for avatar fallback
   const getInitials = () => {
@@ -165,22 +202,22 @@ export function GlobalHeader() {
                 <DropdownMenuLabel className="uppercase text-xs tracking-wide">My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/profile" className="gap-2 flex items-center">
+                  <Link href="/profile" className="gap-2 flex items-center w-full">
                     <User className="h-4 w-4" />
                     <span>Profile</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/profile" className="gap-2 flex items-center">
+                  <Link href="/profile?tab=settings" className="gap-2 flex items-center w-full">
                     <Settings className="h-4 w-4" />
                     <span>Settings</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/content" className="gap-2 flex items-center">
+                  <a href="https://heterodoxlabs.org" target="_blank" rel="noopener noreferrer" className="gap-2 flex items-center">
                     <FileText className="h-4 w-4" />
-                    <span>HDX Content</span>
-                  </Link>
+                    <span>HDX Foundation</span>
+                  </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <a
@@ -193,36 +230,24 @@ export function GlobalHeader() {
                     <span>HDX Shop</span>
                   </a>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/membership" className="gap-2 flex items-center">
-                    <CreditCard className="h-4 w-4" />
-                    <span>Membership</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/help" className="gap-2 flex items-center">
-                    <HelpCircle className="h-4 w-4" />
-                    <span>Help</span>
-                  </Link>
-                </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
 
                 <DropdownMenuLabel className="uppercase text-xs tracking-wide">Follow Us</DropdownMenuLabel>
                 <DropdownMenuGroup className="flex justify-between px-2 py-1.5">
-                  <Link href="https://instagram.com/hdx" target="_blank" rel="noopener noreferrer">
+                  <Link href="https://instagram.com/heterodoxlabs" target="_blank" rel="noopener noreferrer">
                     <Button variant="ghost" size="icon" className="h-8 w-8">
                       <Instagram className="h-4 w-4" />
                       <span className="sr-only">Instagram</span>
                     </Button>
                   </Link>
-                  <Link href="https://twitter.com/hdx" target="_blank" rel="noopener noreferrer">
+                  <Link href="https://twitter.com/heterodoxlabs" target="_blank" rel="noopener noreferrer">
                     <Button variant="ghost" size="icon" className="h-8 w-8">
                       <Twitter className="h-4 w-4" />
                       <span className="sr-only">Twitter</span>
                     </Button>
                   </Link>
-                  <Link href="https://youtube.com/hdx" target="_blank" rel="noopener noreferrer">
+                  <Link href="https://www.youtube.com/@HDXLABS" target="_blank" rel="noopener noreferrer">
                     <Button variant="ghost" size="icon" className="h-8 w-8">
                       <Youtube className="h-4 w-4" />
                       <span className="sr-only">YouTube</span>
@@ -266,6 +291,42 @@ export function GlobalHeader() {
           />
         </div>
       </div>
+
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Contact HDX Support</DialogTitle>
+            <DialogDescription>
+              Send a message to the HDX Foundation team. We'll get back to you as soon as possible.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleHelpSubmit} className="space-y-4">
+            <Input
+              placeholder="Subject"
+              value={helpSubject}
+              onChange={e => setHelpSubject(e.target.value)}
+              required
+              maxLength={100}
+            />
+            <Textarea
+              placeholder="How can we help you?"
+              value={helpMessage}
+              onChange={e => setHelpMessage(e.target.value)}
+              rows={5}
+              required
+              maxLength={1000}
+            />
+            {helpSuccess && <div className="text-green-600 text-sm">{helpSuccess}</div>}
+            {helpError && <div className="text-red-600 text-sm">{helpError}</div>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setHelpOpen(false)} disabled={helpLoading}>Cancel</Button>
+              <Button type="submit" disabled={helpLoading || !helpSubject || !helpMessage} className="bg-accent text-primary-foreground hover:bg-accent/90">
+                {helpLoading ? "Sending..." : "Send"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </header>
   )
 }

@@ -51,7 +51,6 @@ interface LabViewProps {
 
 export default function LabView({ lab, categories, isGuest, notifications, notificationsSidebarOpen, setNotificationsSidebarOpen, handleGuestAction, setActiveTab, router }: LabViewProps) {
   const { user } = useAuth()
-
   const { currentRole } = useRole()
   const isUser = currentRole === "user"
 
@@ -65,8 +64,8 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   const [cognitiveFileName, setCognitiveFileName] = useState("COGNITIVE_TEST_RESULTS.CSV")
   const [tempFileName, setTempFileName] = useState("")
 
-  // Notifications state
-  const [localNotifications, setLocalNotifications] = useState(notificationsData)
+  // Notifications state (only for real notifications, not hardcoded)
+  const [localNotifications, setLocalNotifications] = useState<any[]>([])
   const [showNotifications, setShowNotifications] = useState(true)
   const [localNotificationsSidebarOpen, setLocalNotificationsSidebarOpen] = useState(false)
 
@@ -128,6 +127,8 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   // --- Organization Info state ---
   const [orgInfo, setOrgInfo] = useState<{ org_name: string; profilePic?: string } | null>(null)
 
+  const [loading, setLoading] = useState(true)
+
   // Helper to refetch lab data (including funding_setup)
   const refetchLab = async () => {
     if (!lab?.labId) return;
@@ -141,6 +142,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
 
   useEffect(() => {
     const fetchLabData = async () => {
+      setLoading(true)
       if (!lab?.labId) return
 
       // Fetch experiments
@@ -172,7 +174,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .eq("lab_id", lab.labId)
       setMembers(memberData || [])
 
-      // Fetch notifications
+      // Fetch notifications (real only)
       const { data: notificationData } = await supabase
         .from("notifications")
         .select("*")
@@ -204,6 +206,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .single();
       console.log("Fetched membership data:", membershipData, error);
       setMembership(membershipData);
+      setLoading(false)
     }
     fetchLabData()
   }, [lab])
@@ -313,28 +316,32 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
     async function fetchMembersBreakdown() {
       if (!lab?.labId) return;
       // 1. Fetch labMembers (founders/admins/others)
-      const { data: labMembers = [] } = await supabase
+      const { data: labMembersRaw } = await supabase
         .from("labMembers")
         .select("user, role")
         .eq("lab_id", lab.labId);
+      const labMembers = labMembersRaw || [];
       const founders = new Set(labMembers.filter(m => m.role === "founder").map(m => m.user));
       const admins = new Set(labMembers.filter(m => m.role === "admin").map(m => m.user));
       // 2. Fetch labContributors
-      const { data: labContribs = [] } = await supabase
+      const { data: labContribsRaw } = await supabase
         .from("labContributors")
         .select("userId")
         .eq("labId", lab.labId);
+      const labContribs = labContribsRaw || [];
       const contributors = new Set(labContribs.map(c => c.userId));
       // 3. Fetch labDonors
-      const { data: labDonors = [] } = await supabase
+      const { data: labDonorsRaw } = await supabase
         .from("labDonors")
         .select("userId")
         .eq("labId", lab.labId);
+      const labDonors = labDonorsRaw || [];
       // 4. Fetch labSubscribers (these are donors)
-      const { data: labSubs = [] } = await supabase
+      const { data: labSubsRaw } = await supabase
         .from("labSubscribers")
         .select("userId")
         .eq("labId", lab.labId);
+      const labSubs = labSubsRaw || [];
       const donors = new Set([...labDonors.map(d => d.userId), ...labSubs.map(s => s.userId)]);
       // 5. Union all user IDs for total
       const all = new Set([
@@ -580,289 +587,287 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
 
   return (
     <div className="container mx-auto pt-4 pb-8">
-      {/* Contribution Dialog for non-admin users */}
-      <ContributionDialog
-        open={contributionDialogOpen}
-        onOpenChange={setContributionDialogOpen}
-        experimentId={lab.labId}
-        experimentName={lab.labName}
-      />
-      {/* Role indicator banner */}
-      <div
-        className={`p-2 text-center text-sm font-medium rounded-md mb-4 ${
-          isAdmin
-            ? "bg-purple-900/30 text-purple-300"
-            : isUser
-              ? "bg-blue-900/30 text-blue-300"
-              : "bg-gray-900/30 text-gray-300"
-        }`}
-      >
-        You are viewing as: {isAdmin ? "Lab Admin" : isUser ? "Logged-in User" : "Guest (Not Logged In)"}
-      </div>
-
-      {/* Login prompt for guests */}
-      <LoginPrompt isOpen={loginPromptOpen} onClose={() => setLoginPromptOpen(false)} />
-
-      {/* Global Add Button - Only visible for admins */}
-      {isAdmin && (
-        <GlobalAddButton
-          onUploadFile={handleUploadFile}
-          onNewFolder={handleNewFolder}
-          onNewExperiment={handleNewExperiment}
-          onInviteMember={handleInviteMember}
-          onSettings={handleSettings}
-          onLogEvent={handleLogEvent}
-        />
-      )}
-
-      {/* Notifications Bar - Only visible for admins */}
-      {isAdmin && showNotifications && localNotifications.length > 0 && (
-        <LabNotifications
-          notifications={localNotifications}
-          onDismiss={dismissNotification}
-          onDismissAll={dismissAllNotifications}
-        />
-      )}
-
-      {/* Lab Profile - Full width at the top */}
-      <div className="w-full mb-6">
-        <LabProfile
-          lab={labState}
-          categories={categories}
-          notifications={localNotifications}
-          isAdmin={isAdmin}
-          isGuest={isGuest}
-          isFollowing={localIsFollowing}
-          setIsFollowing={handleFollowToggle}
-          notificationsSidebarOpen={localNotificationsSidebarOpen}
-          setNotificationsSidebarOpen={setLocalNotificationsSidebarOpen}
-          handleGuestAction={localHandleGuestAction}
-          setActiveTab={setLocalActiveTab}
-          router={router}
-          experimentsCount={experimentsCount}
-          filesCount={filesCount}
-          fundingTotal={fundingTotals}
-          membersCount={membersBreakdown.total}
-          membersBreakdown={membersBreakdown}
-          onOpenContributeDialog={() => setContributionDialogOpen(true)}
-          orgInfo={orgInfo}
-        />
-      </div>
-
-      {/* Main content with navigation and content area */}
-      <div className="flex flex-col md:flex-row gap-6">
-        {/* Left side navigation and activity explorer */}
-        <div className="w-full md:w-64 shrink-0 space-y-4">
-          {/* Navigation */}
-          <div className="bg-card rounded-lg overflow-hidden">
-            <nav className="flex flex-col">
-              <button
-                onClick={() => handleTabChange("overview")}
-                className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  localActiveTab === "overview" ? "bg-accent text-background" : "hover:bg-muted"
-                }`}
-              >
-                <Home className="h-5 w-5" />
-                <span className="font-medium">OVERVIEW</span>
-              </button>
-
-              <button
-                onClick={() => handleTabChange("lab-materials")}
-                className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  localActiveTab === "lab-materials" ? "bg-accent text-background" : "hover:bg-muted"
-                }`}
-              >
-                <FileText className="h-5 w-5" />
-                <span className="font-medium">LAB MATERIALS</span>
-              </button>
-
-              <button
-                onClick={() => handleTabChange("experiments")}
-                className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  localActiveTab === "experiments" ? "bg-accent text-background" : "hover:bg-muted"
-                }`}
-              >
-                <FlaskConical className="h-5 w-5" />
-                <span className="font-medium">EXPERIMENTS</span>
-              </button>
-
-              <button
-                onClick={() => handleTabChange("funding")}
-                className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  localActiveTab === "funding" ? "bg-accent text-background" : "hover:bg-muted"
-                }`}
-              >
-                <DollarSign className="h-5 w-5" />
-                <span className="font-medium">FUNDING</span>
-              </button>
-
-              {isAdmin && (
-                <button
-                  onClick={() => {
-                    setLocalActiveTab("settings")
-                    setActiveSettingsTab("general")
-                  }}
-                  className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                    localActiveTab === "settings" ? "bg-accent text-background" : "hover:bg-muted"
-                  }`}
-                >
-                  <Users className="h-5 w-5" />
-                  <span className="font-medium">SETTINGS</span>
-                  {pendingCount > 0 && (
-                    <span className="ml-auto bg-destructive text-destructive-foreground text-xs rounded-full px-2 py-0.5">
-                      {pendingCount}
-                    </span>
-                  )}
-                </button>
-              )}
-            </nav>
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-accent"></div>
+        </div>
+      ) : (
+        <>
+          {/* Contribution Dialog for non-admin users */}
+          <ContributionDialog
+            open={contributionDialogOpen}
+            onOpenChange={setContributionDialogOpen}
+            experimentId={lab.labId}
+            experimentName={lab.labName}
+          />
+          {/* Role indicator banner */}
+          <div
+            className={`p-2 text-center text-sm font-medium rounded-md mb-4 ${
+              isAdmin
+                ? "bg-purple-900/30 text-purple-300"
+                : isUser
+                  ? "bg-blue-900/30 text-blue-300"
+                  : "bg-gray-900/30 text-gray-300"
+            }`}
+          >
+            You are viewing as: {isAdmin ? "Lab Admin" : isUser ? "Logged-in User" : "Guest (Not Logged In)"}
           </div>
 
-          {/* Activity Explorer */}
-          <ActivityExplorer labId={lab.labId} />
-        </div>
+          {/* Login prompt for guests */}
+          <LoginPrompt isOpen={loginPromptOpen} onClose={() => setLoginPromptOpen(false)} />
 
-        {/* Main content area */}
-        <div className="flex-1">
-          {localActiveTab === "overview" && (
-            <LabOverviewTab
-              isAdmin={isAdmin}
-              expandedTab={expandedTab}
-              toggleExpand={toggleExpand}
-              funds={funds}
-              experimentsExpanded={experimentsExpanded}
-              setExperimentsExpanded={setExperimentsExpanded}
-              setCreateExperimentDialogOpen={setCreateExperimentDialogOpen}
-              liveExperimentsData={liveExperimentsData}
-              labId={lab.labId}
+          {/* Global Add Button - Only visible for admins */}
+          {isAdmin && (
+            <GlobalAddButton
+              onUploadFile={handleUploadFile}
+              onNewFolder={handleNewFolder}
+              onNewExperiment={handleNewExperiment}
+              onInviteMember={handleInviteMember}
+              onSettings={handleSettings}
+              onLogEvent={handleLogEvent}
             />
           )}
 
-          {localActiveTab === "lab-materials" && (
-            <LabMaterialsExplorer labId={lab.labId} createNewFolder={createNewFolder} isAdmin={isAdmin} />
-          )}
-
-          {localActiveTab === "experiments" && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle>EXPERIMENTS</CardTitle>
-                <div className="flex items-center gap-2">
-                  {/* New experiment button only for admins */}
-                  {isAdmin && (
-                    <Button
-                      className="bg-accent text-primary-foreground hover:bg-accent/90"
-                      onClick={() => setCreateExperimentDialogOpen(true)}
-                    >
-                      <Beaker className="h-4 w-4 mr-2" />
-                      START NEW EXPERIMENT
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => toggleExpand("experiments")}
-                    className="h-8 w-8 ml-2"
-                  >
-                    {expandedTab === "experiments" ? (
-                      <Minimize2 className="h-4 w-4" />
-                    ) : (
-                      <Maximize2 className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ExperimentsList labId={lab.labId} />
-              </CardContent>
-              <CardFooter>
-                <Button variant="outline" className="w-full border-accent text-accent hover:bg-secondary" asChild>
-                  <Link href="/experiments">VIEW ALL EXPERIMENTS</Link>
-                </Button>
-              </CardFooter>
-            </Card>
-          )}
-
-          {localActiveTab === "funding" && (
-            <LabFundingTab
+          {/* Lab Profile - Full width at the top */}
+          <div className="w-full mb-6">
+            <LabProfile
+              lab={labState}
+              categories={categories}
+              notifications={localNotifications}
               isAdmin={isAdmin}
               isGuest={isGuest}
-              expandedTab={expandedTab}
-              toggleExpand={toggleExpand}
-              funds={funds}
-              setFunds={setFunds}
-              isDonationsActive={isDonationsActive}
-              toggleDonations={toggleDonations}
+              isFollowing={localIsFollowing}
+              setIsFollowing={handleFollowToggle}
+              notificationsSidebarOpen={localNotificationsSidebarOpen}
+              setNotificationsSidebarOpen={setLocalNotificationsSidebarOpen}
               handleGuestAction={localHandleGuestAction}
-              handleEditFund={handleEditFund}
-              handleManageMembership={handleManageMembership}
-              labId={lab.labId}
-              membership={membership}
-              oneTimeDonation={oneTimeDonation}
-              labsMembershipOption={labsMembershipOption}
-              refetchMembership={refetchMembership}
-              refetchOneTimeDonation={refetchOneTimeDonation}
-              lab={labState}
-              refetchLab={refetchLab}
-            />
-          )}
-
-          {localActiveTab === "settings" && isAdmin && (
-            <LabSettingsTab
-              activeSettingsTab={activeSettingsTab}
-              setActiveSettingsTab={setActiveSettingsTab}
               setActiveTab={setLocalActiveTab}
-              pendingCount={pendingCount}
-              contributionSearch={contributionSearch}
-              setContributionSearch={setContributionSearch}
-              contributionFilter={contributionFilter}
-              setContributionFilter={setContributionFilter}
-              filteredContributions={filteredContributions}
-              handleViewContribution={handleViewContribution}
-              SettingsDialogComponent={<SettingsDialog lab={labState} onLabUpdated={setLabState} />}
-              labId={lab.labId}
+              router={router}
+              experimentsCount={experimentsCount}
+              filesCount={filesCount}
+              fundingTotal={fundingTotals}
+              membersCount={membersBreakdown.total}
+              membersBreakdown={membersBreakdown}
+              onOpenContributeDialog={() => setContributionDialogOpen(true)}
+              orgInfo={orgInfo}
+            />
+          </div>
+
+          {/* Main content with navigation and content area */}
+          <div className="flex flex-col md:flex-row gap-6">
+            {/* Left side navigation and activity explorer */}
+            <div className="w-full md:w-64 shrink-0 space-y-4">
+              {/* Navigation */}
+              <div className="bg-card rounded-lg overflow-hidden">
+                <nav className="flex flex-col">
+                  <button
+                    onClick={() => handleTabChange("overview")}
+                    className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      localActiveTab === "overview" ? "bg-accent text-background" : "hover:bg-muted"
+                    }`}
+                  >
+                    <Home className="h-5 w-5" />
+                    <span className="font-medium">OVERVIEW</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleTabChange("lab-materials")}
+                    className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      localActiveTab === "lab-materials" ? "bg-accent text-background" : "hover:bg-muted"
+                    }`}
+                  >
+                    <FileText className="h-5 w-5" />
+                    <span className="font-medium">LAB MATERIALS</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleTabChange("experiments")}
+                    className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      localActiveTab === "experiments" ? "bg-accent text-background" : "hover:bg-muted"
+                    }`}
+                  >
+                    <FlaskConical className="h-5 w-5" />
+                    <span className="font-medium">EXPERIMENTS</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleTabChange("funding")}
+                    className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      localActiveTab === "funding" ? "bg-accent text-background" : "hover:bg-muted"
+                    }`}
+                  >
+                    <DollarSign className="h-5 w-5" />
+                    <span className="font-medium">FUNDING</span>
+                  </button>
+
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        setLocalActiveTab("settings")
+                        setActiveSettingsTab("general")
+                      }}
+                      className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                        localActiveTab === "settings" ? "bg-accent text-background" : "hover:bg-muted"
+                      }`}
+                    >
+                      <Users className="h-5 w-5" />
+                      <span className="font-medium">SETTINGS</span>
+                      {pendingCount > 0 && (
+                        <span className="ml-auto bg-destructive text-destructive-foreground text-xs rounded-full px-2 py-0.5">
+                          {pendingCount}
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </nav>
+              </div>
+
+              {/* Activity Explorer */}
+              <ActivityExplorer labId={lab.labId} />
+            </div>
+
+            {/* Main content area */}
+            <div className="flex-1">
+              {localActiveTab === "overview" && (
+                <LabOverviewTab
+                  isAdmin={isAdmin}
+                  expandedTab={expandedTab}
+                  toggleExpand={toggleExpand}
+                  funds={funds}
+                  experimentsExpanded={experimentsExpanded}
+                  setExperimentsExpanded={setExperimentsExpanded}
+                  setCreateExperimentDialogOpen={setCreateExperimentDialogOpen}
+                  liveExperimentsData={liveExperimentsData}
+                  labId={lab.labId}
+                />
+              )}
+
+              {localActiveTab === "lab-materials" && (
+                <LabMaterialsExplorer labId={lab.labId} createNewFolder={createNewFolder} isAdmin={isAdmin} />
+              )}
+
+              {localActiveTab === "experiments" && (
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle>EXPERIMENTS</CardTitle>
+                    <div className="flex items-center gap-2">
+                      {/* New experiment button only for admins */}
+                      {isAdmin && (
+                        <Button
+                          className="bg-accent text-primary-foreground hover:bg-accent/90"
+                          onClick={() => setCreateExperimentDialogOpen(true)}
+                        >
+                          <Beaker className="h-4 w-4 mr-2" />
+                          START NEW EXPERIMENT
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleExpand("experiments")}
+                        className="h-8 w-8 ml-2"
+                      >
+                        {expandedTab === "experiments" ? (
+                          <Minimize2 className="h-4 w-4" />
+                        ) : (
+                          <Maximize2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ExperimentsList labId={lab.labId} />
+                  </CardContent>
+                  <CardFooter>
+                    <Button variant="outline" className="w-full border-accent text-accent hover:bg-secondary" asChild>
+                      <Link href="/experiments">VIEW ALL EXPERIMENTS</Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )}
+
+              {localActiveTab === "funding" && (
+                <LabFundingTab
+                  isAdmin={isAdmin}
+                  isGuest={isGuest}
+                  expandedTab={expandedTab}
+                  toggleExpand={toggleExpand}
+                  funds={funds}
+                  setFunds={setFunds}
+                  isDonationsActive={isDonationsActive}
+                  toggleDonations={toggleDonations}
+                  handleGuestAction={localHandleGuestAction}
+                  handleManageMembership={handleManageMembership}
+                  labId={lab.labId}
+                  membership={membership}
+                  oneTimeDonation={oneTimeDonation}
+                  labsMembershipOption={labsMembershipOption}
+                  refetchMembership={refetchMembership}
+                  refetchOneTimeDonation={refetchOneTimeDonation}
+                  lab={labState}
+                  refetchLab={refetchLab}
+                />
+              )}
+
+              {localActiveTab === "settings" && isAdmin && (
+                <LabSettingsTab
+                  activeSettingsTab={activeSettingsTab}
+                  setActiveSettingsTab={setActiveSettingsTab}
+                  setActiveTab={setLocalActiveTab}
+                  pendingCount={pendingCount}
+                  contributionSearch={contributionSearch}
+                  setContributionSearch={setContributionSearch}
+                  contributionFilter={contributionFilter}
+                  setContributionFilter={setContributionFilter}
+                  filteredContributions={filteredContributions}
+                  handleViewContribution={handleViewContribution}
+                  SettingsDialogComponent={<SettingsDialog lab={labState} onLabUpdated={setLabState} />}
+                  labId={lab.labId}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Add the LabChat component - only for admins and logged-in users */}
+          {!isGuest && lab?.labId && <LabChat labId={String(lab.labId)} />}
+
+          {/* Notifications Sidebar - only for admins */}
+          {isAdmin && localNotificationsSidebarOpen && (
+            <NotificationsSidebar
+              notifications={localNotifications}
+              dismissNotification={dismissNotification}
+              dismissAllNotifications={dismissAllNotifications}
+              setNotificationsSidebarOpen={setLocalNotificationsSidebarOpen}
             />
           )}
-        </div>
-      </div>
 
-      {/* Add the LabChat component - only for admins and logged-in users */}
-      {!isGuest && <LabChat />}
-
-      {/* Notifications Sidebar - only for admins */}
-      {isAdmin && localNotificationsSidebarOpen && (
-        <NotificationsSidebar
-          notifications={localNotifications}
-          dismissNotification={dismissNotification}
-          dismissAllNotifications={dismissAllNotifications}
-          setNotificationsSidebarOpen={setLocalNotificationsSidebarOpen}
-        />
+          {/* Dialogs */}
+          <LabDialogs
+            isAdmin={isAdmin}
+            isUser={isUser}
+            inviteMemberDialogOpen={inviteMemberDialogOpen}
+            setInviteMemberDialogOpen={setInviteMemberDialogOpen}
+            uploadFileDialogOpen={uploadFileDialogOpen}
+            setUploadFileDialogOpen={setUploadFileDialogOpen}
+            createExperimentDialogOpen={createExperimentDialogOpen}
+            setCreateExperimentDialogOpen={setCreateExperimentDialogOpen}
+            editFundDialogOpen={editFundDialogOpen}
+            setEditFundDialogOpen={setEditFundDialogOpen}
+            currentEditFund={currentEditFund}
+            handleSaveFund={handleSaveFund}
+            contributionDetailOpen={contributionDetailOpen}
+            setContributionDetailOpen={setContributionDetailOpen}
+            selectedContribution={selectedContribution}
+            setSelectedContribution={setSelectedContribution}
+            handleApproveContribution={handleApproveContribution}
+            handleRejectContribution={handleRejectContribution}
+            logEventDialogOpen={logEventDialogOpen}
+            setLogEventDialogOpen={setLogEventDialogOpen}
+            editMembershipDialogOpen={editMembershipDialogOpen}
+            setEditMembershipDialogOpen={setEditMembershipDialogOpen}
+          />
+        </>
       )}
-
-      {/* Dialogs */}
-      <LabDialogs
-        isAdmin={isAdmin}
-        isUser={isUser}
-        inviteMemberDialogOpen={inviteMemberDialogOpen}
-        setInviteMemberDialogOpen={setInviteMemberDialogOpen}
-        uploadFileDialogOpen={uploadFileDialogOpen}
-        setUploadFileDialogOpen={setUploadFileDialogOpen}
-        createExperimentDialogOpen={createExperimentDialogOpen}
-        setCreateExperimentDialogOpen={setCreateExperimentDialogOpen}
-        editFundDialogOpen={editFundDialogOpen}
-        setEditFundDialogOpen={setEditFundDialogOpen}
-        currentEditFund={currentEditFund}
-        handleSaveFund={handleSaveFund}
-        contributionDetailOpen={contributionDetailOpen}
-        setContributionDetailOpen={setContributionDetailOpen}
-        selectedContribution={selectedContribution}
-        setSelectedContribution={setSelectedContribution}
-        handleApproveContribution={handleApproveContribution}
-        handleRejectContribution={handleRejectContribution}
-        logEventDialogOpen={logEventDialogOpen}
-        setLogEventDialogOpen={setLogEventDialogOpen}
-        editMembershipDialogOpen={editMembershipDialogOpen}
-        setEditMembershipDialogOpen={setEditMembershipDialogOpen}
-      />
     </div>
   )
 }

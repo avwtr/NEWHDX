@@ -929,7 +929,7 @@ const NetworkGraph = ({ data }: { data: typeof networkData }) => {
                     style={{ pointerEvents: "none" }} // Prevent tooltip from interfering with hover
                   >
                     <div className="bg-card border border-secondary rounded-md p-3 text-xs shadow-lg">
-                      <div className="font-medium text-sm mb-1">{contribution.content}</div>
+                      <div className="font-medium text-sm uppercase mb-1">{contribution.content}</div>
                       <div className="text-muted-foreground flex items-center gap-1 mb-2">
                         {getActivityIcon(contribution.type)}
                         <span className="uppercase">{contribution.type.replace("_", " ")}</span>
@@ -1221,32 +1221,173 @@ const NetworkGraph = ({ data }: { data: typeof networkData }) => {
 }
 
 // Activity Timeline Component
-const ActivityTimeline = ({ activities }: { activities: typeof activityData }) => {
+const ActivityTimeline = ({ activities, userProfiles }: { activities: any[], userProfiles: { [userId: string]: { username: string, initials: string, profilePic?: string } } }) => {
+  // Sort activities by created_at descending (most recent first)
+  const sortedActivities = [...activities].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
   return (
     <div className="space-y-6 overflow-y-auto max-h-[600px] pr-2">
-      {activities.map((activity) => (
-        <div key={activity.id} className="flex gap-3 pb-6 border-b border-secondary last:border-0">
-          <Avatar className="h-8 w-8 mt-0.5 flex-shrink-0">
-            <AvatarImage src={activity.user.avatar || "/placeholder.svg"} alt={activity.user.name} />
-            <AvatarFallback>{activity.user.initials}</AvatarFallback>
-          </Avatar>
-          <div className="space-y-2 min-w-0 flex-1 pr-3">
-            <p className="text-sm break-words">
-              <span className="font-medium">{activity.user.name}</span>{" "}
-              {activity.type === "file_upload" && "uploaded a file"}
-              {activity.type === "doc_update" && "updated documentation"}
-              {activity.type === "comment" && "commented on a contribution"}
-              {activity.type === "fork" && "forked the lab"}
-            </p>
-            <div className="flex items-center text-xs text-muted-foreground flex-wrap">
-              {getActivityIcon(activity.type)}
-              <span className="ml-1 break-all">{activity.content}</span>
+      {sortedActivities.map((activity, idx) => {
+        const userInfo = userProfiles[activity.performed_by] || { username: "Unknown", initials: "U", profilePic: undefined }
+        return (
+          <div key={activity.id || activity.activity_id || activity.created_at || idx} className="flex gap-3 pb-6 border-b border-secondary last:border-0">
+            <Avatar className="h-8 w-8 mt-0.5 flex-shrink-0">
+              <AvatarImage src={userInfo.profilePic || "/placeholder.svg"} alt={userInfo.username} />
+              <AvatarFallback>{userInfo.initials}</AvatarFallback>
+            </Avatar>
+            <div className="space-y-2 min-w-0 flex-1 pr-3">
+              <p className="text-sm break-words">
+                <span className="font-medium">{userInfo.username}</span>{" "}
+                {activity.activity_type === "fileupload" && "uploaded a file"}
+                {activity.activity_type === "filecreated" && "created a file"}
+                {activity.activity_type === "filedelete" && "deleted a file"}
+                {activity.activity_type === "filemoved" && "moved a file"}
+                {activity.activity_type === "fileedited" && "edited a file"}
+                {activity.activity_type === "bulletinposted" && "posted a bulletin"}
+                {activity.activity_type === "bulletinedited" && "edited a bulletin"}
+                {activity.activity_type === "bulletindeleted" && "deleted a bulletin"}
+              </p>
+              <div className="flex items-center text-xs text-muted-foreground flex-wrap">
+                <span className="ml-1 break-all">{activity.activity_name}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{activity.created_at ? new Date(activity.created_at).toLocaleString() : ""}</p>
             </div>
-            <p className="text-xs text-muted-foreground">{activity.timestamp}</p>
-            <p className="text-sm mt-1 break-words whitespace-normal">{activity.description}</p>
           </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// --- NEW: Helper to build user activity summary for the network graph ---
+function buildUserActivitySummary(activities: any[], userProfiles: { [userId: string]: { username: string, initials: string, profilePic?: string } }) {
+  const summary: {
+    [userId: string]: {
+      total: number,
+      typeCounts: { [type: string]: number },
+      profile: { username: string, initials: string, profilePic?: string }
+    }
+  } = {}
+  activities.forEach((a) => {
+    const userId = a.performed_by
+    if (!userId) return
+    if (!summary[userId]) {
+      summary[userId] = {
+        total: 0,
+        typeCounts: {},
+        profile: userProfiles[userId] || { username: "Unknown", initials: "U", profilePic: undefined }
+      }
+    }
+    summary[userId].total++
+    summary[userId].typeCounts[a.activity_type] = (summary[userId].typeCounts[a.activity_type] || 0) + 1
+  })
+  return summary
+}
+
+// --- NEW: Real-data NetworkGraph ---
+const RealNetworkGraph = ({ labName, userSummary }: { labName: string, userSummary: ReturnType<typeof buildUserActivitySummary> }) => {
+  // Layout: center lab, users in a circle
+  const userIds = Object.keys(userSummary)
+  const center = { x: 400, y: 400 }
+  const radius = 260
+  const nodeRadius = 36
+  const [hoveredUser, setHoveredUser] = useState<string | null>(null)
+  const [hoverPos, setHoverPos] = useState<{ x: number, y: number } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  return (
+    <div className="relative w-full h-[800px]" ref={containerRef}>
+      <svg width={800} height={800}>
+        {/* Center lab node */}
+        <circle cx={center.x} cy={center.y} r={nodeRadius + 8} fill="#1A2252" stroke="#A0FFDD" strokeWidth={3} />
+        <text x={center.x} y={center.y + nodeRadius + 28} textAnchor="middle" className="text-xs font-bold fill-accent uppercase">
+          {labName}
+        </text>
+        {/* User nodes and edges */}
+        {userIds.map((userId, i) => {
+          const angle = (2 * Math.PI * i) / userIds.length
+          const ux = center.x + radius * Math.cos(angle)
+          const uy = center.y + radius * Math.sin(angle)
+          const { total, profile } = userSummary[userId]
+          // Edge thickness: min 2, max 16
+          const strokeWidth = Math.max(2, Math.min(16, 2 + total))
+          return (
+            <g key={userId}>
+              {/* Edge */}
+              <line
+                x1={center.x}
+                y1={center.y}
+                x2={ux}
+                y2={uy}
+                stroke="#A0FFDD"
+                strokeWidth={strokeWidth}
+                opacity={hoveredUser && hoveredUser !== userId ? 0.3 : 0.8}
+              />
+              {/* User node */}
+              <g
+                onMouseEnter={() => {
+                  setHoveredUser(userId)
+                  setHoverPos({ x: ux, y: uy })
+                }}
+                onMouseLeave={() => {
+                  setHoveredUser(null)
+                  setHoverPos(null)
+                }}
+                style={{ cursor: "pointer" }}
+              >
+                <circle
+                  cx={ux}
+                  cy={uy}
+                  r={nodeRadius}
+                  fill="#0F1642"
+                  stroke="#A0FFDD"
+                  strokeWidth={hoveredUser === userId ? 4 : 2}
+                />
+                <foreignObject x={ux - 24} y={uy - 24} width={48} height={48}>
+                  <div className="w-12 h-12 flex items-center justify-center">
+                    <Avatar className="h-10 w-10 border-2 border-accent">
+                      <AvatarImage src={profile.profilePic || "/placeholder.svg"} alt={profile.username} />
+                      <AvatarFallback>{profile.initials}</AvatarFallback>
+                    </Avatar>
+                  </div>
+                </foreignObject>
+                {/* Username below node */}
+                <text x={ux} y={uy + nodeRadius + 16} textAnchor="middle" className="text-xs font-medium fill-accent uppercase">
+                  {profile.username.length > 15 ? profile.username.substring(0, 15) + "..." : profile.username}
+                </text>
+                {/* Total actions count */}
+                <circle cx={ux + nodeRadius - 10} cy={uy - nodeRadius + 10} r={12} fill="#A0FFDD" />
+                <text x={ux + nodeRadius - 10} y={uy - nodeRadius + 14} textAnchor="middle" className="text-xs font-bold fill-primary-foreground">
+                  {total}
+                </text>
+              </g>
+            </g>
+          )
+        })}
+      </svg>
+      {/* Absolutely positioned overlay for hovered user */}
+      {hoveredUser && hoverPos && (
+        <div
+          style={{
+            position: 'absolute',
+            left: hoverPos.x - 90,
+            top: hoverPos.y - 120,
+            zIndex: 1000,
+            pointerEvents: 'auto',
+            minWidth: 180,
+            maxWidth: 220,
+          }}
+          className="bg-card border border-accent rounded-md p-3 text-xs shadow-lg animate-fadeIn"
+        >
+          <div className="font-semibold mb-1">{userSummary[hoveredUser].profile.username}</div>
+          <div className="mb-1">Total actions: <span className="font-bold">{userSummary[hoveredUser].total}</span></div>
+          <div className="mb-1">Breakdown:</div>
+          <ul className="ml-2">
+            {Object.entries(userSummary[hoveredUser].typeCounts).map(([type, count]) => (
+              <li key={type} className="flex justify-between"><span>{type}</span> <span className="font-bold">{count}</span></li>
+            ))}
+          </ul>
         </div>
-      ))}
+      )}
     </div>
   )
 }
@@ -1259,7 +1400,7 @@ export default function ActivityExplorer({ labId }: ActivityExplorerProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCustomEventModalOpen, setIsCustomEventModalOpen] = useState(false)
   const [activities, setActivities] = useState<any[]>([])
-  const [usernames, setUsernames] = useState<{ [userId: string]: { username: string, initials: string } }>({})
+  const [userProfiles, setUserProfiles] = useState<{ [userId: string]: { username: string, initials: string, profilePic?: string } }>({})
 
   useEffect(() => {
     async function fetchActivities() {
@@ -1275,19 +1416,19 @@ export default function ActivityExplorer({ labId }: ActivityExplorerProps) {
         return
       }
       setActivities(data || [])
-      // Fetch usernames for all unique performed_by values
+      // Fetch user profiles for all unique performed_by values
       const uniqueUserIds = Array.from(new Set((data || []).map((a: any) => a.performed_by).filter(Boolean)))
       if (uniqueUserIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('user_id,username')
+          .select('user_id,username,profilePic')
           .in('user_id', uniqueUserIds)
-        const usernameMap: { [userId: string]: { username: string, initials: string } } = {}
+        const profileMap: { [userId: string]: { username: string, initials: string, profilePic?: string } } = {}
         profiles?.forEach((profile: any) => {
           const initials = profile.username ? profile.username.split(' ').map((n: string) => n[0]).join('').toUpperCase() : "U"
-          usernameMap[profile.user_id] = { username: profile.username || "Unknown", initials }
+          profileMap[profile.user_id] = { username: profile.username || "Unknown", initials, profilePic: profile.profilePic }
         })
-        setUsernames(usernameMap)
+        setUserProfiles(profileMap)
       }
     }
     fetchActivities()
@@ -1359,7 +1500,7 @@ export default function ActivityExplorer({ labId }: ActivityExplorerProps) {
             <TabsContent value="visualization">
               <div className="bg-card/50 border border-secondary rounded-lg p-6">
                 <h3 className="text-sm font-medium uppercase mb-4">CONTRIBUTION NETWORK</h3>
-                <NetworkGraph data={networkData} />
+                <RealNetworkGraph labName="Lab" userSummary={buildUserActivitySummary(activities, userProfiles)} />
               </div>
             </TabsContent>
 
@@ -1375,7 +1516,7 @@ export default function ActivityExplorer({ labId }: ActivityExplorerProps) {
                     LOG CUSTOM EVENT
                   </Button>
                 </div>
-                <ActivityTimeline activities={activities} />
+                <ActivityTimeline activities={activities} userProfiles={userProfiles} />
               </div>
             </TabsContent>
           </Tabs>
@@ -1408,12 +1549,12 @@ export default function ActivityExplorer({ labId }: ActivityExplorerProps) {
       <CardContent>
         <div className="space-y-6">
           {activities.slice(0, 4).map((activity, index) => {
-            const userInfo = usernames[activity.performed_by] || { username: "Unknown", initials: "U" }
+            const userInfo = userProfiles[activity.performed_by] || { username: "Unknown", initials: "U", profilePic: undefined }
             const key = activity.id || activity.activity_id || activity.created_at || index;
             return (
               <div key={key} className="flex gap-3 pb-4 border-b border-secondary last:border-b-0">
                 <Avatar className="h-8 w-8 flex-shrink-0">
-                  <AvatarImage src="/placeholder.svg" alt={userInfo.username} />
+                  <AvatarImage src={userInfo.profilePic || "/placeholder.svg"} alt={userInfo.username} />
                   <AvatarFallback>{userInfo.initials}</AvatarFallback>
                 </Avatar>
                 <div className="space-y-2 min-w-0 flex-1 pr-2">

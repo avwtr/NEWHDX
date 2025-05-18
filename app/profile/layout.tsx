@@ -11,5 +11,11 @@ export default function ProfileLayout({
 }: {
   children: React.ReactNode
 }) {
-  return <div className="min-h-screen bg-background">{children}</div>
+  return (
+    <div className="min-h-screen bg-background">
+      <main className="container py-8">
+        {children}
+      </main>
+    </div>
+  )
 }

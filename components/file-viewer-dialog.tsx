@@ -175,7 +175,13 @@ export function FileViewerDialog({
     setError(null);
     try {
       let content = null;
-      const fileType = file.type.toLowerCase();
+      const fileType = (
+        file.type ||
+        (file as any).fileType ||
+        (file.name && file.name.split('.').pop()) ||
+        ((file as any).filename && (file as any).filename.split('.').pop()) ||
+        ""
+      ).toLowerCase();
 
       if (isFirebaseFile(file)) {
         // Fetch from Firebase Storage
@@ -270,7 +276,13 @@ export function FileViewerDialog({
   useEffect(() => {
     async function getPreviewUrl() {
       setPreviewUrl(null);
-      const fileType = file.type.toLowerCase();
+      const fileType = (
+        file.type ||
+        (file as any).fileType ||
+        (file.name && file.name.split('.').pop()) ||
+        ((file as any).filename && (file as any).filename.split('.').pop()) ||
+        ""
+      ).toLowerCase();
       // Normalize bucket and key
       const bucket = file.bucket || (file.storageKey ? "labmaterials" : file.storage_key ? "cont-requests" : "labmaterials");
       const key = file.storageKey || file.storage_key || file.path;
@@ -408,7 +420,13 @@ export function FileViewerDialog({
     if (loading) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
     if (error) return <div className="p-8 text-center text-destructive">{error}</div>;
 
-    const fileType = file.type.toLowerCase();
+    const fileType = (
+      file.type ||
+      (file as any).fileType ||
+      (file.name && file.name.split('.').pop()) ||
+      ((file as any).filename && (file as any).filename.split('.').pop()) ||
+      ""
+    ).toLowerCase();
 
     // For images and PDFs, show preview in overlay
     if (["jpg", "jpeg", "png", "gif", "svg"].includes(fileType)) {

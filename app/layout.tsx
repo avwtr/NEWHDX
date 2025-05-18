@@ -6,7 +6,7 @@ import { AuthProvider } from "@/components/auth-provider"
 import { RoleProvider } from "@/contexts/role-context"
 import "@/app/globals.css"
 import { Toaster } from "@/components/ui/toaster"
-import { LoadingAnimation } from "@/components/loading-animation"
+import { GlobalLoader } from "@/components/GlobalLoader"
 
 // Initialize the JetBrains Mono font
 const jetbrainsMono = JetBrains_Mono({
@@ -36,10 +36,10 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <LoadingAnimation />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AuthProvider>
             <RoleProvider>
+              <GlobalLoader />
               <div className="relative flex min-h-screen flex-col">
                 <SiteHeader />
                 <div className="flex-1">{children}</div>
@@ -54,7 +54,7 @@ export default function RootLayout({
 }
 
 export const metadata = {
-  generator: 'v0.dev',
+  generator: 'HDX LABS',
   icons: {
     icon: [
       { url: '/favicon.ico' }

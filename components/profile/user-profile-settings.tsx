@@ -12,12 +12,14 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ArrowLeft, Upload, X, Plus, Bell, Mail, FileText, Beaker, Database } from "lucide-react"
+import { ArrowLeft, Upload, X, Plus, Bell, Mail, FileText, Beaker, Database, Search, Filter } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { researchAreas } from "@/lib/research-areas"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface UserProfileSettingsProps {
   user: {
@@ -109,6 +111,23 @@ function PaymentForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+interface LabInfo {
+  labId: string
+  labName: string
+  profilePic?: string
+}
+
+interface Contribution {
+  id: string
+  title: string
+  description: string
+  status: string
+  type: string
+  created_at: string
+  num_files: number
+  labFrom: string
+}
+
 export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: UserProfileSettingsProps) {
   const [username, setUsername] = useState(user.username)
   const [bio, setBio] = useState(user.bio)
@@ -119,46 +138,11 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Add a list of all possible science categories (can be imported or hardcoded)
-  const allScienceCategories = [
-    "Neuroscience", "AI", "Biology", "Chemistry", "Physics", "Medicine", "Psychology", "Engineering", "Mathematics", "Environmental", "Astronomy", "Geology", "Brain Mapping", "Cognitive Science", "Quantum Mechanics", "Particle Physics", "Genomics", "Bioinformatics", "Ethics", "Computer Science", "Climate Science", "Data Analysis", "Molecular Biology", "Biochemistry", "Astrophysics", "Cosmology", "Clinical Research", "Biotechnology", "Medical Imaging", "Meteorology", "Machine Learning", "Optimization", "Data Processing", "Data Visualization", "Methodology", "Computing", "Evaluation", "Innovation", "Research Funding", "Governance", "Mitigation", "Diversity Studies", "Public Perception", "Citizen Science", "Bias Studies"
-  ]
+  // Use standardized researchAreas (value/label pairs)
+  const allResearchAreas = researchAreas
 
   // Mock data for user contributions
-  const userContributions = [
-    {
-      id: "contrib-1",
-      title: "Genomic Data Analysis Pipeline",
-      lab: "Genomic Data Analysis Lab",
-      status: "published",
-      date: "2 months ago",
-      type: "code",
-    },
-    {
-      id: "contrib-2",
-      title: "Protein Structure Visualization Tool",
-      lab: "Protein Folding Simulation",
-      status: "under review",
-      date: "3 weeks ago",
-      type: "application",
-    },
-    {
-      id: "contrib-3",
-      title: "Neural Network Training Dataset",
-      lab: "Neural Network Applications in Biology",
-      status: "published",
-      date: "1 month ago",
-      type: "dataset",
-    },
-    {
-      id: "contrib-4",
-      title: "Comparative Analysis of Protein Folding Algorithms",
-      lab: "Protein Folding Simulation",
-      status: "draft",
-      date: "2 days ago",
-      type: "publication",
-    },
-  ]
+  // const userContributions = [ ... ] // Remove this mock data
 
   const toggleInterest = (interest: any) => {
     if (selectedInterests.includes(interest)) {
@@ -212,6 +196,15 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
 
   // Add state for research interests
   const [researchInterests, setResearchInterests] = useState<string[]>(user.research_interests || [])
+
+  // For new interest input
+  const [newInterest, setNewInterest] = useState("")
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  // Only show suggestions not already selected
+  const filteredSuggestions = allResearchAreas.filter(area =>
+    area.label.toLowerCase().includes(newInterest.toLowerCase()) &&
+    !researchInterests.includes(area.value)
+  )
 
   // Fetch profile on mount
   useEffect(() => {
@@ -476,9 +469,9 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
   }
 
   // Handler to add a new interest
-  const handleAddInterest = (interest: string) => {
-    if (!researchInterests.includes(interest)) {
-      setResearchInterests([...researchInterests, interest])
+  const handleAddInterest = (interestValue: string) => {
+    if (!researchInterests.includes(interestValue)) {
+      setResearchInterests([...researchInterests, interestValue])
     }
   }
 
@@ -486,6 +479,56 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
   const handleRemoveInterest = (interest: string) => {
     setResearchInterests(researchInterests.filter(i => i !== interest))
   }
+
+  const [userContributions, setUserContributions] = useState<Contribution[]>([])
+  const [loadingContributions, setLoadingContributions] = useState(false)
+  const [contributionSearch, setContributionSearch] = useState("")
+  const [contributionFilter, setContributionFilter] = useState("all")
+  const [labMap, setLabMap] = useState<{ [labId: string]: LabInfo }>({})
+
+  // Fetch user's contributions and their labs
+  useEffect(() => {
+    if (!user?.id) return
+    setLoadingContributions(true)
+    supabase
+      .from("contribution_requests")
+      .select("*")
+      .eq("submittedBy", user.id)
+      .order("created_at", { ascending: false })
+      .then(async ({ data, error }) => {
+        if (!error && data) {
+          setUserContributions(data)
+          // Fetch lab info for all unique labFrom
+          const uniqueLabIds = Array.from(new Set(data.map((c: any) => c.labFrom).filter(Boolean)))
+          if (uniqueLabIds.length > 0) {
+            const { data: labs, error: labsError } = await supabase
+              .from("labs")
+              .select("labId, labName, profilePic")
+              .in("labId", uniqueLabIds)
+            if (!labsError && labs) {
+              const map: { [labId: string]: LabInfo } = {}
+              labs.forEach((lab: any) => {
+                map[lab.labId] = { labId: lab.labId, labName: lab.labName, profilePic: lab.profilePic }
+              })
+              setLabMap(map)
+            }
+          }
+        }
+        setLoadingContributions(false)
+      })
+  }, [user?.id])
+
+  // Filter contributions
+  const filteredContributions = userContributions
+    .filter((contribution) => {
+      if (contributionFilter === "all") return true
+      return contribution.status === contributionFilter
+    })
+    .filter(
+      (contribution) =>
+        contribution.title.toLowerCase().includes(contributionSearch.toLowerCase()) ||
+        (contribution.description && contribution.description.toLowerCase().includes(contributionSearch.toLowerCase()))
+    )
 
   return (
     <div className="container py-8 max-w-6xl">
@@ -568,19 +611,72 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
                   {researchInterests.length === 0 && (
                     <span className="text-xs text-muted-foreground">No research interests selected.</span>
                   )}
-                  {researchInterests.map((interest, idx) => (
-                    <span key={idx} className="inline-flex items-center rounded-full bg-secondary px-2 py-1 text-xs font-medium">
-                      {interest}
-                      <button
-                        type="button"
-                        className="ml-1 text-muted-foreground hover:text-destructive"
-                        onClick={() => handleRemoveInterest(interest)}
-                        aria-label={`Remove ${interest}`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
+                  {researchInterests.map((interest, idx) => {
+                    // Find label from researchAreas, fallback to value
+                    const area = allResearchAreas.find(a => a.value === interest)
+                    return (
+                      <span key={idx} className="inline-flex items-center rounded-full bg-secondary px-2 py-1 text-xs font-medium">
+                        {area ? area.label : interest}
+                        <button
+                          type="button"
+                          className="ml-1 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveInterest(interest)}
+                          aria-label={`Remove ${area ? area.label : interest}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+                {/* Add new interest input */}
+                <div className="relative w-full max-w-xs">
+                  <Input
+                    type="text"
+                    placeholder="Add or search research interest..."
+                    value={newInterest}
+                    onChange={e => {
+                      setNewInterest(e.target.value)
+                      setShowSuggestions(true)
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-accent hover:text-primary"
+                    onClick={() => {
+                      // Try to match to a suggestion, else add as custom
+                      const match = allResearchAreas.find(a => a.label.toLowerCase() === newInterest.trim().toLowerCase())
+                      const valueToAdd = match ? match.value : newInterest.trim()
+                      if (valueToAdd && !researchInterests.includes(valueToAdd)) {
+                        handleAddInterest(valueToAdd)
+                        setNewInterest("")
+                        setShowSuggestions(false)
+                      }
+                    }}
+                    aria-label="Add interest"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                  {showSuggestions && filteredSuggestions.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full bg-secondary border border-gray-200 rounded shadow-lg max-h-40 overflow-auto">
+                      {filteredSuggestions.map((area, idx) => (
+                        <div
+                          key={area.value}
+                          className="px-3 py-2 text-foreground hover:bg-accent hover:text-primary cursor-pointer text-sm"
+                          onMouseDown={() => {
+                            handleAddInterest(area.value)
+                            setNewInterest("")
+                            setShowSuggestions(false)
+                          }}
+                        >
+                          {area.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -599,33 +695,108 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
           <Card>
             <CardHeader>
               <CardTitle>My Contributions</CardTitle>
-              <CardDescription>Manage your contributions to various labs and research projects</CardDescription>
+              <CardDescription>View and manage your contributions to various labs and research projects</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {userContributions.map((contribution) => (
-                  <div key={contribution.id} className="flex items-start justify-between p-4 border rounded-md">
-                    <div className="flex gap-3">
-                      <div className="mt-0.5 p-2 bg-muted rounded-md">{getContributionIcon(contribution.type)}</div>
-                      <div>
-                        <h4 className="font-medium">{contribution.title}</h4>
-                        <div className="text-sm text-muted-foreground">
-                          {contribution.lab} • {contribution.date}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(contribution.status)}
-                      <Button variant="ghost" size="sm">
-                        View
-                      </Button>
-                    </div>
+                <div className="flex flex-col sm:flex-row gap-3 justify-between">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search contributions..."
+                      className="pl-8"
+                      value={contributionSearch}
+                      onChange={(e) => setContributionSearch(e.target.value)}
+                    />
                   </div>
-                ))}
+                  <div className="flex gap-2 items-center">
+                    <Filter className="h-4 w-4 text-muted-foreground" />
+                    <Select value={contributionFilter} onValueChange={setContributionFilter}>
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Filter by status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="border rounded-md">
+                  <ScrollArea className="h-[400px]">
+                    <div className="divide-y divide-secondary">
+                      {loadingContributions ? (
+                        <div className="py-8 text-center text-muted-foreground">Loading...</div>
+                      ) : filteredContributions.length > 0 ? (
+                        filteredContributions.map((contribution) => {
+                          const lab = labMap[contribution.labFrom]
+                          return (
+                            <div
+                              key={contribution.id}
+                              className="p-4 hover:bg-secondary/20 transition-colors"
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <h3 className="font-medium flex items-center gap-3">
+                                    {contribution.title}
+                                    {lab && (
+                                      <span className="flex items-center gap-2 ml-4">
+                                        <Avatar className="h-6 w-6">
+                                          <AvatarImage src={lab.profilePic || "/placeholder.svg?height=40&width=40"} alt={lab.labName || "Lab"} />
+                                          <AvatarFallback>{(lab.labName || "L").charAt(0)}</AvatarFallback>
+                                        </Avatar>
+                                        <span className="text-xs text-muted-foreground truncate max-w-[120px]">{lab.labName || "Unknown Lab"}</span>
+                                      </span>
+                                    )}
+                                  </h3>
+                                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                                    <span>{new Date(contribution.created_at).toLocaleString()}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <p className="text-sm line-clamp-2 mt-1">{contribution.description}</p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge
+                                  className={
+                                    ["pending"].includes(contribution.status)
+                                      ? "bg-amber-500"
+                                      : ["approved", "accepted"].includes(contribution.status)
+                                        ? "bg-green-600 text-white"
+                                        : "bg-red-600 text-white"
+                                  }
+                                >
+                                  {["approved", "accepted"].includes(contribution.status) ? "APPROVED" : contribution.status.toUpperCase()}
+                                </Badge>
+                                {contribution.type && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {contribution.type.toUpperCase()}
+                                  </Badge>
+                                )}
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <FileText className="h-3.5 w-3.5" />
+                                  <span>
+                                    {contribution.num_files} file{contribution.num_files !== 1 && "s"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <div className="py-8 text-center text-muted-foreground">
+                          <p>No contributions found</p>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
               </div>
             </CardContent>
             <CardFooter>
-              <Button className="w-full">
+              <Button className="w-full" onClick={() => window.location.href = '/contribute'}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create New Contribution
               </Button>

@@ -1,117 +1,78 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { MessageSquare, X, ChevronDown, ChevronUp, Send, Paperclip, Smile, Users } from "lucide-react"
+import { MessageSquare, X, ChevronDown, ChevronUp, Send } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { supabase } from "@/lib/supabase"
+import { useAuth } from "@/components/auth-provider"
 
-// Sample chat messages
-const sampleMessages = [
-  {
-    id: 1,
-    sender: {
-      id: 1,
-      name: "Dr. Sarah Johnson",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "SJ",
-    },
-    content:
-      "I've uploaded the latest fMRI data to the datasets folder. Can someone take a look at the preprocessing results?",
-    timestamp: "10:32 AM",
-  },
-  {
-    id: 2,
-    sender: {
-      id: 2,
-      name: "Alex Kim",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "AK",
-    },
-    content: "I'll review it this afternoon. Did you use the new motion correction algorithm?",
-    timestamp: "10:45 AM",
-  },
-  {
-    id: 3,
-    sender: {
-      id: 1,
-      name: "Dr. Sarah Johnson",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "SJ",
-    },
-    content:
-      "Yes, I implemented the algorithm we discussed last week. It seems to be working well, but I'd like your opinion on the results.",
-    timestamp: "10:48 AM",
-  },
-  {
-    id: 4,
-    sender: {
-      id: 3,
-      name: "Maria Lopez",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "ML",
-    },
-    content:
-      "I can help with the statistical analysis once the preprocessing is complete. When do you think you'll be done, Alex?",
-    timestamp: "11:05 AM",
-  },
-  {
-    id: 5,
-    sender: {
-      id: 2,
-      name: "Alex Kim",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "AK",
-    },
-    content: "I should be done by 3 PM today. I'll ping everyone when it's ready for the next step.",
-    timestamp: "11:10 AM",
-  },
-]
-
-// Sample online users
-const onlineUsers = [
-  {
-    id: 1,
-    name: "Dr. Sarah Johnson",
-    avatar: "/placeholder.svg?height=40&width=40",
-    initials: "SJ",
-    status: "online",
-  },
-  {
-    id: 2,
-    name: "Alex Kim",
-    avatar: "/placeholder.svg?height=40&width=40",
-    initials: "AK",
-    status: "online",
-  },
-  {
-    id: 3,
-    name: "Maria Lopez",
-    avatar: "/placeholder.svg?height=40&width=40",
-    initials: "ML",
-    status: "online",
-  },
-  {
-    id: 4,
-    name: "Robert Chen",
-    avatar: "/placeholder.svg?height=40&width=40",
-    initials: "RC",
-    status: "away",
-  },
-]
-
-export function LabChat() {
+// Accept labId as prop
+export function LabChat({ labId }: { labId: string }) {
+  const { user } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
-  const [showMembers, setShowMembers] = useState(false)
   const [message, setMessage] = useState("")
-  const [messages, setMessages] = useState(sampleMessages)
+  const [messages, setMessages] = useState<any[]>([])
+  const [userMap, setUserMap] = useState<Record<string, { username: string; profilePic: string }>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [unreadMessages, setUnreadMessages] = useState(2)
+  const [unreadMessages, setUnreadMessages] = useState(0)
+
+  // Fetch messages for this lab
+  useEffect(() => {
+    if (!labId) return
+    let ignore = false
+    async function fetchMessages() {
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .select("id, created_at, from, labId, content")
+        .eq("labId", labId)
+        .order("created_at", { ascending: true })
+      if (!ignore && data) {
+        setMessages(data)
+        // Fetch user info for all unique senders
+        const userIds = Array.from(new Set(data.map((m: any) => m.from)))
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("user_id, username, profilePic")
+            .in("user_id", userIds)
+          const map: Record<string, { username: string; profilePic: string }> = {}
+          profiles?.forEach((p: any) => {
+            map[p.user_id] = { username: p.username, profilePic: p.profilePic }
+          })
+          setUserMap(map)
+        }
+      }
+    }
+    fetchMessages()
+    // Subscribe to new messages
+    const sub = supabase
+      .channel('chat-messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `labId=eq.${labId}` }, payload => {
+        setMessages(prev => [...prev, payload.new])
+        // Optionally fetch user info for new sender
+        const senderId = payload.new.from
+        if (!userMap[senderId]) {
+          supabase
+            .from("profiles")
+            .select("user_id, username, profilePic")
+            .eq("user_id", senderId)
+            .single()
+            .then(({ data }) => {
+              if (data) setUserMap(prev => ({ ...prev, [data.user_id]: { username: data.username, profilePic: data.profilePic } }))
+            })
+        }
+      })
+      .subscribe()
+    return () => {
+      ignore = true
+      supabase.removeChannel(sub)
+    }
+  }, [labId])
 
   // Scroll to bottom of messages when new messages are added
   useEffect(() => {
@@ -133,28 +94,18 @@ export function LabChat() {
     setIsExpanded(!isExpanded)
   }
 
-  // Toggle members list
-  const toggleMembers = () => {
-    setShowMembers(!showMembers)
-  }
-
   // Send a new message
-  const sendMessage = () => {
-    if (message.trim()) {
-      const newMessage = {
-        id: messages.length + 1,
-        sender: {
-          id: 1,
-          name: "Dr. Sarah Johnson",
-          avatar: "/placeholder.svg?height=40&width=40",
-          initials: "SJ",
-        },
-        content: message,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      }
-      setMessages([...messages, newMessage])
-      setMessage("")
+  const sendMessage = async () => {
+    if (!user || !message.trim()) return
+    const { data, error } = await supabase.from("chat_messages").insert({
+      from: user.id,
+      labId,
+      content: message.trim(),
+    }).select()
+    if (data) {
+      setMessages(prev => [...prev, data[0]])
     }
+    setMessage("")
   }
 
   // Handle Enter key press
@@ -170,6 +121,8 @@ export function LabChat() {
       setUnreadMessages(0)
     }
   }, [isOpen])
+
+  if (!user) return null
 
   return (
     <div className="fixed bottom-8 left-8 z-40 flex flex-col items-end">
@@ -208,62 +161,36 @@ export function LabChat() {
               <Badge className="ml-2 bg-accent text-primary-foreground text-xs">LIVE</Badge>
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary" onClick={toggleMembers}>
-                <Users className="h-4 w-4" />
-              </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary" onClick={toggleExpanded}>
                 {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
               </Button>
             </div>
           </div>
 
-          <div className="flex h-[calc(100%-110px)]">
-            {/* Chat Messages */}
-            <div className={`flex-1 flex flex-col ${showMembers ? "hidden md:flex" : "flex"}`}>
-              <div className="flex-1 overflow-y-auto p-3 space-y-4">
-                {messages.map((msg) => (
-                  <div key={msg.id} className="flex items-start gap-2">
-                    <Avatar className="h-8 w-8 mt-1">
-                      <AvatarImage src={msg.sender.avatar} alt={msg.sender.name} />
-                      <AvatarFallback>{msg.sender.initials}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{msg.sender.name}</span>
-                        <span className="text-xs text-muted-foreground">{msg.timestamp}</span>
-                      </div>
-                      <p className="text-sm break-words">{msg.content}</p>
+          {/* Chat Messages */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-4" style={{ height: isExpanded ? 480 : 300 }}>
+            {messages.map((msg) => {
+              const sender = userMap[msg.from] || {}
+              const date = new Date(msg.created_at)
+              const timeString = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              const dayString = date.toLocaleDateString()
+              return (
+                <div key={msg.id} className="flex items-start gap-2">
+                  <Avatar className="h-8 w-8 mt-1">
+                    <AvatarImage src={sender.profilePic || "/placeholder.svg"} alt={sender.username || "User"} />
+                    <AvatarFallback>{(sender.username || "U").charAt(0).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{sender.username || msg.from}</span>
+                      <span className="text-xs text-muted-foreground">{dayString} {timeString}</span>
                     </div>
+                    <p className="text-sm break-words">{msg.content}</p>
                   </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-
-            {/* Members List (Shown when toggled) */}
-            <div className={`w-[200px] border-l border-secondary overflow-y-auto ${showMembers ? "block" : "hidden"}`}>
-              <div className="p-3 border-b border-secondary">
-                <h4 className="text-xs font-medium uppercase">Online Members</h4>
-              </div>
-              <div className="p-2">
-                {onlineUsers.map((user) => (
-                  <div key={user.id} className="flex items-center gap-2 p-2 hover:bg-secondary/30 rounded-md">
-                    <div className="relative">
-                      <Avatar className="h-7 w-7">
-                        <AvatarImage src={user.avatar} alt={user.name} />
-                        <AvatarFallback>{user.initials}</AvatarFallback>
-                      </Avatar>
-                      <div
-                        className={`absolute bottom-0 right-0 h-2 w-2 rounded-full border border-card ${
-                          user.status === "online" ? "bg-green-500" : "bg-yellow-500"
-                        }`}
-                      />
-                    </div>
-                    <span className="text-sm truncate">{user.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              )
+            })}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Chat Input */}
@@ -276,26 +203,6 @@ export function LabChat() {
                 placeholder="Type a message..."
                 className="flex-1"
               />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-secondary">
-                      <Paperclip className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Attach File</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-secondary">
-                      <Smile className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Add Emoji</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
               <Button
                 onClick={sendMessage}
                 disabled={!message.trim()}
