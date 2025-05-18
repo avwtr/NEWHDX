@@ -865,6 +865,9 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
             setLogEventDialogOpen={setLogEventDialogOpen}
             editMembershipDialogOpen={editMembershipDialogOpen}
             setEditMembershipDialogOpen={setEditMembershipDialogOpen}
+            labId={lab.labId}
+            lab={lab}
+            userId={user?.id || ""}
           />
         </>
       )}

@@ -8,6 +8,8 @@ import { ContributionDetailModal } from "@/components/contribution-detail-modal"
 import { LogEventDialog } from "@/components/log-event-dialog"
 import { toast } from "@/components/ui/use-toast"
 import { EditMembershipDialog } from "@/components/edit-membership-dialog"
+import { StartExperimentModal } from "@/components/start-experiment-modal"
+import { useAuth } from "@/components/auth-provider"
 
 interface LabDialogsProps {
   isAdmin: boolean
@@ -32,6 +34,9 @@ interface LabDialogsProps {
   setLogEventDialogOpen: (value: boolean) => void
   editMembershipDialogOpen: boolean
   setEditMembershipDialogOpen: (value: boolean) => void
+  labId: string
+  lab: any
+  userId: string
 }
 
 export function LabDialogs({
@@ -57,6 +62,9 @@ export function LabDialogs({
   setLogEventDialogOpen,
   editMembershipDialogOpen,
   setEditMembershipDialogOpen,
+  labId,
+  lab,
+  userId,
 }: LabDialogsProps) {
   return (
     <>
@@ -78,9 +86,16 @@ export function LabDialogs({
           )}
 
           {createExperimentDialogOpen && (
-            <CreateExperimentDialog
+            <StartExperimentModal
               isOpen={createExperimentDialogOpen}
               onClose={() => setCreateExperimentDialogOpen(false)}
+              suggestedCategories={
+                Array.isArray(lab?.researchAreas)
+                  ? lab.researchAreas.map((cat: any) => typeof cat === 'string' ? cat : cat.category)
+                  : []
+              }
+              labId={labId}
+              userId={userId}
             />
           )}
 

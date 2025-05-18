@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -57,12 +57,28 @@ interface Experiment {
   contributors: Contributor[]
   files: ExperimentFile[]
   results?: string
+  created_at: string
 }
 
 interface ExperimentsListProps {
   labId: string
   experiments?: Experiment[]
 }
+
+// Add this CSS animation at the top of the file, after the imports
+const pulseAnimation = `
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+`
 
 // Function to generate a unique color for each category
 const generateColorForCategory = (category: string) => {
@@ -78,6 +94,93 @@ const generateColorForCategory = (category: string) => {
   return color
 }
 
+// Add this custom hook after the imports
+const useRunningTime = (startDate: string) => {
+  const [runningTime, setRunningTime] = useState("")
+
+  useEffect(() => {
+    const calculateTime = () => {
+      const start = new Date(startDate)
+      const now = new Date()
+      const diff = now.getTime() - start.getTime()
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+      const milliseconds = Math.floor(diff % 1000)
+
+      if (days > 0) {
+        setRunningTime(`${days}d ${hours}h ${minutes}m`)
+      } else if (hours > 0) {
+        setRunningTime(`${hours}h ${minutes}m ${seconds}s`)
+      } else if (minutes > 0) {
+        setRunningTime(`${minutes}m ${seconds}s`)
+      } else if (seconds > 0) {
+        setRunningTime(`${seconds}s ${milliseconds}ms`)
+      } else {
+        setRunningTime(`${milliseconds}ms`)
+      }
+    }
+
+    calculateTime()
+    // Update every 100ms for smooth millisecond updates
+    const interval = setInterval(calculateTime, 100)
+
+    return () => clearInterval(interval)
+  }, [startDate])
+
+  return runningTime
+}
+
+// Add new ExperimentCard component
+const ExperimentCard: React.FC<{ experiment: Experiment }> = ({ experiment }) => {
+  const runningTime = useRunningTime(experiment.created_at)
+
+  return (
+    <Link href={`/newexperiments/${experiment.id}`} className="block">
+      <Card className="overflow-hidden relative hover:bg-secondary/50 transition-colors cursor-pointer">
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-full bg-green-500 animate-[pulse_2s_ease-in-out_infinite]" />
+            <span className="text-xs text-green-500 font-medium">LIVE</span>
+          </div>
+        </div>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <div>
+            <h3 className="text-accent font-semibold text-lg hover:underline">
+              {experiment.name}
+            </h3>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {experiment.categories?.map((category: string) => (
+                <Badge key={category} variant="secondary" className="text-xs">
+                  {category}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground text-right">
+            {experiment.endDate ? (
+              <span>Ends: {experiment.endDate}</span>
+            ) : (
+              <span>Ongoing</span>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm mb-2">{experiment.objective}</p>
+          <div className="flex justify-end">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              <span>Running for {runningTime}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  )
+}
+
 export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experiments }) => {
   const [displayExperiments, setDisplayExperiments] = useState<Experiment[]>([])
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null)
@@ -88,17 +191,20 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
   const isAdmin = currentRole === "admin"
 
   useEffect(() => {
+    console.log('Fetching experiments for labId:', labId)
     async function fetchExperiments() {
       if (!labId) return
       const { data, error } = await supabase
         .from("experiments")
         .select("*")
         .eq("lab_id", labId)
-        .order("startDate", { ascending: false })
+        .order("created_at", { ascending: false })
       if (error) {
+        console.error('Supabase error:', error)
         setDisplayExperiments([])
         return
       }
+      console.log('Fetched experiments:', data)
       setDisplayExperiments(data || [])
     }
     fetchExperiments()
@@ -143,124 +249,17 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
 
   return (
     <div className="space-y-6">
+      <style>{pulseAnimation}</style>
       {displayExperiments.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <p>No experiments found for this lab.</p>
         </div>
       ) : (
-        displayExperiments.map((experiment) => (
-          <Card key={experiment.id} className="overflow-hidden">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <Link href={`/experiments/view?id=${experiment.id}`} className="font-medium text-lg text-accent">
-                    {experiment.name}
-                  </Link>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isAdmin && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-red-500 hover:bg-red-500/10 hover:text-red-400"
-                      onClick={() => openDeleteDialog(experiment)}
-                      title="Delete experiment"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-green-500 hover:bg-green-500/10 hover:text-green-400"
-                    onClick={() => {
-                      setSelectedExperiment(experiment)
-                      setSaveDialogOpen(true)
-                    }}
-                    title="Save to profile"
-                  >
-                    <PlusCircle className="h-5 w-5" />
-                  </Button>
-                  <Badge className={experiment.status === "LIVE" ? "bg-green-600" : "bg-blue-600"}>
-                    {experiment.status}
-                  </Badge>
-                </div>
-              </div>
-
-              <p className="text-sm mb-3">{experiment.description}</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                <div>
-                  <h4 className="text-sm font-medium mb-2">OBJECTIVE</h4>
-                  <p className="text-sm text-muted-foreground">{experiment.objective}</p>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-medium mb-2">TIMELINE</h4>
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <Calendar className="h-4 w-4 mr-1" />
-                    <span>Started: {formatDate(experiment.startDate)}</span>
-                  </div>
-                  {experiment.endDate && (
-                    <div className="flex items-center text-sm text-muted-foreground mt-1">
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      <span>Concluded: {formatDate(experiment.endDate)}</span>
-                    </div>
-                  )}
-                  {!experiment.endDate && (
-                    <div className="flex items-center text-sm text-muted-foreground mt-1">
-                      <Clock className="h-4 w-4 mr-1" />
-                      <span>Ongoing</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-3">
-                {experiment.categories.map((category, index) => {
-                  const categoryColor = generateColorForCategory(category)
-                  return (
-                    <Badge
-                      key={index}
-                      variant="outline"
-                      className="text-xs"
-                      style={{ backgroundColor: categoryColor, color: "white", borderColor: categoryColor }}
-                    >
-                      {category.toUpperCase()}
-                    </Badge>
-                  )
-                })}
-              </div>
-
-              <div className="mb-3">
-                <h4 className="text-sm font-medium mb-2">CONTRIBUTORS</h4>
-                <div className="flex -space-x-2">
-                  {experiment.contributors.map((contributor) => (
-                    <Avatar key={contributor.id} className="h-8 w-8 border-2 border-background">
-                      <AvatarImage src={contributor.avatar || "/placeholder.svg"} alt={contributor.name} />
-                      <AvatarFallback>{contributor.initials}</AvatarFallback>
-                    </Avatar>
-                  ))}
-                </div>
-              </div>
-
-              {experiment.results && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">RESULTS</h4>
-                  <p className="text-sm text-muted-foreground">{experiment.results}</p>
-                </div>
-              )}
-
-              <div className="flex justify-end mt-4">
-                <Button className="bg-accent text-primary-foreground hover:bg-accent/90" asChild>
-                  <Link href={`/experiments/view?id=${experiment.id}`}>
-                    {experiment.status === "LIVE" ? "VIEW EXPERIMENT" : "VIEW RESULTS"}
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))
+        <div className="grid gap-4">
+          {displayExperiments.map((experiment) => (
+            <ExperimentCard key={experiment.id} experiment={experiment} />
+          ))}
+        </div>
       )}
 
       {/* Save to Profile Dialog */}

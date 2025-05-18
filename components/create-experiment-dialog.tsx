@@ -23,13 +23,16 @@ import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { CalendarIcon, Beaker } from "lucide-react"
+import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 
 interface CreateExperimentDialogProps {
   isOpen: boolean
   onClose: () => void
+  labId: string
 }
 
-export function CreateExperimentDialog({ isOpen, onClose }: CreateExperimentDialogProps) {
+export function CreateExperimentDialog({ isOpen, onClose, labId }: CreateExperimentDialogProps) {
   const [experimentName, setExperimentName] = useState("")
   const [objective, setObjective] = useState("")
   const [startDate, setStartDate] = useState<Date>()
@@ -66,7 +69,7 @@ export function CreateExperimentDialog({ isOpen, onClose }: CreateExperimentDial
     }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!experimentName || !objective || !startDate) {
       // Show validation errors
       return
@@ -74,9 +77,49 @@ export function CreateExperimentDialog({ isOpen, onClose }: CreateExperimentDial
 
     setIsSubmitting(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false)
+    try {
+      const { data, error } = await supabase
+        .from("experiments")
+        .insert([
+          {
+            name: experimentName,
+            objective: objective,
+            startDate: startDate.toISOString(),
+            endDate: isOngoing ? null : endDate?.toISOString(),
+            status: "LIVE",
+            categories: selectedTags,
+            lab_id: labId
+          }
+        ])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Upload files if any
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          const filePath = `experiments/${data.id}/${file.name}`
+          const { error: uploadError } = await supabase.storage
+            .from("experiment-files")
+            .upload(filePath, file)
+          
+          if (uploadError) throw uploadError
+
+          // Add file reference to experiment_files table
+          await supabase
+            .from("experiment_files")
+            .insert([
+              {
+                experiment_id: data.id,
+                file_name: file.name,
+                file_path: filePath,
+                file_size: file.size,
+                file_type: file.type
+              }
+            ])
+        }
+      }
 
       // Reset form
       setExperimentName("")
@@ -89,7 +132,22 @@ export function CreateExperimentDialog({ isOpen, onClose }: CreateExperimentDial
 
       // Close dialog
       onClose()
-    }, 1500)
+
+      // Show success toast
+      toast({
+        title: "Experiment Created",
+        description: "Your experiment has been created successfully.",
+      })
+    } catch (error) {
+      console.error("Error creating experiment:", error)
+      toast({
+        title: "Error",
+        description: "Failed to create experiment. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -261,11 +319,11 @@ export function CreateExperimentDialog({ isOpen, onClose }: CreateExperimentDial
             className="bg-accent text-primary-foreground hover:bg-accent/90"
           >
             {isSubmitting ? (
-              "Creating..."
+              "Initiating..."
             ) : (
               <>
                 <Beaker className="h-4 w-4 mr-2" />
-                Create Experiment
+                INITIATE EXPERIMENT
               </>
             )}
           </Button>
