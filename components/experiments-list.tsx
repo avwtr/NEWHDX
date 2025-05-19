@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { CheckCircle, PlusCircle, Trash2, Clock, BeakerIcon, Calendar } from "lucide-react"
+import { CheckCircle, PlusCircle, Trash2, Clock, FlaskConical, Calendar } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -272,7 +272,7 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
           {selectedExperiment && (
             <div className="flex flex-col gap-3 p-3 bg-secondary/30 rounded-md">
               <div className="flex items-center gap-2">
-                <BeakerIcon className="h-5 w-5 text-accent" />
+                <FlaskConical className="h-5 w-5 text-accent" />
                 <h3 className="font-medium">{selectedExperiment.name}</h3>
               </div>
               <p className="text-sm text-muted-foreground">{selectedExperiment.description}</p>
@@ -309,7 +309,7 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
           {experimentToDelete && (
             <div className="flex flex-col gap-3 p-3 my-2 bg-secondary/30 rounded-md">
               <div className="flex items-center gap-2">
-                <BeakerIcon className="h-5 w-5 text-accent" />
+                <FlaskConical className="h-5 w-5 text-accent" />
                 <h3 className="font-medium">{experimentToDelete.name}</h3>
               </div>
               <p className="text-sm text-muted-foreground">{experimentToDelete.description}</p>

@@ -40,6 +40,10 @@ interface FileViewerDialogProps {
     lastUpdatedBy?: string
     lastUpdated?: string
     bucket?: string
+    file?: string
+    file_size?: string
+    added_by?: string
+    created_at?: string
   }
   isOpen: boolean
   onClose: () => void
@@ -126,9 +130,9 @@ async function fetchUsername(userId: string): Promise<string> {
 }
 
 // Helper to determine if file is editable
-function isEditableFileType(fileType: string) {
+function isEditableFileType(fileType: string | undefined) {
+  if (!fileType) return false;
   const t = fileType.toLowerCase();
-  // Only allow editing for text, code, and tabular files
   return ["md", "txt", "py", "js", "ts", "r", "csv", "xlsx", "json"].includes(t);
 }
 
@@ -169,6 +173,15 @@ export function FileViewerDialog({
     }
   }, [file.lastUpdatedBy]);
 
+  // Utility to get bucket and path for experiment_files
+  const getBucketAndPath = () => {
+    if (file.storageKey && file.file) {
+      return { bucket: "experiment-files", path: file.storageKey };
+    }
+    // fallback for lab materials
+    return { bucket: file.bucket || "labmaterials", path: file.storageKey || file.path };
+  };
+
   // Fetch file content (refactored so it can be called after save)
   const fetchFileContent = async () => {
     setLoading(true);
@@ -178,39 +191,30 @@ export function FileViewerDialog({
       const fileType = (
         file.type ||
         (file as any).fileType ||
+        (file.file && file.file.split('.').pop()) ||
         (file.name && file.name.split('.').pop()) ||
         ((file as any).filename && (file as any).filename.split('.').pop()) ||
         ""
       ).toLowerCase();
-
+      const { bucket, path } = getBucketAndPath();
       if (isFirebaseFile(file)) {
-        // Fetch from Firebase Storage
-        if (!file.storageKey) throw new Error('No storageKey for Firebase file');
-        // Add cache-busting param
-        const url = await getDownloadURL(firebaseRef(firebaseStorage, file.storageKey)) + `?t=${Date.now()}`;
-        const response = await fetch(url);
-        content = await response.text();
+        // Firebase logic (not used for experiment files)
+        throw new Error('Firebase storage not supported for experiment files');
       } else {
-        // Fetch from Supabase Storage
-        const path = file.storageKey || file.path;
-        const bucket = file.bucket || 'labmaterials';
+        // Supabase Storage
         if (!path) throw new Error('No path for Supabase file');
-        // Add cache-busting param
         const { data, error } = await supabase.storage.from(bucket).download(path + `?t=${Date.now()}`);
         if (error || !data) throw new Error('Failed to download file from Supabase');
         content = await data.text();
       }
-
       if (!content) throw new Error('No file content available');
 
       // Parse content based on file type
       if (["csv", "xlsx", "json"].includes(fileType)) {
         try {
-          // Try parsing as JSON first
           const jsonData = JSON.parse(content);
           setContent(JSON.stringify(jsonData, null, 2));
         } catch {
-          // If not JSON, treat as CSV
           const rows = content.split("\n").map(row => row.split(","));
           const formattedContent = rows.map(row => row.join("\t")).join("\n");
           setContent(formattedContent);
@@ -279,20 +283,18 @@ export function FileViewerDialog({
       const fileType = (
         file.type ||
         (file as any).fileType ||
+        (file.file && file.file.split('.').pop()) ||
         (file.name && file.name.split('.').pop()) ||
         ((file as any).filename && (file as any).filename.split('.').pop()) ||
         ""
       ).toLowerCase();
-      // Normalize bucket and key
-      const bucket = file.bucket || (file.storageKey ? "labmaterials" : file.storage_key ? "cont-requests" : "labmaterials");
-      const key = file.storageKey || file.storage_key || file.path;
+      const { bucket, path } = getBucketAndPath();
       if (["jpg", "jpeg", "png", "gif", "svg", "pdf"].includes(fileType)) {
         if (file.url) {
           setPreviewUrl(file.url);
-        } else if (key) {
+        } else if (path) {
           try {
-            // Use signed URL for private buckets
-            const { data, error } = await supabase.storage.from(bucket).createSignedUrl(key, 60 * 10); // 10 min
+            const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 10);
             if (error || !data?.signedUrl) throw error || new Error("No signed URL");
             setPreviewUrl(data.signedUrl);
           } catch (err) {
@@ -376,15 +378,19 @@ export function FileViewerDialog({
   };
 
   const handleDelete = async () => {
-    if (!onDelete) return;
     setLoading(true);
     try {
-      await onDelete(file.id);
+      // Remove from storage
+      if (file.storageKey) {
+        await supabase.storage.from("experiment-files").remove([file.storageKey]);
+      }
+      // Remove from DB
+      await supabase.from("experiment_files").delete().eq("id", file.id);
       setIsDeleteDialogOpen(false);
       onClose();
       toast({
         title: "File Deleted",
-        description: `${file.name} has been deleted.`,
+        description: `${file.file || file.name} has been deleted.`,
       });
     } catch (err: any) {
       toast({
@@ -400,10 +406,22 @@ export function FileViewerDialog({
   const handleDownload = async () => {
     setLoading(true);
     try {
-      await downloadFile(file);
+      const { bucket, path } = getBucketAndPath();
+      const { data, error } = await supabase.storage.from(bucket).download(path);
+      if (error || !data) throw new Error("Failed to download file");
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.file || file.name || 'download';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
       toast({
         title: "File Downloaded",
-        description: `${file.name} has been downloaded.`,
+        description: `${file.file || file.name} has been downloaded.`,
       });
     } catch (err: any) {
       toast({
@@ -423,6 +441,7 @@ export function FileViewerDialog({
     const fileType = (
       file.type ||
       (file as any).fileType ||
+      (file.file && file.file.split('.').pop()) ||
       (file.name && file.name.split('.').pop()) ||
       ((file as any).filename && (file as any).filename.split('.').pop()) ||
       ""
@@ -492,28 +511,23 @@ export function FileViewerDialog({
         <DialogContent className={`max-w-4xl max-h-[90vh] overflow-hidden flex flex-col${isFullScreen ? ' fixed inset-0 z-50 max-w-full max-h-full bg-background' : ''}`} style={isFullScreen ? {padding: 0, borderRadius: 0} : {}}>
           <DialogHeader>
             <div className="flex items-center justify-between">
-              <DialogTitle className="text-xl">{file.name}</DialogTitle>
+              <DialogTitle className="text-xl">{file.file || file.name}</DialogTitle>
               <div className="flex items-center gap-2">
-                {isAdmin && !isEditing && isEditableFileType(file.type) && (
+                {isAdmin && !isEditing && isEditableFileType(
+                  file.type ||
+                  (file.file && file.file.split('.').pop()) ||
+                  (file.name && file.name.split('.').pop()) ||
+                  ''
+                ) && (
                   <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                     <Edit2 className="h-4 w-4 mr-1" /> Edit
-                  </Button>
-                )}
-                {isAdmin && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-red-500 hover:text-red-700 hover:bg-red-100"
-                    onClick={() => setIsDeleteDialogOpen(true)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" /> Delete
                   </Button>
                 )}
               </div>
             </div>
             <div className="text-sm text-muted-foreground">
-              {formatFileSize(file.size)} • Last updated by {lastUpdatedByName || file.lastUpdatedBy || "Unknown"}
-              {file.lastUpdated ? `, ${new Date(file.lastUpdated).toLocaleString()}` : ""}
+              {`${(parseInt(String(file.file_size || 0)) / 1024).toFixed(1)} KB`} • Uploaded by {file.added_by || "Unknown"}
+              {file.created_at ? `, ${new Date(file.created_at).toLocaleString()}` : ""}
             </div>
           </DialogHeader>
 
@@ -573,15 +587,18 @@ export function FileViewerDialog({
 
           <DialogFooter className="mt-4">
             <div className="flex justify-between w-full">
-              <Button variant="outline" onClick={handleDownload}>
+              <Button variant="outline" onClick={handleDownload} disabled={loading}>
                 <Download className="h-4 w-4 mr-2" />
                 Download
               </Button>
-
-              {isAdmin && isEditing && isEditableFileType(file.type) && (
-                <Button onClick={handleSave} className="bg-accent text-primary-foreground hover:bg-accent/90">
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
+              {isAdmin && (
+                <Button
+                  variant="destructive"
+                  onClick={() => setIsDeleteDialogOpen(true)}
+                  disabled={loading}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
                 </Button>
               )}
             </div>
@@ -595,13 +612,12 @@ export function FileViewerDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure you want to delete this file?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete <span className="font-bold">{file.name}</span>{" "}
-              from the lab materials.
+              This action cannot be undone. This will permanently delete <span className="font-bold">{file.file || file.name}</span> from the experiment files.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-500 text-white hover:bg-red-600">
+            <AlertDialogAction onClick={async () => { await handleDelete(); }} className="bg-red-500 text-white hover:bg-red-600">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

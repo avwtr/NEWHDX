@@ -93,7 +93,7 @@ export function CustomEventDialog({ open, onOpenChange, experimentId, onAddEvent
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="eventType">Event Type</Label>
-            <Select value={eventType} onValueChange={setEventType}>
+            <Select value={eventType} onValueChange={setEventType} required>
               <SelectTrigger>
                 <SelectValue placeholder="Select event type" />
               </SelectTrigger>
@@ -138,12 +138,7 @@ export function CustomEventDialog({ open, onOpenChange, experimentId, onAddEvent
             </Button>
             <Button
               type="submit"
-              disabled={
-                isSubmitting ||
-                (eventType === "custom" && !customEventName) ||
-                (!eventType && !customEventName) ||
-                !description
-              }
+              disabled={isSubmitting || (eventType === "custom" && !customEventName) || (!eventType && !customEventName) || !description}
             >
               {isSubmitting ? "Adding..." : "Add Event"}
             </Button>

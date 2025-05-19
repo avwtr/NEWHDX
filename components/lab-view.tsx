@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Maximize2, Minimize2, Beaker, Home, FileText, FlaskConical, Users, DollarSign } from "lucide-react"
+import { Maximize2, Minimize2, FlaskConical, Home, FileText, Users, DollarSign } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { useRole } from "@/contexts/role-context"
 import ActivityExplorer from "@/components/activity-explorer"
@@ -757,7 +757,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                           className="bg-accent text-primary-foreground hover:bg-accent/90"
                           onClick={() => setCreateExperimentDialogOpen(true)}
                         >
-                          <Beaker className="h-4 w-4 mr-2" />
+                          <FlaskConical className="h-4 w-4 mr-2" />
                           START NEW EXPERIMENT
                         </Button>
                       )}
@@ -778,11 +778,6 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                   <CardContent>
                     <ExperimentsList labId={lab.labId} />
                   </CardContent>
-                  <CardFooter>
-                    <Button variant="outline" className="w-full border-accent text-accent hover:bg-secondary" asChild>
-                      <Link href="/experiments">VIEW ALL EXPERIMENTS</Link>
-                    </Button>
-                  </CardFooter>
                 </Card>
               )}
 

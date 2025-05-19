@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
-import { CalendarIcon, Beaker } from "lucide-react"
+import { CalendarIcon } from "lucide-react"
 
 const ExperimentView = () => {
   const { userRole } = useRole()
@@ -265,7 +265,7 @@ const ExperimentView = () => {
                 "Creating..."
               ) : (
                 <>
-                  <Beaker className="h-4 w-4 mr-2" />
+                  <FlaskConical className="h-4 w-4 mr-2" />
                   Create Experiment
                 </>
               )}

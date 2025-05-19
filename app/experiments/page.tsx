@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Beaker, Search, Calendar, Clock, Filter, ArrowUpDown, ArrowLeft } from "lucide-react"
+import { FlaskConical, Search, Calendar, Clock, Filter, ArrowUpDown, ArrowLeft } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -133,12 +133,12 @@ export default function ExperimentsPage() {
               <ArrowLeft className="h-4 w-4 mr-1" />
               Back to Lab
             </Link>
-            <Beaker className="h-6 w-6 text-accent" />
+            <FlaskConical className="h-6 w-6 text-accent" />
             <h1 className="text-2xl font-bold">Experiments</h1>
           </div>
 
           <Button className="bg-accent text-primary-foreground hover:bg-accent/90">
-            <Beaker className="h-4 w-4 mr-2" />
+            <FlaskConical className="h-4 w-4 mr-2" />
             Create New Experiment
           </Button>
         </div>
@@ -266,7 +266,7 @@ export default function ExperimentsPage() {
 
                 <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" asChild>
                   <Link href="/experiments/view">
-                    <Beaker className="h-4 w-4 mr-2" />
+                    <FlaskConical className="h-4 w-4 mr-2" />
                     View Experiment
                   </Link>
                 </Button>
@@ -276,7 +276,7 @@ export default function ExperimentsPage() {
 
           {sortedExperiments.length === 0 && (
             <div className="col-span-1 lg:col-span-2 flex flex-col items-center justify-center py-12 text-center">
-              <Beaker className="h-12 w-12 text-muted-foreground mb-4" />
+              <FlaskConical className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium">No experiments found</h3>
               <p className="text-muted-foreground mt-1 mb-4">
                 {searchQuery || statusFilter !== "all"
@@ -284,7 +284,7 @@ export default function ExperimentsPage() {
                   : "Start a new experiment to begin your research"}
               </p>
               <Button className="bg-accent text-primary-foreground hover:bg-accent/90">
-                <Beaker className="h-4 w-4 mr-2" />
+                <FlaskConical className="h-4 w-4 mr-2" />
                 Create New Experiment
               </Button>
             </div>

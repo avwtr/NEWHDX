@@ -21,7 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
-import { CalendarIcon, Beaker, Search, Check, X } from "lucide-react"
+import { CalendarIcon, FlaskConical, Search, Check, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { researchAreas } from "@/lib/research-areas"
 import { supabase } from "@/lib/supabase"
@@ -83,6 +83,38 @@ export function StartExperimentModal({ isOpen, onClose, suggestedCategories, lab
       if (error) throw error
 
       if (data && data.id) {
+        // Insert activity log with correct schema
+        const activityPayload = {
+          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+          activity_name: `Experiment Started: ${experimentName}`,
+          activity_type: "experiment_started",
+          performed_by: userId,
+          lab_from: labId,
+          created_at: new Date().toISOString(),
+        };
+        console.log('[StartExperimentModal] Logging activity:', activityPayload);
+        const { data: activityData, error: activityError } = await supabase.from("activity").insert([activityPayload]).select().single();
+        console.log('[StartExperimentModal] Activity log result:', { activityData, activityError });
+
+        // Insert into experiment_activity table as well
+        const experimentActivityPayload = {
+          activity_id: activityPayload.activity_id,
+          activity_name: activityPayload.activity_name,
+          activity_type: activityPayload.activity_type,
+          performed_by: userId,
+          experiment_id: data.id,
+          created_at: activityPayload.created_at,
+        };
+        const { data: expActData, error: expActError } = await supabase.from("experiment_activity").insert([experimentActivityPayload]).select().single();
+        console.log('[StartExperimentModal] Experiment activity log result:', { expActData, expActError });
+
+        // Add creator as contributor
+        await supabase.from("experiment_contributors").insert({
+          user_id: userId,
+          experiment_id: data.id,
+          added_when: "CREATED"
+        });
+
         router.push(`/newexperiments/${data.id}`)
       }
       onClose()
@@ -102,9 +134,16 @@ export function StartExperimentModal({ isOpen, onClose, suggestedCategories, lab
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        {isSubmitting && (
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 dark:bg-black/80 backdrop-blur-sm">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-accent mb-6"></div>
+            <div className="text-lg font-semibold text-accent">Initiating Experiment...</div>
+            <div className="text-sm text-muted-foreground mt-2">Please wait while we set up your experiment.</div>
+          </div>
+        )}
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <Beaker className="h-5 w-5 text-accent" />
+            <FlaskConical className="h-5 w-5 text-accent" />
             Start New Experiment
           </DialogTitle>
           <DialogDescription>

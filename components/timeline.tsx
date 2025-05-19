@@ -13,6 +13,10 @@ interface TimelineEvent {
   date: string
   event: string
   description: string
+  user?: {
+    username: string
+    profilePic: string
+  } | null
 }
 
 interface TimelineProps {
@@ -69,6 +73,16 @@ export function Timeline({ events, onAddEvent }: TimelineProps) {
               <div className="flex items-center text-sm text-muted-foreground">
                 <CalendarIcon className="mr-1 h-3 w-3" />
                 <span>{event.date}</span>
+                {event.user && (
+                  <span className="flex items-center ml-3 gap-1">
+                    <img
+                      src={event.user.profilePic || "/placeholder.svg"}
+                      alt={event.user.username}
+                      className="w-5 h-5 rounded-full object-cover border border-secondary"
+                    />
+                    <span className="font-mono text-xs text-white/80">@{event.user.username}</span>
+                  </span>
+                )}
               </div>
               <h3 className="font-medium">{event.event}</h3>
               <p className="text-sm text-muted-foreground">{event.description}</p>
