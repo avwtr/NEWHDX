@@ -737,7 +737,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                   experimentsExpanded={experimentsExpanded}
                   setExperimentsExpanded={setExperimentsExpanded}
                   setCreateExperimentDialogOpen={setCreateExperimentDialogOpen}
-                  liveExperimentsData={liveExperimentsData}
+                  liveExperimentsData={experiments}
                   labId={lab.labId}
                 />
               )}
@@ -776,7 +776,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <ExperimentsList labId={lab.labId} />
+                    <ExperimentsList labId={lab.labId} experiments={experiments} />
                   </CardContent>
                 </Card>
               )}

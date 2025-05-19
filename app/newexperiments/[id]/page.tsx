@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -298,11 +298,13 @@ export default function ExperimentViewPage() {
   const [labMaterials, setLabMaterials] = useState<any[]>([]);
   const [isFetchingLabMaterials, setIsFetchingLabMaterials] = useState(false);
   const [isAddingFromLab, setIsAddingFromLab] = useState(false);
+  const [removingContributorId, setRemovingContributorId] = useState<string | null>(null);
 
   // Refs
   const statusIndicatorRef = useRef<HTMLDivElement>(null)
 
   const { user } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     if (!id) return
@@ -567,6 +569,7 @@ export default function ExperimentViewPage() {
   }
 
   const handleAddContributor = async (profile: any) => {
+    if (!user) return;
     setIsAddingContributor(true);
     await supabase.from("experiment_contributors").insert({
       user_id: profile.user_id,
@@ -598,7 +601,7 @@ export default function ExperimentViewPage() {
       setConcludeDialogOpen(false)
 
       // In a real app, this would update the experiment status and redirect to a conclusion page
-      window.location.href = "/experiments/conclude"
+      router.push(`/newexperiments/${experiment.id}/conclude`)
     }, 1500)
   }
 
@@ -696,6 +699,7 @@ export default function ExperimentViewPage() {
   };
 
   const handleSaveObjective = async () => {
+    if (!user) return;
     setIsSavingObjective(true);
     const { data, error } = await supabase
       .from("experiments")
@@ -869,6 +873,32 @@ export default function ExperimentViewPage() {
     ]);
   };
 
+  // Helper to get creator contributor
+  const creatorContributor = contributors.find(c => c.added_when === "CREATED");
+  const isCurrentUserCreator = creatorContributor && creatorContributor.user_id === user?.id;
+
+  // Remove contributor handler
+  const handleRemoveContributor = async (contributor: any) => {
+    if (!experiment?.id || !user?.id) return;
+    setRemovingContributorId(contributor.user_id);
+    try {
+      await supabase.from("experiment_contributors").delete().eq("user_id", contributor.user_id).eq("experiment_id", experiment.id);
+      // Log activity
+      await logExperimentActivity({
+        activity_name: `Contributor Removed: ${contributor.profile?.username || contributor.user_id}`,
+        activity_type: "contributor_removed",
+        performed_by: user.id,
+        experiment_id: experiment.id,
+      });
+      // Update contributors state
+      setContributors(prev => prev.filter(c => c.user_id !== contributor.user_id));
+    } catch (err: any) {
+      alert("Failed to remove contributor: " + (err.message || "Unknown error"));
+    } finally {
+      setRemovingContributorId(null);
+    }
+  };
+
   if (loading) return <div>Loading...</div>
   if (!experiment) return <div>Experiment not found.</div>
 
@@ -926,7 +956,7 @@ export default function ExperimentViewPage() {
             <Button
               variant="outline"
               className="border-accent text-accent hover:bg-secondary"
-              onClick={() => setConcludeDialogOpen(true)}
+              onClick={() => router.push(`/newexperiments/${experiment.id}/conclude`)}
             >
               <CheckCircle className="h-4 w-4 mr-2" />
               Conclude Experiment
@@ -1014,6 +1044,18 @@ export default function ExperimentViewPage() {
                               {contributor.added_when}
                             </Badge>
                         </div>
+                        {/* Remove button: only show if current user is creator, and not for the creator themselves */}
+                        {isCurrentUserCreator && contributor.added_when !== "CREATED" && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="ml-2"
+                            disabled={removingContributorId === contributor.user_id}
+                            onClick={() => handleRemoveContributor(contributor)}
+                          >
+                            {removingContributorId === contributor.user_id ? "Removing..." : "Remove"}
+                          </Button>
+                        )}
                       </div>
                       );
                     })}
@@ -1340,57 +1382,6 @@ export default function ExperimentViewPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAddContributorOpen(false)}>
               Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Conclude Experiment Dialog */}
-      <Dialog open={concludeDialogOpen} onOpenChange={setConcludeDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Conclude Experiment</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="flex items-center p-3 bg-amber-500/10 border border-amber-500/30 rounded-md">
-              <AlertCircle className="h-5 w-5 text-amber-500 mr-2 flex-shrink-0" />
-              <p className="text-sm">
-                Concluding this experiment will mark it as complete and generate a summary report. This action cannot be
-                undone.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="conclude-reason">Conclusion Summary</Label>
-              <Textarea
-                id="conclude-reason"
-                placeholder="Summarize the results and outcomes of this experiment..."
-                value={concludeReason}
-                onChange={(e) => setConcludeReason(e.target.value)}
-                rows={5}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConcludeDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConcludeExperiment}
-              disabled={!concludeReason.trim() || isSubmittingConclusion}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {isSubmittingConclusion ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Concluding...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Conclude Experiment
-                </>
-              )}
             </Button>
           </DialogFooter>
         </DialogContent>

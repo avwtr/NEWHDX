@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Maximize2, Minimize2, Plus, Calendar, Users, Edit, Trash, Image as ImageIcon } from "lucide-react"
+import { Maximize2, Minimize2, Plus, Calendar, Users, Edit, Trash, Image as ImageIcon, Circle } from "lucide-react"
 import Link from "next/link"
 import { CreateFundDialog } from "@/components/create-fund-dialog"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from "date-fns"
 
 interface LabOverviewTabProps {
   isAdmin: boolean
@@ -43,6 +44,25 @@ function useUsername(userId: string | undefined) {
     fetchUsername();
   }, [userId]);
   return username;
+}
+
+function getElapsedString(date: string | Date) {
+  if (!date) return "-";
+  const now = new Date();
+  const end = typeof date === 'string' ? new Date(date) : date;
+  let years = differenceInYears(now, end);
+  let months = differenceInMonths(now, end) % 12;
+  let days = differenceInDays(now, end) % 30;
+  let hours = differenceInHours(now, end) % 24;
+  let minutes = differenceInMinutes(now, end) % 60;
+  let parts = [];
+  if (years) parts.push(`${years}y`);
+  if (months) parts.push(`${months}mo`);
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (parts.length === 0) parts.push("just now");
+  return parts.join(" ") + " ago";
 }
 
 export function LabOverviewTab({
@@ -464,84 +484,71 @@ export function LabOverviewTab({
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {(experimentsExpanded
-              ? [
-                  ...liveExperimentsData,
-                  {
-                    id: 3,
-                    name: "Cognitive Function Assessment",
-                    description: "Studying cognitive function in adults using novel assessment techniques",
-                    categories: ["psychology", "cognitive-science"],
-                    contributors: 4,
-                    startDate: "2023-11-10",
-                    status: "LIVE",
-                  },
-                  {
-                    id: 4,
-                    name: "Brain-Computer Interface Testing",
-                    description: "Testing new BCI prototypes for accessibility applications",
-                    categories: ["neuroscience", "technology"],
-                    contributors: 6,
-                    startDate: "2023-12-05",
-                    status: "LIVE",
-                  },
-                  {
-                    id: 5,
-                    name: "Memory Formation Study",
-                    description: "Investigating neural mechanisms of memory formation and recall",
-                    categories: ["neuroscience", "memory"],
-                    contributors: 3,
-                    startDate: "2024-01-20",
-                    status: "LIVE",
-                  },
-                ]
-              : liveExperimentsData
-            ).map((experiment) => (
-              <Card key={experiment.id} className="bg-secondary/50 border-secondary">
-                <CardContent className="p-4">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex justify-between items-start">
-                      <Link href="#" className="hover:underline font-medium text-accent text-lg">
-                        {experiment.name}
-                      </Link>
-                      <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20">
-                        {experiment.status}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{experiment.description}</p>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {experiment.categories.map((category: string) => (
-                        <Badge key={category} variant="secondary" className="text-xs">
-                          {category}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                      <div className="flex items-center">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        Started: {experiment.startDate}
+            {liveExperimentsData.map((experiment) => {
+              const isClosed = experiment.closed_status === "CLOSED";
+              return (
+                <Card key={experiment.id} className="bg-secondary/50 border-secondary">
+                  <CardContent className="p-4">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex justify-between items-start">
+                        <Link
+                          href={isClosed ? `/newexperiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`}
+                          className="hover:underline font-medium text-accent text-lg flex items-center gap-2"
+                        >
+                          {experiment.name}
+                          {isClosed && (
+                            <span className="flex items-center gap-1 ml-2">
+                              <Circle className="h-3 w-3 text-red-500 fill-red-500" />
+                              <span className="text-xs font-bold text-red-500">CONCLUDED</span>
+                            </span>
+                          )}
+                        </Link>
+                        {isClosed ? (
+                          <Badge variant="outline" className="bg-red-100 text-red-600 border-red-200">
+                            {experiment.conclusion_tag ? experiment.conclusion_tag.replace(/-/g, ' ').toUpperCase() : "CONCLUDED"}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20">
+                            {experiment.status}
+                          </Badge>
+                        )}
                       </div>
-                      <div className="flex items-center">
-                        <Users className="h-3 w-3 mr-1" />
-                        {experiment.contributors} contributors
+                      <p className="text-sm text-muted-foreground">{experiment.description}</p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {experiment.categories.map((category: string) => (
+                          <Badge key={category} variant="secondary" className="text-xs">
+                            {category}
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                        {isClosed ? (
+                          <>
+                            <div className="flex items-center">
+                              <Circle className="h-3 w-3 mr-1 text-red-500 fill-red-500" />
+                              <span>Concluded {getElapsedString(experiment.end_date)}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center">
+                              <Calendar className="h-3 w-3 mr-1" />
+                              Started: {experiment.startDate}
+                            </div>
+                            <div className="flex items-center">
+                              <Users className="h-3 w-3 mr-1" />
+                              {experiment.contributors} contributors
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </CardContent>
-        <CardFooter>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-accent hover:bg-secondary"
-            onClick={() => setExperimentsExpanded(!experimentsExpanded)}
-          >
-            {experimentsExpanded ? "SHOW LESS" : "VIEW ALL EXPERIMENTS"}
-          </Button>
-        </CardFooter>
       </Card>
 
       {/* Enhanced Funding Goals Section (only if there are any) */}

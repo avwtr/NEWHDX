@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { CheckCircle, PlusCircle, Trash2, Clock, FlaskConical, Calendar } from "lucide-react"
+import { CheckCircle, PlusCircle, Trash2, Clock, FlaskConical, Calendar, Circle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { supabase } from "@/lib/supabase"
+import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from "date-fns"
 
 interface Contributor {
   id: string
@@ -133,18 +134,47 @@ const useRunningTime = (startDate: string) => {
   return runningTime
 }
 
-// Add new ExperimentCard component
-const ExperimentCard: React.FC<{ experiment: Experiment }> = ({ experiment }) => {
-  const runningTime = useRunningTime(experiment.created_at)
+function getElapsedString(date: string | Date) {
+  if (!date) return "-";
+  const now = new Date();
+  const end = typeof date === 'string' ? new Date(date) : date;
+  let years = differenceInYears(now, end);
+  let months = differenceInMonths(now, end) % 12;
+  let days = differenceInDays(now, end) % 30;
+  let hours = differenceInHours(now, end) % 24;
+  let minutes = differenceInMinutes(now, end) % 60;
+  let parts = [];
+  if (years) parts.push(`${years}y`);
+  if (months) parts.push(`${months}mo`);
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (parts.length === 0) parts.push("just now");
+  return parts.join(" ") + " ago";
+}
 
+// Add new ExperimentCard component
+const ExperimentCard: React.FC<{ experiment: any }> = ({ experiment }) => {
+  const runningTime = useRunningTime(experiment.created_at)
+  const isClosed = experiment.closed_status === "CLOSED";
   return (
-    <Link href={`/newexperiments/${experiment.id}`} className="block">
+    <Link
+      href={isClosed ? `/newexperiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`}
+      className="block"
+    >
       <Card className="overflow-hidden relative hover:bg-secondary/50 transition-colors cursor-pointer">
         <div className="absolute top-4 right-4 flex items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-full bg-green-500 animate-[pulse_2s_ease-in-out_infinite]" />
-            <span className="text-xs text-green-500 font-medium">LIVE</span>
-          </div>
+          {isClosed ? (
+            <div className="flex items-center gap-1.5">
+              <Circle className="h-3 w-3 text-red-500 fill-red-500" />
+              <span className="text-xs text-red-500 font-bold">CONCLUDED</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-[pulse_2s_ease-in-out_infinite]" />
+              <span className="text-xs text-green-500 font-medium">LIVE</span>
+            </div>
+          )}
         </div>
         <CardHeader className="pb-2 flex flex-row items-center justify-between">
           <div>
@@ -160,7 +190,9 @@ const ExperimentCard: React.FC<{ experiment: Experiment }> = ({ experiment }) =>
             </div>
           </div>
           <div className="text-xs text-muted-foreground text-right">
-            {experiment.endDate ? (
+            {isClosed ? (
+              <span>Concluded {getElapsedString(experiment.end_date)}</span>
+            ) : experiment.endDate ? (
               <span>Ends: {experiment.endDate}</span>
             ) : (
               <span>Ongoing</span>
@@ -169,11 +201,25 @@ const ExperimentCard: React.FC<{ experiment: Experiment }> = ({ experiment }) =>
         </CardHeader>
         <CardContent>
           <p className="text-sm mb-2">{experiment.objective}</p>
-          <div className="flex justify-end">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              <span>Running for {runningTime}</span>
-            </div>
+          <div className="flex justify-between items-end">
+            {isClosed ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-red-100 text-red-600 border-red-200">
+                    {experiment.conclusion_tag ? experiment.conclusion_tag.replace(/-/g, ' ').toUpperCase() : "CONCLUDED"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  <span>Closed</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                <span>Running for {runningTime}</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -182,7 +228,7 @@ const ExperimentCard: React.FC<{ experiment: Experiment }> = ({ experiment }) =>
 }
 
 export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experiments }) => {
-  const [displayExperiments, setDisplayExperiments] = useState<Experiment[]>([])
+  const [displayExperiments, setDisplayExperiments] = useState<any[]>(experiments || [])
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -191,24 +237,26 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
   const isAdmin = currentRole === "admin"
 
   useEffect(() => {
-    console.log('Fetching experiments for labId:', labId)
-    async function fetchExperiments() {
-      if (!labId) return
+    if (experiments) {
+      setDisplayExperiments(experiments)
+      return
+    }
+    // Only fetch if experiments prop is not provided
+    if (!labId) return
+    const fetchExperiments = async () => {
       const { data, error } = await supabase
         .from("experiments")
         .select("*")
         .eq("lab_id", labId)
         .order("created_at", { ascending: false })
       if (error) {
-        console.error('Supabase error:', error)
         setDisplayExperiments([])
         return
       }
-      console.log('Fetched experiments:', data)
       setDisplayExperiments(data || [])
     }
     fetchExperiments()
-  }, [labId])
+  }, [labId, experiments])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
