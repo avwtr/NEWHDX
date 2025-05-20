@@ -154,12 +154,12 @@ function getElapsedString(date: string | Date) {
 }
 
 // Add new ExperimentCard component
-const ExperimentCard: React.FC<{ experiment: any }> = ({ experiment }) => {
+export const ExperimentCard: React.FC<{ experiment: any }> = ({ experiment }) => {
   const runningTime = useRunningTime(experiment.created_at)
   const isClosed = experiment.closed_status === "CLOSED";
   return (
     <Link
-      href={isClosed ? `/newexperiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`}
+      href={isClosed ? `/experiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`}
       className="block"
     >
       <Card className="overflow-hidden relative hover:bg-secondary/50 transition-colors cursor-pointer">

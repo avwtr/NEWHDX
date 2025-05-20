@@ -299,10 +299,25 @@ export default function LabProfile({
             <span className="text-muted-foreground">Files</span>
           </div>
 
-          <div className="flex items-center gap-2 text-sm">
-            <FlaskConical className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{experimentsCount}</span>
-            <span className="text-muted-foreground">Experiments</span>
+          <div className="flex flex-col gap-1 text-sm">
+            <div className="flex items-center gap-2">
+              <FlaskConical className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{experimentsCount}</span>
+              <span className="text-muted-foreground">Experiments</span>
+            </div>
+            {/* Live Experiments List */}
+            {Array.isArray(lab.experiments) && lab.experiments.filter(
+              (exp: any) => (exp.status === "LIVE" || exp.closed_status !== "CLOSED")
+            ).length > 0 && (
+              <div className="mt-1 flex flex-col gap-1">
+                {lab.experiments.filter((exp: any) => (exp.status === "LIVE" || exp.closed_status !== "CLOSED")).map((exp: any) => (
+                  <div key={exp.id} className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-green-500 animate-[pulse_2s_ease-in-out_infinite]" />
+                    <span className="text-sm text-accent font-semibold">{exp.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-0.5 text-sm min-w-[120px]">

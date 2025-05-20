@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import {
   Search,
@@ -34,6 +34,8 @@ import {
 import { useAuth } from "@/components/auth-provider"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { supabase } from "@/lib/supabase"
+import { Badge } from "@/components/ui/badge"
 
 export function GlobalHeader() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -44,6 +46,74 @@ export function GlobalHeader() {
   const [helpLoading, setHelpLoading] = useState(false)
   const [helpSuccess, setHelpSuccess] = useState<string | null>(null)
   const [helpError, setHelpError] = useState<string | null>(null)
+
+  // Search state
+  const [searchResults, setSearchResults] = useState<any>({ users: [], labs: [], grants: [], experiments: [] })
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const searchTimeout = useRef<any>(null)
+  const searchRef = useRef<HTMLDivElement>(null)
+
+  // Debounced search
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults({ users: [], labs: [], grants: [], experiments: [] })
+      setShowDropdown(false)
+      return
+    }
+    setSearchLoading(true)
+    setShowDropdown(true)
+    if (searchTimeout.current) clearTimeout(searchTimeout.current)
+    searchTimeout.current = setTimeout(async () => {
+      // Query users
+      const [{ data: users }, { data: labs, error: labsError }, { data: grants }, { data: experiments }] = await Promise.all([
+        supabase.from("profiles").select("user_id, username, profilePic, research_interests").ilike("username", `%${searchQuery}%`).limit(5),
+        supabase.from("labs").select("labId, labName, description").ilike("labName", `%${searchQuery}%`).limit(5),
+        supabase.from("grants").select("id, title, description").ilike("title", `%${searchQuery}%`).limit(5),
+        supabase.from("experiments").select("id, name, objective").ilike("name", `%${searchQuery}%`).limit(5),
+      ])
+      let labsWithCategories = labs || [];
+      if (labs && labs.length > 0) {
+        const labIds = labs.map((lab: any) => lab.labId);
+        const { data: labCategories } = await supabase
+          .from("labCategories")
+          .select("lab_id, category")
+          .in("lab_id", labIds);
+        labsWithCategories = labs.map((lab: any) => ({
+          ...lab,
+          categories: (labCategories || [])
+            .filter((cat: any) => cat.lab_id === lab.labId)
+            .map((cat: any) => cat.category)
+        }));
+      }
+      if (labsError) {
+        console.error("Labs search error:", labsError)
+      }
+      console.log("Labs search result:", labsWithCategories)
+      setSearchResults({
+        users: users || [],
+        labs: labsWithCategories,
+        grants: grants || [],
+        experiments: experiments || [],
+      })
+      setSearchLoading(false)
+      setShowDropdown(true)
+    }, 350)
+    return () => clearTimeout(searchTimeout.current)
+  }, [searchQuery])
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    if (showDropdown) {
+      document.addEventListener("mousedown", handleClick)
+    }
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [showDropdown])
 
   const handleHelpSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -120,15 +190,104 @@ export function GlobalHeader() {
           </Link>
 
           {/* Search Bar */}
-          <div className="relative hidden md:block">
+          <div className="relative hidden md:block" ref={searchRef}>
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search labs, datasets, publications..."
+              placeholder="Search for users, labs, experiments"
               className="w-[300px] lg:w-[400px] pl-8 bg-secondary border-secondary text-foreground"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => searchQuery && setShowDropdown(true)}
             />
+            {/* Search Results Dropdown */}
+            {showDropdown && (
+              <div className="absolute left-0 mt-2 w-full bg-background border border-secondary rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+                {searchLoading ? (
+                  <div className="p-4 text-center text-muted-foreground">Searching...</div>
+                ) : (
+                  <>
+                    {searchResults.users.length === 0 && searchResults.labs.length === 0 && searchResults.grants.length === 0 && searchResults.experiments.length === 0 ? (
+                      <div className="p-4 text-center text-muted-foreground">No results found.</div>
+                    ) : (
+                      <>
+                        {/* Users */}
+                        {searchResults.users.length > 0 && (
+                          <div>
+                            <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase">Users</div>
+                            {searchResults.users.map((user: any) => (
+                              <Link key={user.user_id} href={`/profile/${user.username}`} className="flex flex-col gap-1 px-4 py-2 hover:bg-secondary/50">
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="h-7 w-7">
+                                    <AvatarImage src={user.profilePic || "/placeholder.svg"} alt={user.username} />
+                                    <AvatarFallback>{(user.username || "U").charAt(0).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <span className="font-medium">{user.username}</span>
+                                </div>
+                                {Array.isArray(user.research_interests) && user.research_interests.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {user.research_interests.slice(0, 3).map((cat: string, idx: number) => (
+                                      <Badge key={idx} variant="secondary" className="text-[10px] px-2 py-0.5">
+                                        {cat.replace(/-/g, ' ').toUpperCase()}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                        {/* Labs */}
+                        {searchResults.labs.length > 0 && (
+                          <div>
+                            <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase">Labs</div>
+                            {searchResults.labs.map((lab: any) => (
+                              <Link key={lab.labId} href={`/lab/${lab.labId}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <span className="font-medium">{lab.labName}</span>
+                                <span className="block text-xs text-muted-foreground">{lab.description}</span>
+                                {Array.isArray(lab.categories) && lab.categories.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {lab.categories.slice(0, 3).map((cat: string, idx: number) => (
+                                      <Badge key={idx} variant="secondary" className="text-[10px] px-2 py-0.5">
+                                        {cat.replace(/-/g, ' ').toUpperCase()}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                        {/* Grants */}
+                        {searchResults.grants.length > 0 && (
+                          <div>
+                            <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase">Grants</div>
+                            {searchResults.grants.map((grant: any) => (
+                              <Link key={grant.id} href={`/grants/${grant.id}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <span className="font-medium">{grant.title}</span>
+                                <span className="block text-xs text-muted-foreground">{grant.description}</span>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                        {/* Experiments */}
+                        {searchResults.experiments.length > 0 && (
+                          <div>
+                            <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase">Experiments</div>
+                            {searchResults.experiments.map((exp: any) => (
+                              <Link key={exp.id} href={`/experiments/${exp.id}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <span className="font-medium">{exp.name}</span>
+                                <span className="block text-xs text-muted-foreground">{exp.objective}</span>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -284,7 +443,7 @@ export function GlobalHeader() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search labs, datasets, publications..."
+            placeholder="Search for users, labs, experiments"
             className="w-full pl-8 bg-secondary border-secondary text-foreground"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

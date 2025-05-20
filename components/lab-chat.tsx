@@ -20,12 +20,14 @@ export function LabChat({ labId }: { labId: string }) {
   const [userMap, setUserMap] = useState<Record<string, { username: string; profilePic: string }>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [unreadMessages, setUnreadMessages] = useState(0)
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true)
 
   // Fetch messages for this lab
   useEffect(() => {
     if (!labId) return
     let ignore = false
     async function fetchMessages() {
+      setIsLoadingUsers(true)
       const { data, error } = await supabase
         .from("chat_messages")
         .select("id, created_at, from, labId, content")
@@ -46,25 +48,32 @@ export function LabChat({ labId }: { labId: string }) {
           })
           setUserMap(map)
         }
+        setIsLoadingUsers(false)
       }
     }
     fetchMessages()
     // Subscribe to new messages
     const sub = supabase
       .channel('chat-messages')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `labId=eq.${labId}` }, payload => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `labId=eq.${labId}` }, async payload => {
         setMessages(prev => [...prev, payload.new])
-        // Optionally fetch user info for new sender
+        // Fetch user info for new sender if not already in userMap
         const senderId = payload.new.from
         if (!userMap[senderId]) {
-          supabase
+          const { data } = await supabase
             .from("profiles")
             .select("user_id, username, profilePic")
             .eq("user_id", senderId)
             .single()
-            .then(({ data }) => {
-              if (data) setUserMap(prev => ({ ...prev, [data.user_id]: { username: data.username, profilePic: data.profilePic } }))
-            })
+          if (data) {
+            setUserMap(prev => ({ 
+              ...prev, 
+              [data.user_id]: { 
+                username: data.username, 
+                profilePic: data.profilePic 
+              } 
+            }))
+          }
         }
       })
       .subscribe()
@@ -132,11 +141,11 @@ export function LabChat({ labId }: { labId: string }) {
           <TooltipTrigger asChild>
             <Button
               onClick={toggleChat}
-              className={`rounded-full h-14 w-14 shadow-lg relative ${isOpen ? "bg-secondary hover:bg-secondary/80" : "bg-accent hover:bg-accent/90"}`}
+              className={`rounded-full h-20 w-20 shadow-lg relative ${isOpen ? "bg-secondary hover:bg-secondary/80" : "bg-accent hover:bg-accent/90"}`}
             >
-              {isOpen ? <X className="h-6 w-6" /> : <MessageSquare className="h-6 w-6" />}
+              {isOpen ? <X className="h-8 w-8" /> : <MessageSquare className="h-8 w-8" />}
               {!isOpen && unreadMessages > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center">
                   {unreadMessages}
                 </span>
               )}
@@ -169,27 +178,33 @@ export function LabChat({ labId }: { labId: string }) {
 
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-3 space-y-4" style={{ height: isExpanded ? 480 : 300 }}>
-            {messages.map((msg) => {
-              const sender = userMap[msg.from] || {}
-              const date = new Date(msg.created_at)
-              const timeString = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-              const dayString = date.toLocaleDateString()
-              return (
-                <div key={msg.id} className="flex items-start gap-2">
-                  <Avatar className="h-8 w-8 mt-1">
-                    <AvatarImage src={sender.profilePic || "/placeholder.svg"} alt={sender.username || "User"} />
-                    <AvatarFallback>{(sender.username || "U").charAt(0).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{sender.username || msg.from}</span>
-                      <span className="text-xs text-muted-foreground">{dayString} {timeString}</span>
+            {isLoadingUsers ? (
+              <div className="flex justify-center items-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent"></div>
+              </div>
+            ) : (
+              messages.map((msg) => {
+                const sender = userMap[msg.from]
+                const date = new Date(msg.created_at)
+                const timeString = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                const dayString = date.toLocaleDateString()
+                return (
+                  <div key={msg.id} className="flex items-start gap-2">
+                    <Avatar className="h-8 w-8 mt-1">
+                      <AvatarImage src={sender?.profilePic || "/placeholder.svg"} alt={sender?.username || "User"} />
+                      <AvatarFallback>{(sender?.username || "U").charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{sender?.username || "Loading..."}</span>
+                        <span className="text-xs text-muted-foreground">{dayString} {timeString}</span>
+                      </div>
+                      <p className="text-sm break-words">{msg.content}</p>
                     </div>
-                    <p className="text-sm break-words">{msg.content}</p>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+            )}
             <div ref={messagesEndRef} />
           </div>
 

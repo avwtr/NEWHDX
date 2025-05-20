@@ -20,6 +20,7 @@ import {
   FlaskRoundIcon as Flask,
   Users,
   DollarSign,
+  Circle,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -29,6 +30,7 @@ import { supabase } from "@/lib/supabase"
 import { researchAreas } from "@/lib/research-areas"
 import { useAuth } from "@/components/auth-provider"
 import { createPortal } from "react-dom"
+import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from "date-fns"
 
 // Add this after imports, before the ExplorePage component
 const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
@@ -274,6 +276,26 @@ const ExpandButton = ({
   );
 };
 
+// Helper to get elapsed time string for concluded experiments
+function getElapsedString(date: string | Date) {
+  if (!date) return "-";
+  const now = new Date();
+  const end = typeof date === 'string' ? new Date(date) : date;
+  let years = differenceInYears(now, end);
+  let months = differenceInMonths(now, end) % 12;
+  let days = differenceInDays(now, end) % 30;
+  let hours = differenceInHours(now, end) % 24;
+  let minutes = differenceInMinutes(now, end) % 60;
+  let parts = [];
+  if (years) parts.push(`${years}y`);
+  if (months) parts.push(`${months}mo`);
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (parts.length === 0) parts.push("just now");
+  return parts.join(" ") + " ago";
+}
+
 export default function ExplorePage() {
   const [activeTab, setActiveTab] = useState("labs")
   const [searchQuery, setSearchQuery] = useState("")
@@ -293,6 +315,11 @@ export default function ExplorePage() {
   const [expandedLabIds, setExpandedLabIds] = useState<string[]>([]);
   const [expandedExperimentIds, setExpandedExperimentIds] = useState<string[]>([]);
   const [expandedGrantIds, setExpandedGrantIds] = useState<string[]>([]);
+
+  // Add experiments state and loading state
+  const [experimentsData, setExperimentsData] = useState<any[]>([]);
+  const [experimentsLoading, setExperimentsLoading] = useState(false);
+  const [experimentsError, setExperimentsError] = useState<any>(null);
 
   useEffect(() => {
     if (activeTab === "labs") {
@@ -420,6 +447,93 @@ export default function ExplorePage() {
         console.log('[Labs Fetch] mappedLabs:', mappedLabs);
         setLabsData(mappedLabs);
         setLabsLoading(false);
+      })();
+    }
+
+    if (activeTab === "experiments") {
+      setExperimentsLoading(true);
+      setExperimentsError(null);
+      (async () => {
+        try {
+          // 1. Fetch experiments
+          const { data: experiments, error: experimentsError } = await supabase
+            .from("experiments")
+            .select("*")
+            .order("created_at", { ascending: false });
+
+          if (experimentsError) throw experimentsError;
+
+          // 2. Fetch labs for all experiments
+          const labIds = [...new Set(experiments.map(e => e.lab_id).filter(Boolean))];
+          let labMap: Record<string, any> = {};
+          if (labIds.length > 0) {
+            const { data: labs } = await supabase
+              .from("labs")
+              .select("labId, labName, profilePic")
+              .in("labId", labIds);
+            if (labs) {
+              labs.forEach(lab => { labMap[lab.labId] = lab });
+            }
+          }
+
+          // 4. Fetch contributors for all experiments
+          let contributorsMap: Record<string, any[]> = {};
+          if (labIds.length > 0) {
+            const { data: contributors } = await supabase
+              .from("experiment_contributors")
+              .select("experiment_id, user_id, profile:profiles(username, avatar_url)");
+            if (contributors) {
+              contributors.forEach(c => {
+                if (!contributorsMap[c.experiment_id]) contributorsMap[c.experiment_id] = [];
+                contributorsMap[c.experiment_id].push(c);
+              });
+            }
+          }
+
+          // 5. Fetch files for all experiments
+          let filesMap: Record<string, any[]> = {};
+          if (labIds.length > 0) {
+            const { data: files } = await supabase
+              .from("files")
+              .select("id, name, file_path, experiment_id, uploaded_by, created_at");
+            if (files) {
+              files.forEach(f => {
+                if (!filesMap[f.experiment_id]) filesMap[f.experiment_id] = [];
+                filesMap[f.experiment_id].push(f);
+              });
+            }
+          }
+
+          // 6. Map experiments to display model
+          const mappedExperiments = experiments.map(exp => ({
+            id: exp.id,
+            name: exp.name,
+            description: exp.description,
+            objective: exp.objective,
+            categories: Array.isArray(exp.categories) ? exp.categories : [],
+            lab: labMap[exp.lab_id]?.labName || "Unknown Lab",
+            labId: exp.lab_id,
+            participantsNeeded: exp.participants_needed || 0,
+            participantsCurrent: exp.participants_current || 0,
+            deadline: exp.deadline,
+            compensation: exp.compensation || "No compensation",
+            timeCommitment: exp.time_commitment || "Not specified",
+            lastUpdated: exp.created_at ? `${Math.round((Date.now() - new Date(exp.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
+            status: exp.status || "DRAFT",
+            closed_status: exp.closed_status,
+            end_date: exp.end_date,
+            created_at: exp.created_at,
+            contributors: contributorsMap[exp.id] || [],
+            files: filesMap[exp.id] || [],
+          }));
+
+          setExperimentsData(mappedExperiments);
+        } catch (error) {
+          console.error('Error fetching experiments:', error);
+          setExperimentsError(error);
+        } finally {
+          setExperimentsLoading(false);
+        }
       })();
     }
   }, [activeTab]);
@@ -603,13 +717,13 @@ export default function ExplorePage() {
   const getCurrentData = () => {
     switch (activeTab) {
       case "experiments":
-        return experimentsData
+        return experimentsData;
       case "labs":
-        return labsData
+        return labsData;
       case "grants":
-        return grantsData
+        return grantsData;
       default:
-        return experimentsData
+        return experimentsData;
     }
   }
 
@@ -900,83 +1014,106 @@ export default function ExplorePage() {
 
             {/* Results Grid */}
             <TabsContent value="experiments" className="mt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredData.map((experiment: any) => (
-                  <Card key={experiment.id} className="overflow-hidden">
-                    <CardContent className="p-0">
-                      <div 
-                        className="block p-4 hover:bg-secondary/50 cursor-pointer"
-                        onClick={(e) => {
-                          // Check if the click was in the categories area
-                          const target = e.target as HTMLElement;
-                          const categoriesArea = target.closest('.categories-area');
-                          if (categoriesArea) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            return;
-                          }
-                          // If not in categories area, navigate to experiment
-                          window.location.href = `/experiments/view?id=${experiment.id}`;
-                        }}
-                      >
-                        <div className="space-y-1">
-                          <h3 className="font-medium text-accent">
-                            {experiment.name}
-                          </h3>
-                          {/* Science categories as colored badges, up to 3, with ellipsis if more */}
-                          <div 
-                            className="flex flex-wrap gap-1 mt-2 relative categories-area"
-                          >
-                            {(expandedExperimentIds.includes(experiment.id) ? experiment.categories : experiment.categories.slice(0, 3)).map((category: string) => (
-                              <Badge
-                                key={category}
-                                variant={category as any}
-                                className="mr-2 mb-2 text-xs"
-                              >
-                                {getCategoryLabel(category)}
-                              </Badge>
-                            ))}
-                            {experiment.categories.length > 3 && !expandedExperimentIds.includes(experiment.id) && (
-                              <button
-                                type="button"
-                                className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setExpandedExperimentIds(ids => [...ids, experiment.id]);
-                                }}
-                                title="View all categories"
-                              >
-                                ...
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mt-3">
-                          <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                            <span>
-                              Participants: {experiment.participantsCurrent}/{experiment.participantsNeeded}
-                            </span>
-                            <span>
-                              {Math.round((experiment.participantsCurrent / experiment.participantsNeeded) * 100)}%
-                            </span>
-                          </div>
-                          <Progress
-                            value={(experiment.participantsCurrent / experiment.participantsNeeded) * 100}
-                            className="h-2"
-                          />
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                          <span>{experiment.lab}</span>
-                          <span>{experiment.lastUpdated}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              {experimentsLoading ? (
+                <div className="text-center py-8">Loading experiments…</div>
+              ) : (
+                <>
+                  {experimentsError && (
+                    <div className="text-red-500 text-sm mb-4">Error fetching experiments: {experimentsError.message || String(experimentsError)}</div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredData.map((experiment: any) => {
+                      const isClosed = experiment.closed_status === "CLOSED";
+                      return (
+                        <Card key={experiment.id} className="overflow-hidden">
+                          <CardContent className="p-0">
+                            <Link href={isClosed ? `/experiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`} className="block p-4 hover:bg-secondary/50">
+                              <div className="flex justify-between items-center mb-2">
+                                <div className="flex items-center gap-2">
+                                  {isClosed ? (
+                                    <><Circle className="h-3 w-3 text-red-500 fill-red-500" /><span className="text-xs text-red-500 font-bold">CONCLUDED</span></>
+                                  ) : (
+                                    <><div className="h-2 w-2 rounded-full bg-green-500 animate-[pulse_2s_ease-in-out_infinite]" /><span className="text-xs text-green-500 font-medium">LIVE</span></>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground text-right">
+                                  {isClosed ? (
+                                    <span>Concluded {experiment.end_date ? getElapsedString(experiment.end_date) : "-"}</span>
+                                  ) : (
+                                    <span>Ongoing</span>
+                                  )}
+                                </div>
+                              </div>
+                              <h3 className="font-semibold text-accent text-lg mb-1">{experiment.name}</h3>
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {(expandedExperimentIds.includes(experiment.id) ? experiment.categories : experiment.categories.slice(0, 3)).map((category: string) => {
+                                  const color = getCategoryBadgeColors(category);
+                                  return (
+                                    <Badge key={category} variant={category as any} className="mr-2 mb-2 text-xs">
+                                      {getCategoryLabel(category)}
+                                    </Badge>
+                                  );
+                                })}
+                                {experiment.categories.length > 3 && !expandedExperimentIds.includes(experiment.id) && (
+                                  <button
+                                    type="button"
+                                    className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
+                                    onClick={e => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setExpandedExperimentIds(ids => [...ids, experiment.id]);
+                                    }}
+                                    title="View all categories"
+                                  >
+                                    ...
+                                  </button>
+                                )}
+                              </div>
+                              {experiment.objective && <p className="text-sm text-muted-foreground mb-2">{experiment.objective}</p>}
+                              {/* Contributors */}
+                              {Array.isArray(experiment.contributors) && experiment.contributors.length > 0 && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-xs text-muted-foreground">Contributors:</span>
+                                  {experiment.contributors.map((c: any) => (
+                                    <Link key={c.user_id} href={`/profile/${c.user_id}`} target="_blank" rel="noopener noreferrer">
+                                      <Avatar className="h-6 w-6 border">
+                                        <AvatarImage src={c.profile?.avatar_url || "/placeholder.svg"} alt={c.profile?.username || c.user_id} />
+                                        <AvatarFallback>{c.profile?.username?.[0] || "U"}</AvatarFallback>
+                                      </Avatar>
+                                    </Link>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Files */}
+                              {Array.isArray(experiment.files) && experiment.files.length > 0 && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <FileText className="h-4 w-4 text-muted-foreground" />
+                                  {experiment.files.map((file: any) => (
+                                    <a
+                                      key={file.id}
+                                      href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/experiment-files/${file.file_path}`}
+                                      download
+                                      className="text-xs underline text-accent"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {file.name}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                                <span>{experiment.lab}</span>
+                                <span>{experiment.lastUpdated}</span>
+                              </div>
+                            </Link>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="labs" className="mt-0">

@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from "date-fns"
+import { ExperimentCard } from "@/components/experiments-list"
 
 interface LabOverviewTabProps {
   isAdmin: boolean
@@ -460,99 +461,29 @@ export function LabOverviewTab({
         </CardContent>
       </Card>
 
-      {/* Enhanced Experiments Section */}
-      <Card className="border-accent/20">
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-xl">LIVE EXPERIMENTS</CardTitle>
-          <div className="flex items-center gap-2">
-            {/* New experiment button only for admins */}
-            {isAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-accent text-accent hover:bg-secondary"
-                onClick={() => setCreateExperimentDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                NEW EXPERIMENT
+      {/* Enhanced Experiments Section (only if there are live experiments) */}
+      {liveExperimentsData.filter((experiment) => experiment.closed_status !== "CLOSED").length > 0 && (
+        <Card className="border-accent/20">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-xl">LIVE EXPERIMENTS</CardTitle>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={() => toggleExpand("experiments")} className="h-8 w-8">
+                {expandedTab === "experiments" ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
-            )}
-            <Button variant="ghost" size="icon" onClick={() => toggleExpand("experiments")} className="h-8 w-8">
-              {expandedTab === "experiments" ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {liveExperimentsData.map((experiment) => {
-              const isClosed = experiment.closed_status === "CLOSED";
-              return (
-                <Card key={experiment.id} className="bg-secondary/50 border-secondary">
-                  <CardContent className="p-4">
-                    <div className="flex flex-col gap-2">
-                      <div className="flex justify-between items-start">
-                        <Link
-                          href={isClosed ? `/newexperiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`}
-                          className="hover:underline font-medium text-accent text-lg flex items-center gap-2"
-                        >
-                          {experiment.name}
-                          {isClosed && (
-                            <span className="flex items-center gap-1 ml-2">
-                              <Circle className="h-3 w-3 text-red-500 fill-red-500" />
-                              <span className="text-xs font-bold text-red-500">CONCLUDED</span>
-                            </span>
-                          )}
-                        </Link>
-                        {isClosed ? (
-                          <Badge variant="outline" className="bg-red-100 text-red-600 border-red-200">
-                            {experiment.conclusion_tag ? experiment.conclusion_tag.replace(/-/g, ' ').toUpperCase() : "CONCLUDED"}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-accent/10 text-accent border-accent/20">
-                            {experiment.status}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{experiment.description}</p>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {experiment.categories.map((category: string) => (
-                          <Badge key={category} variant="secondary" className="text-xs">
-                            {category}
-                          </Badge>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                        {isClosed ? (
-                          <>
-                            <div className="flex items-center">
-                              <Circle className="h-3 w-3 mr-1 text-red-500 fill-red-500" />
-                              <span>Concluded {getElapsedString(experiment.end_date)}</span>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="flex items-center">
-                              <Calendar className="h-3 w-3 mr-1" />
-                              Started: {experiment.startDate}
-                            </div>
-                            <div className="flex items-center">
-                              <Users className="h-3 w-3 mr-1" />
-                              {experiment.contributors} contributors
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {liveExperimentsData.filter((experiment) => experiment.closed_status !== "CLOSED").map((experiment) => (
+                <ExperimentCard key={experiment.id} experiment={experiment} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Enhanced Funding Goals Section (only if there are any) */}
-      {recentFunds.length > 0 && (
+      {recentFunds && recentFunds.length > 0 && (
         <Card className="border-accent/20">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-xl">FUNDING GOALS</CardTitle>

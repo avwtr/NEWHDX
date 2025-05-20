@@ -230,7 +230,7 @@ export default function ConcludeExperimentPage() {
       .eq("id", experiment.id);
     setIsSubmitting(false);
     if (!error) {
-      setIsSuccess(true);
+      router.push(`/experiments/${experiment.id}/conclude`);
     } else {
       toast({ title: "Failed to conclude experiment.", description: error.message, variant: "destructive" });
     }
@@ -456,7 +456,15 @@ export default function ConcludeExperimentPage() {
                       >
                         {getFileIcon(file.file?.split('.').pop() || file.type)}
                         <div>
-                          <p className="font-medium">{file.file || file.name}</p>
+                          <a
+                            href={file.file_path ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/experiment-files/${file.file_path}` : '#'}
+                            className="font-medium text-accent hover:underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download
+                          >
+                            {file.file || file.name}
+                          </a>
                           <p className="text-muted-foreground text-xs">
                             {file.file_size || file.size} • {file.added_by || file.addedBy}
                           </p>
@@ -491,7 +499,7 @@ export default function ConcludeExperimentPage() {
                             <AvatarImage src={contributor.profile?.profilePic || "/placeholder.svg"} alt={contributor.profile?.username || contributor.user_id} />
                             <AvatarFallback className="text-[10px]">{(contributor.profile?.username || contributor.user_id || "U").slice(0,2).toUpperCase()}</AvatarFallback>
                           </Avatar>
-                          <span>{contributor.profile?.username || contributor.user_id}</span>
+                          <Link href={`/profile/${contributor.user_id}`} className="hover:underline text-accent font-medium" target="_blank" rel="noopener noreferrer">{contributor.profile?.username || contributor.user_id}</Link>
                         </div>
                       ))}
                     {contributors.filter((c, i, arr) => arr.findIndex(x => x.user_id === c.user_id) === i).length > 6 && (
@@ -708,7 +716,15 @@ export default function ConcludeExperimentPage() {
                       >
                         {getFileIcon(file.file?.split('.').pop() || file.type)}
                         <div>
-                          <p className="font-medium">{file.file || file.name}</p>
+                          <a
+                            href={file.file_path ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/experiment-files/${file.file_path}` : '#'}
+                            className="font-medium text-accent hover:underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download
+                          >
+                            {file.file || file.name}
+                          </a>
                           <p className="text-muted-foreground text-xs">
                             {file.file_size || file.size} • {file.added_by || file.addedBy}
                           </p>
@@ -754,7 +770,7 @@ export default function ConcludeExperimentPage() {
                               <AvatarImage src={contributor.profile?.profilePic || "/placeholder.svg"} alt={contributor.profile?.username || contributor.user_id} />
                               <AvatarFallback className="text-[10px]">{(contributor.profile?.username || contributor.user_id || "U").slice(0,2).toUpperCase()}</AvatarFallback>
                             </Avatar>
-                            <span>{contributor.profile?.username || contributor.user_id}</span>
+                            <Link href={`/profile/${contributor.user_id}`} className="hover:underline text-accent font-medium" target="_blank" rel="noopener noreferrer">{contributor.profile?.username || contributor.user_id}</Link>
                           </div>
                         ))}
                     </div>

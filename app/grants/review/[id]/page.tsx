@@ -34,8 +34,8 @@ import GrantReviewLoading from "./loading"
 
 export default function GrantReviewPage() {
   const router = useRouter()
-  const params = useParams();
-  const grantId = params.id as string;
+  const params = useParams() || {};
+  const grantId = (params as any).id as string;
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedApplication, setSelectedApplication] = useState<string | null>(null)
@@ -386,8 +386,8 @@ export default function GrantReviewPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <Link href="/grants" className="text-sm text-muted-foreground hover:underline mb-2 inline-block">
-              ← Back to Grants
+            <Link href="/explore" className="text-sm text-muted-foreground hover:underline mb-2 inline-block">
+              ← Back to Explore
             </Link>
             <h1 className="text-3xl font-bold">{grant?.grant_name || 'Grant'}</h1>
             <div className="flex items-center gap-4 mt-2">

@@ -617,6 +617,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
           <LoginPrompt isOpen={loginPromptOpen} onClose={() => setLoginPromptOpen(false)} />
 
           {/* Global Add Button - Only visible for admins */}
+          {/*
           {isAdmin && (
             <GlobalAddButton
               onUploadFile={handleUploadFile}
@@ -627,6 +628,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
               onLogEvent={handleLogEvent}
             />
           )}
+          */}
 
           {/* Lab Profile - Full width at the top */}
           <div className="w-full mb-6">

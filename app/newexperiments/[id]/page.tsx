@@ -953,14 +953,16 @@ export default function ExperimentViewPage() {
             </div>
           </div>
           <div className="flex gap-2 mt-4 md:mt-0">
-            <Button
-              variant="outline"
-              className="border-accent text-accent hover:bg-secondary"
-              onClick={() => router.push(`/newexperiments/${experiment.id}/conclude`)}
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Conclude Experiment
-            </Button>
+            {contributors.some(c => c.user_id === user?.id) && (
+              <Button
+                variant="outline"
+                className="border-accent text-accent hover:bg-secondary"
+                onClick={() => router.push(`/newexperiments/${experiment.id}/conclude`)}
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Conclude Experiment
+              </Button>
+            )}
           </div>
         </div>
 

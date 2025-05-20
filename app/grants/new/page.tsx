@@ -220,7 +220,7 @@ export default function NewGrantPage() {
       setShowSuccessAnimation(true)
       setTimeout(() => {
         setLoading(false)
-        router.push("/grants")
+        router.push(`/grants/review/${newGrantId}`)
       }, 1800)
     } catch (error) {
       setLoading(false)
