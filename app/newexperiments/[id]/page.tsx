@@ -1128,12 +1128,12 @@ export default function ExperimentViewPage() {
                           Upload File
                         </label>
                       </Button>
+                      <Button variant="outline" onClick={() => setAddFromLabDialogOpen(true)}>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Add from Lab Materials
+                      </Button>
                     </>
                   )}
-                  <Button variant="outline" onClick={() => setAddFromLabDialogOpen(true)}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    Add from Lab Materials
-                  </Button>
                 </div>
               </CardHeader>
               <CardContent>

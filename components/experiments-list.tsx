@@ -52,6 +52,7 @@ interface Experiment {
   description: string
   objective: string
   status: "LIVE" | "CONCLUDED"
+  closed_status?: "CLOSED" | null
   startDate: string
   endDate?: string
   categories: string[]
@@ -238,25 +239,40 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
 
   useEffect(() => {
     if (experiments) {
-      setDisplayExperiments(experiments)
-      return
+      // Sort experiments: live first, then by creation date
+      const sortedExperiments = [...experiments].sort((a, b) => {
+        // If a is live and b is not, a comes first
+        if (a.closed_status !== "CLOSED" && b.closed_status === "CLOSED") return -1;
+        // If b is live and a is not, b comes first
+        if (b.closed_status !== "CLOSED" && a.closed_status === "CLOSED") return 1;
+        // If both are live or both are closed, sort by creation date
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+      setDisplayExperiments(sortedExperiments);
+      return;
     }
     // Only fetch if experiments prop is not provided
-    if (!labId) return
+    if (!labId) return;
     const fetchExperiments = async () => {
       const { data, error } = await supabase
         .from("experiments")
         .select("*")
         .eq("lab_id", labId)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: false });
       if (error) {
-        setDisplayExperiments([])
-        return
+        setDisplayExperiments([]);
+        return;
       }
-      setDisplayExperiments(data || [])
-    }
-    fetchExperiments()
-  }, [labId, experiments])
+      // Sort fetched experiments: live first, then by creation date
+      const sortedExperiments = (data || []).sort((a, b) => {
+        if (a.closed_status !== "CLOSED" && b.closed_status === "CLOSED") return -1;
+        if (b.closed_status !== "CLOSED" && a.closed_status === "CLOSED") return 1;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+      setDisplayExperiments(sortedExperiments);
+    };
+    fetchExperiments();
+  }, [labId, experiments]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)

@@ -196,7 +196,7 @@ export function FileViewerDialog({
         ((file as any).filename && (file as any).filename.split('.').pop()) ||
         ""
       ).toLowerCase();
-      const { bucket, path } = getBucketAndPath();
+      const { bucket = 'labmaterials', path = '' } = getBucketAndPath();
       if (isFirebaseFile(file)) {
         // Firebase logic (not used for experiment files)
         throw new Error('Firebase storage not supported for experiment files');
@@ -288,20 +288,23 @@ export function FileViewerDialog({
         ((file as any).filename && (file as any).filename.split('.').pop()) ||
         ""
       ).toLowerCase();
-      const { bucket, path } = getBucketAndPath();
+      const { bucket = 'labmaterials', path = '' } = getBucketAndPath();
       if (["jpg", "jpeg", "png", "gif", "svg", "pdf"].includes(fileType)) {
         if (file.url) {
           setPreviewUrl(file.url);
-        } else if (path) {
-          try {
-            const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 10);
-            if (error || !data?.signedUrl) throw error || new Error("No signed URL");
-            setPreviewUrl(data.signedUrl);
-          } catch (err) {
+        } else {
+          const safePath = typeof path === 'string' ? path : '';
+          const safeBucket = typeof bucket === 'string' ? bucket : 'labmaterials';
+          if (safePath.length > 0) {
+            const { data } = supabase.storage.from(safeBucket).getPublicUrl(safePath);
+            if (data?.publicUrl) {
+              setPreviewUrl(data.publicUrl);
+            } else {
+              setPreviewUrl(null);
+            }
+          } else {
             setPreviewUrl(null);
           }
-        } else {
-          setPreviewUrl(null);
         }
       } else {
         setPreviewUrl(null);
@@ -406,7 +409,7 @@ export function FileViewerDialog({
   const handleDownload = async () => {
     setLoading(true);
     try {
-      const { bucket, path } = getBucketAndPath();
+      const { bucket = 'labmaterials', path = '' } = getBucketAndPath();
       const { data, error } = await supabase.storage.from(bucket).download(path);
       if (error || !data) throw new Error("Failed to download file");
       const url = URL.createObjectURL(data);

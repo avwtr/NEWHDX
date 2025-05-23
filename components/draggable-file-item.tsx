@@ -19,6 +19,7 @@ import {
   Tag,
   Trash2,
   Download,
+  Plus,
 } from "lucide-react"
 import {
   Dialog,
@@ -68,6 +69,7 @@ interface FileItemProps {
   userRole?: string
   onClick?: () => void
   labId: string
+  showSaveToProfile?: boolean
 }
 
 // Utility to format file sizes
@@ -126,6 +128,7 @@ export function DraggableFileItem({
   userRole = "guest",
   onClick,
   labId,
+  showSaveToProfile = false,
 }: FileItemProps) {
   const isAdmin = userRole === "admin"
   const [isRenaming, setIsRenaming] = useState(false)
@@ -405,15 +408,17 @@ export function DraggableFileItem({
           >
             <Eye className="h-5 w-5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-green-500 hover:bg-green-500/10 hover:text-green-400"
-            onClick={() => setSaveDialogOpen(true)}
-            title="Save to profile"
-          >
-            <PlusCircle className="h-5 w-5" />
-          </Button>
+          {showSaveToProfile && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-accent hover:bg-accent/10"
+              onClick={handleSaveToProfile}
+              title="Save to profile"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

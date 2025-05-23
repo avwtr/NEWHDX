@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 import Image from "next/image"
+import { LoadingAnimation } from "@/components/loading-animation"
 
 // Lab template data - SIMPLIFIED to only two options
 const labTemplates = [
@@ -133,8 +134,8 @@ export default function CreateLabPage() {
   const [founderSearchLoading, setFounderSearchLoading] = useState(false)
   const [isLabCreating, setIsLabCreating] = useState(false)
   const [typewriterText, setTypewriterText] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
 
-  // Search organizations as user types
   useEffect(() => {
     if (orgSearch.length < 1) {
       setOrgOptions([])

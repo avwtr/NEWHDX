@@ -11,23 +11,22 @@ import { useAuth } from "@/components/auth-provider"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { FileViewerDialog, downloadFile } from "@/components/file-viewer-dialog"
 
-export function UserCollections() {
+export function UserCollections({ userId }: { userId: string }) {
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [files, setFiles] = useState<any[]>([])
-  const { user } = useAuth();
   const [labMap, setLabMap] = useState<Record<string, any>>({})
   const [viewerFile, setViewerFile] = useState<any | null>(null)
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!userId) return;
     setLoading(true)
     setError(null)
     supabase
       .from("saved_files")
       .select("file_id, labId, created_at")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .then(async ({ data, error }) => {
         if (error) {
@@ -77,7 +76,7 @@ export function UserCollections() {
         setLabMap(labMap)
         setLoading(false)
       })
-  }, [user?.id])
+  }, [userId])
 
   // Helper to get icon for file type
   const getIconForFile = (file: any) => {

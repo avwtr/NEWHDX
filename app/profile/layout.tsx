@@ -2,7 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "User Profile",
+  title: "HDX",
   description: "View and manage your profile, labs, activity, and collections",
 }
 

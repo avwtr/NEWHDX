@@ -72,6 +72,25 @@ export default function CreateOrganization() {
     }
   }, [categoryDropdownOpen])
 
+  useEffect(() => {
+    const isNavigating = sessionStorage.getItem("isNavigatingToCreateOrg") === "true";
+    let timer: NodeJS.Timeout | null = null;
+    if (isNavigating) {
+      timer = setTimeout(() => {}, 1000);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.removeItem("isNavigatingToCreateOrg");
+    sessionStorage.removeItem("isNavigatingToCreateGrant");
+    sessionStorage.removeItem("isNavigatingToLanding");
+    sessionStorage.removeItem("isNavigatingToProfile");
+    sessionStorage.removeItem("isNavigatingToCreateLab");
+  }, []);
+
   const handleTagSelect = (tag: string) => {
     if (selectedTags.includes(tag)) {
       setSelectedTags(selectedTags.filter((t) => t !== tag))
@@ -172,85 +191,94 @@ export default function CreateOrganization() {
       alert("You must be logged in to create an organization.")
       return
     }
-    // Generate slug and ensure uniqueness
-    let baseSlug = slugify(name)
-    let slug = baseSlug
-    let i = 1
-    while (true) {
-      const { data: existing, error } = await supabase
-        .from("organizations")
-        .select("id")
-        .eq("slug", slug)
-        .maybeSingle()
-      if (!existing) break
-      slug = `${baseSlug}-${i++}`
-    }
-    // Upload profile image if a new file was selected
-    let profilePicUrl = profileImage
-    if (newProfilePicFile) {
-      const fileExt = newProfilePicFile.name.split('.').pop()
-      const uniqueSuffix = Date.now()
-      const fileName = `${slug}-${uniqueSuffix}.${fileExt}`
-      const uploadResponse = await supabase.storage.from("org-profile-pics").upload(fileName, newProfilePicFile)
-      if (uploadResponse.error) {
-        alert("Error uploading profile image: " + uploadResponse.error.message)
-        // fallback to default image
-      } else {
-        const { data: publicUrlData } = supabase.storage.from("org-profile-pics").getPublicUrl(fileName)
-        if (publicUrlData?.publicUrl) {
-          profilePicUrl = publicUrlData.publicUrl
+    try {
+      // Generate slug and ensure uniqueness
+      let baseSlug = slugify(name)
+      let slug = baseSlug
+      let i = 1
+      while (true) {
+        const { data: existing, error } = await supabase
+          .from("organizations")
+          .select("id")
+          .eq("slug", slug)
+          .maybeSingle()
+        if (!existing) break
+        slug = `${baseSlug}-${i++}`
+      }
+      // Upload profile image if a new file was selected
+      let profilePicUrl = profileImage
+      if (newProfilePicFile) {
+        const fileExt = newProfilePicFile.name.split('.').pop()
+        const uniqueSuffix = Date.now()
+        const fileName = `${slug}-${uniqueSuffix}.${fileExt}`
+        const uploadResponse = await supabase.storage.from("org-profile-pics").upload(fileName, newProfilePicFile)
+        if (uploadResponse.error) {
+          alert("Error uploading profile image: " + uploadResponse.error.message)
+          // fallback to default image
+        } else {
+          const { data: publicUrlData } = supabase.storage.from("org-profile-pics").getPublicUrl(fileName)
+          if (publicUrlData?.publicUrl) {
+            profilePicUrl = publicUrlData.publicUrl
+          }
         }
       }
-    }
-    // Generate a UUID for the organization
-    const orgId = crypto.randomUUID()
-    // Insert organization with created_by and explicit org_id
-    const { data: org, error: orgError } = await supabase
-      .from("organizations")
-      .insert({
-        org_id: orgId,
-        org_name: name,
-        description,
-        profilePic: profilePicUrl,
-        categories: selectedCategories,
-        slug,
-        created_at: new Date().toISOString(),
-        created_by: user.id,
-      })
-      .select('org_id')
-      .single()
-    if (orgError || !org) {
-      alert("Failed to create organization: " + (orgError?.message || "Unknown error"))
-      return
-    }
-    // Insert org members (creator + selected users) with the same org_id
-    const memberRows = [
-      // Always add the creator first
-      {
-        org_id: orgId,
-        user_id: user.id,
-        created_at: new Date().toISOString(),
-      },
-      // Then add any other selected users
-      ...selectedUsers
-        .filter(u => u.id !== user.id) // Filter out creator if they somehow got added
-        .map(u => ({
+      // Generate a UUID for the organization
+      const orgId = crypto.randomUUID()
+      // Insert organization with created_by and explicit org_id
+      const { data: org, error: orgError } = await supabase
+        .from("organizations")
+        .insert({
           org_id: orgId,
-          user_id: u.id,
+          org_name: name,
+          description,
+          profilePic: profilePicUrl,
+          categories: selectedCategories,
+          slug,
           created_at: new Date().toISOString(),
-        })),
-    ];
-    if (memberRows.length > 0) {
-      const { error: memberError } = await supabase
-        .from("orgMembers")
-        .insert(memberRows)
-      if (memberError) {
-        alert("Failed to add members: " + memberError.message)
-        // Continue anyway
+          created_by: user.id,
+        })
+        .select('org_id')
+        .single()
+      if (orgError || !org) {
+        alert("Failed to create organization: " + (orgError?.message || "Unknown error"))
+        return
       }
+      // Insert org members (creator + selected users) with the same org_id
+      const memberRows = [
+        // Always add the creator first
+        {
+          org_id: orgId,
+          user_id: user.id,
+          created_at: new Date().toISOString(),
+        },
+        // Then add any other selected users
+        ...selectedUsers
+          .filter(u => u.id !== user.id) // Filter out creator if they somehow got added
+          .map(u => ({
+            org_id: orgId,
+            user_id: u.id,
+            created_at: new Date().toISOString(),
+          })),
+      ];
+      if (memberRows.length > 0) {
+        const { error: memberError } = await supabase
+          .from("orgMembers")
+          .insert(memberRows)
+        if (memberError) {
+          alert("Failed to add members: " + memberError.message)
+          // Continue anyway
+        }
+      }
+      // Redirect to pretty org profile URL
+      sessionStorage.removeItem("isNavigatingToCreateOrg");
+      sessionStorage.removeItem("isNavigatingToCreateGrant");
+      sessionStorage.removeItem("isNavigatingToLanding");
+      sessionStorage.removeItem("isNavigatingToProfile");
+      sessionStorage.removeItem("isNavigatingToCreateLab");
+      router.push(`/orgs/${slug}`)
+    } catch (error) {
+      throw error
     }
-    // Redirect to pretty org profile URL
-    router.push(`/orgs/${slug}`)
   }
 
   return (

@@ -19,6 +19,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { useAuth } from '@/components/auth-provider'
 import { researchAreas } from "@/lib/research-areas"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { LoadingAnimation } from "@/components/loading-animation"
 
 export default function NewGrantPage() {
   const router = useRouter()
@@ -159,17 +160,17 @@ export default function NewGrantPage() {
   }
 
   // Handle form submission
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!validateForm()) {
-      alert("Please fill out all required fields. Each question and answer option must have at least 1 character.")
-      return
-    }
-
-    setLoading(true)
-    setShowSuccessAnimation(false)
+    setIsSubmitting(true)
     try {
+      if (!validateForm()) {
+        alert("Please fill out all required fields. Each question and answer option must have at least 1 character.")
+        return
+      }
+
       // Generate a UUID for this grant
       const newGrantId = uuidv4();
 
@@ -191,7 +192,7 @@ export default function NewGrantPage() {
         .single()
 
       if (grantError || !grant) {
-        setLoading(false)
+        setIsSubmitting(false)
         alert("Error creating grant: " + (grantError?.message || "Unknown error"))
         return
       }
@@ -211,7 +212,7 @@ export default function NewGrantPage() {
             created_at: new Date().toISOString(),
           })
         if (questionError) {
-          setLoading(false)
+          setIsSubmitting(false)
           alert("Error creating question: " + questionError.message)
           return
         }
@@ -219,11 +220,16 @@ export default function NewGrantPage() {
 
       setShowSuccessAnimation(true)
       setTimeout(() => {
-        setLoading(false)
+        setIsSubmitting(false);
+        sessionStorage.removeItem("isNavigatingToCreateOrg");
+        sessionStorage.removeItem("isNavigatingToCreateGrant");
+        sessionStorage.removeItem("isNavigatingToLanding");
+        sessionStorage.removeItem("isNavigatingToProfile");
+        sessionStorage.removeItem("isNavigatingToCreateLab");
         router.push(`/grants/review/${newGrantId}`)
       }, 1800)
     } catch (error) {
-      setLoading(false)
+      setIsSubmitting(false)
       alert("Failed to create grant. Please try again.")
     }
   }
@@ -269,7 +275,6 @@ export default function NewGrantPage() {
   // Fetch user's organizations
   const [organizations, setOrganizations] = useState<any[]>([])
   const [selectedOrg, setSelectedOrg] = useState<{ org_id: string; org_name: string; profilePic?: string } | null>(null)
-  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     const fetchOrganizations = async () => {
@@ -335,8 +340,21 @@ export default function NewGrantPage() {
       })
   }, [orgSearch])
 
+  useEffect(() => {
+    sessionStorage.removeItem("isNavigatingToCreateOrg");
+    sessionStorage.removeItem("isNavigatingToCreateGrant");
+    sessionStorage.removeItem("isNavigatingToLanding");
+    sessionStorage.removeItem("isNavigatingToProfile");
+    sessionStorage.removeItem("isNavigatingToCreateLab");
+  }, []);
+
   return (
     <div className="container max-w-4xl py-8 px-4">
+      {(isLoading || isSubmitting) && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <LoadingAnimation />
+        </div>
+      )}
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold mb-2">Create New Grant</h1>
         <p className="text-muted-foreground">Set up your grant details and application questions</p>
@@ -757,8 +775,8 @@ export default function NewGrantPage() {
               <Button type="button" variant="outline" onClick={() => router.back()}>
                 Cancel
               </Button>
-              <Button type="submit" className="gap-2" disabled={!name || !description || !amount || !date || categories.length === 0 || loading}>
-                {loading ? "Creating..." : <CheckCircle2 className="h-4 w-4" />}
+              <Button type="submit" className="gap-2" disabled={!name || !description || !amount || !date || categories.length === 0 || isSubmitting}>
+                {isSubmitting ? "Creating..." : <CheckCircle2 className="h-4 w-4" />}
                 Create Grant
               </Button>
             </div>
@@ -767,32 +785,20 @@ export default function NewGrantPage() {
       </form>
 
       {/* Grant creation loading/success animation overlay */}
-      {(loading || showSuccessAnimation) && (
+      {(showSuccessAnimation) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl p-8 flex flex-col items-center animate-fade-in min-w-[320px]">
-            {!showSuccessAnimation ? (
-              <div className="mb-4">
-                {/* Spinner */}
-                <svg className="animate-spin h-16 w-16 text-accent" viewBox="0 0 50 50">
-                  <circle className="opacity-20" cx="25" cy="25" r="20" stroke="currentColor" strokeWidth="5" fill="none" />
-                  <circle className="opacity-80" cx="25" cy="25" r="20" stroke="currentColor" strokeWidth="5" fill="none" strokeDasharray="100" strokeDashoffset="60" />
-                </svg>
-              </div>
-            ) : (
-              <div className="mb-4">
-                {/* Checkmark animation */}
-                <svg className="w-16 h-16 text-green-500 animate-pop-in" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="32" cy="32" r="30" stroke="currentColor" strokeWidth="4" fill="none" className="animate-circular-stroke" />
-                  <path d="M20 34L29 43L44 25" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="animate-checkmark" />
-                </svg>
-              </div>
-            )}
-            <div className="text-lg font-semibold text-accent text-center">
-              {!showSuccessAnimation ? "Creating grant..." : "Grant created successfully!"}
+            <div className="mb-4">
+              {/* Checkmark animation */}
+              <svg className="w-16 h-16 text-green-500 animate-pop-in" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="32" cy="32" r="30" stroke="currentColor" strokeWidth="4" fill="none" className="animate-circular-stroke" />
+                <path d="M20 34L29 43L44 25" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="animate-checkmark" />
+              </svg>
             </div>
-            {showSuccessAnimation && (
-              <div className="text-sm text-muted-foreground text-center mt-1">Redirecting…</div>
-            )}
+            <div className="text-lg font-semibold text-accent text-center">
+              "Grant created successfully!"
+            </div>
+            <div className="text-sm text-muted-foreground text-center mt-1">Redirecting…</div>
           </div>
           <style jsx global>{`
             @keyframes fade-in {

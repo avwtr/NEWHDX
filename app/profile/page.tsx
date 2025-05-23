@@ -1,15 +1,25 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
+import { LoadingAnimation } from "@/components/loading-animation"
 
 export default function ProfileRedirect() {
   const router = useRouter()
   const { user } = useAuth()
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
+    const isNavigating = sessionStorage.getItem("isNavigatingToProfile") === "true";
+    if (isNavigating) {
+      setIsLoading(true);
+      sessionStorage.removeItem("isNavigatingToProfile");
+      const timer = setTimeout(() => setIsLoading(false), 1000);
+      return () => clearTimeout(timer);
+    }
+
     if (!user) {
       router.push("/login")
       return
@@ -34,6 +44,11 @@ export default function ProfileRedirect() {
 
   return (
     <div className="flex items-center justify-center min-h-screen">
+      {isLoading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <LoadingAnimation />
+        </div>
+      )}
       <div className="text-center">
         <h2 className="text-2xl font-semibold mb-2">Redirecting...</h2>
         <p className="text-muted-foreground">Taking you to your profile page</p>

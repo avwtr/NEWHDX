@@ -43,11 +43,16 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
   const [isDeleteFolderDialogOpen, setIsDeleteFolderDialogOpen] = useState(false);
 
+  // Check if user is logged in and is admin
+  const isLoggedInAndAdmin = Boolean(user) && isAdmin;
+
+  // Only enable drag-and-drop sensors for admin users
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Minimum px to move before drag starts
+        distance: 8,
       },
+      enabled: isAdmin, // Only enable for admin users
     })
   );
 
@@ -423,8 +428,14 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     console.log("[createFolder] Called with:", folderName, parentFolder);
     console.log("[createFolder] labId:", labId);
     console.log("[createFolder] user?.id:", user?.id);
+
+    // Ensure unique folder name by appending timestamp if it's the default name
+    const finalFolderName = folderName === "NEW_FOLDER" 
+      ? `NEW_FOLDER_${Date.now()}`
+      : folderName;
+
     // Optimistically update UI
-    setFolders((prev) => [...prev, { id: folderName, name: folderName.toUpperCase(), files: [] }]);
+    setFolders((prev) => [...prev, { id: finalFolderName, name: finalFolderName.toUpperCase(), files: [] }]);
     // Backend: insert a .keep row in files table with all required columns
     const { error, data } = await supabase.from("files").insert([
       {
@@ -432,7 +443,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
         fileType: "folder",
         fileSize: "0 KB",
         labID: labId,
-        folder: folderName,
+        folder: finalFolderName,
         fileTag: "folder",
         initiallycreatedBy: user?.id || null,
         lastUpdatedBy: user?.id || null,
@@ -440,7 +451,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       },
     ]);
     if (error) {
-      setFolders((prev) => prev.filter((folder) => folder.id !== folderName));
+      setFolders((prev) => prev.filter((folder) => folder.id !== finalFolderName));
       console.error("[createFolder] Supabase insert error:", error);
       toast({ title: "Error", description: `Failed to create folder: ${JSON.stringify(error)} | labId: ${labId} | userId: ${user?.id}` });
       return;
@@ -450,13 +461,13 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     await supabase.from("activity").insert([
       {
         activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-        activity_name: `Folder Created: ${folderName}`,
+        activity_name: `Folder Created: ${finalFolderName}`,
         activity_type: "foldercreated",
         performed_by: user?.id,
         lab_from: labId
       }
     ]);
-    toast({ title: "Folder Created", description: `New folder \"${folderName}\" has been created` });
+    toast({ title: "Folder Created", description: `New folder \"${finalFolderName}\" has been created` });
     // Refetch files/folders to ensure UI is up to date
     fetchFilesAndFolders();
   };
@@ -785,8 +796,9 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       onRename={handleRenameFile}
       onDelete={handleFileDelete}
       onDownload={handleFileDownload}
-      userRole={isAdmin ? "admin" : "user"}
+      userRole={isLoggedInAndAdmin ? "admin" : "user"}
       labId={labId}
+      showSaveToProfile={Boolean(user)}
     />
   );
 
@@ -839,22 +851,22 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       </CardHeader>
       <CardContent
         ref={containerRef}
-          className={`space-y-4 ${isExpanded ? "min-h-[calc(100vh-200px)]" : ""} relative${isDraggingOver ? " bg-accent/10 border-2 border-dashed border-accent" : ""}`}
-          onDragOver={isAdmin ? (e) => { handleContainerDragOver(e); console.log('[CardContent] Drag over'); } : undefined}
-        onDragLeave={isAdmin ? handleContainerDragLeave : undefined}
-        >
+        className={`space-y-4 ${isExpanded ? "min-h-[calc(100vh-200px)]" : ""} relative${isDraggingOver && isLoggedInAndAdmin ? " bg-accent/10 border-2 border-dashed border-accent" : ""}`}
+        onDragOver={isLoggedInAndAdmin ? handleContainerDragOver : undefined}
+        onDragLeave={isLoggedInAndAdmin ? handleContainerDragLeave : undefined}
+      >
         <div className="flex justify-center mb-4">
-            {isAdmin && (
+          {isLoggedInAndAdmin && (
             <div className="flex gap-2">
-                <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsUploadDialogOpen(true)}>
+              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsUploadDialogOpen(true)}>
                 <Upload className="h-4 w-4 mr-2" />
                 UPLOAD FILE
               </Button>
-                <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFileDialogOpen(true)}>
+              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFileDialogOpen(true)}>
                 <FileIcon className="h-4 w-4 mr-2" />
                 CREATE FILE
               </Button>
-                <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFolderDialogOpen(true)}>
+              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFolderDialogOpen(true)}>
                 <FolderPlus className="h-4 w-4 mr-2" />
                 NEW FOLDER
               </Button>
@@ -862,49 +874,51 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
           )}
         </div>
         <div className="space-y-4">
-            {/* Render folders as droppables */}
-            {folders.map(folder => (
-              <DroppableFolder
+          {/* Render folders as droppables */}
+          {folders.map(folder => (
+            <DroppableFolder
               key={folder.id}
               id={folder.id}
-                folder={folder}
+              folder={folder}
               isOpen={openFolders.includes(folder.id)}
               onToggle={toggleFolder}
               onRenameFolder={handleRenameFolder}
               onRenameFile={handleRenameFile}
-                userRole={isAdmin ? "admin" : "user"}
-                renderFileItem={renderFileItem}
-                actions={isAdmin ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-red-500 hover:bg-red-500/10 hover:text-red-400 ml-2 mr-1"
-                    style={{ marginLeft: 8, marginRight: 4 }}
-                    onClick={e => { e.stopPropagation(); setFolderToDelete(folder.id); setIsDeleteFolderDialogOpen(true); }}
-                    title="Delete folder"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </Button>
-                ) : null}
+              userRole={isLoggedInAndAdmin ? "admin" : "user"}
+              renderFileItem={renderFileItem}
+              actions={isLoggedInAndAdmin ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-red-500 hover:bg-red-500/10 hover:text-red-400 ml-2 mr-1"
+                  style={{ marginLeft: 8, marginRight: 4 }}
+                  onClick={e => { e.stopPropagation(); setFolderToDelete(folder.id); setIsDeleteFolderDialogOpen(true); }}
+                  title="Delete folder"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </Button>
+              ) : null}
             />
           ))}
-            {/* Render root files as draggables */}
-            {rootFiles.map((file: any) => (
-              <DraggableFileItemDnd
-                key={file.id || `root-${file.filename}`}
-                id={file.id}
-                file={file}
-                onRename={handleRenameFile}
-                onDelete={handleFileDelete}
-                onDownload={handleFileDownload}
-                userRole={isAdmin ? "admin" : "user"}
-                labId={labId}
-              />
-            ))}
-            {/* Root drop zone as a droppable */}
-            <DroppableRoot />
+          {/* Render root files as draggables */}
+          {rootFiles.map((file: any) => (
+            <DraggableFileItemDnd
+              key={file.id || `root-${file.filename}`}
+              id={file.id}
+              file={file}
+              onRename={handleRenameFile}
+              onDelete={handleFileDelete}
+              onDownload={handleFileDownload}
+              userRole={isLoggedInAndAdmin ? "admin" : "user"}
+              labId={labId}
+              showSaveToProfile={Boolean(user)}
+            />
+          ))}
+          {/* Root drop zone as a droppable - only show for admin users */}
+          {isLoggedInAndAdmin && <DroppableRoot />}
         </div>
-          {/* dnd-kit DragOverlay for file drag preview */}
+        {/* dnd-kit DragOverlay for file drag preview - only show for admin users */}
+        {isLoggedInAndAdmin && (
           <DragOverlay>
             {activeDragFile ? (
               <div style={{ boxShadow: '0 4px 24px #0008', borderRadius: 8, background: '#222', padding: 8 }}>
@@ -917,7 +931,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
                   author={activeDragFile.author}
                   date={activeDragFile.date}
                   file={activeDragFile}
-                  userRole={isAdmin ? "admin" : "user"}
+                  userRole={isLoggedInAndAdmin ? "admin" : "user"}
                   onRename={() => {}}
                   onDragStart={(e, id, name, type) => {}}
                   onDragOver={(e) => {}}
@@ -925,13 +939,15 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
                   onDelete={() => {}}
                   onDownload={() => handleFileDownload(activeDragFile)}
                   labId={labId}
+                  showSaveToProfile={Boolean(user)}
                 />
               </div>
             ) : null}
           </DragOverlay>
+        )}
         {isExpanded && (
           <div className="fixed bottom-8 right-8">
-              <Button onClick={() => setIsExpanded(false)} className="bg-accent text-primary-foreground hover:bg-accent/90">
+            <Button onClick={() => setIsExpanded(false)} className="bg-accent text-primary-foreground hover:bg-accent/90">
               <Minimize2 className="h-4 w-4 mr-2" />
               Close Expanded View
             </Button>
@@ -939,61 +955,67 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
         )}
       </CardContent>
       <CardFooter>
-         
-        </CardFooter>
-      {/* Dialogs */}
-      {isUploadDialogOpen && (
-        <FileUploadDialog
-            labId={labId}
-          open={isUploadDialogOpen}
-          onOpenChange={setIsUploadDialogOpen}
-          onClose={() => setIsUploadDialogOpen(false)}
-          onUploadComplete={handleUploadComplete}
-        />
+      </CardFooter>
+      {/* Dialogs - only show for admin users */}
+      {isLoggedInAndAdmin && (
+        <>
+          {isUploadDialogOpen && (
+            <FileUploadDialog
+              labId={labId}
+              open={isUploadDialogOpen}
+              onOpenChange={setIsUploadDialogOpen}
+              onClose={() => setIsUploadDialogOpen(false)}
+              onUploadComplete={handleUploadComplete}
+            />
+          )}
+          {isCreateFolderDialogOpen && (
+            <CreateFolderDialog
+              onCreateFolder={(name, parent) => createFolder(name, parent)}
+              onClose={() => setIsCreateFolderDialogOpen(false)}
+              isOpen={isCreateFolderDialogOpen}
+            />
+          )}
+          {isCreateFileDialogOpen && <CreateFileDialog labId={labId} onClose={() => setIsCreateFileDialogOpen(false)} onFileCreated={fetchFilesAndFolders} />}
+          {/* Folder Delete Confirmation Dialog */}
+          <Dialog open={isDeleteFolderDialogOpen} onOpenChange={setIsDeleteFolderDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Folder</DialogTitle>
+              </DialogHeader>
+              <div>
+                Are you sure you want to delete the folder <b>{folderToDelete}</b>?<br />
+                <span className="text-destructive">All files inside this folder will be permanently deleted.</span>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDeleteFolderDialogOpen(false)}>Cancel</Button>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (folderToDelete) {
+                      setIsDeleteFolderDialogOpen(false);
+                      await handleDeleteFolder(folderToDelete);
+                      setFolderToDelete(null);
+                    }
+                  }}
+                >
+                  Delete Folder
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
       )}
-      {isCreateFolderDialogOpen && (
-        <CreateFolderDialog
-            onCreateFolder={(name, parent) => createFolder(name, parent)}
-          onClose={() => setIsCreateFolderDialogOpen(false)}
-          isOpen={isCreateFolderDialogOpen}
-        />
-      )}
-        {isCreateFileDialogOpen && <CreateFileDialog labId={labId} onClose={() => setIsCreateFileDialogOpen(false)} onFileCreated={fetchFilesAndFolders} />}
-        {/* Folder Delete Confirmation Dialog */}
-        <Dialog open={isDeleteFolderDialogOpen} onOpenChange={setIsDeleteFolderDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Folder</DialogTitle>
-            </DialogHeader>
-            <div>
-              Are you sure you want to delete the folder <b>{folderToDelete}</b>?<br />
-              <span className="text-destructive">All files inside this folder will be permanently deleted.</span>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDeleteFolderDialogOpen(false)}>Cancel</Button>
-              <Button
-                variant="destructive"
-                onClick={async () => {
-                  if (folderToDelete) {
-                    setIsDeleteFolderDialogOpen(false);
-                    await handleDeleteFolder(folderToDelete);
-                    setFolderToDelete(null);
-                  }
-                }}
-              >
-                Delete Folder
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
     </Card>
     </DndContext>
   )
 }
 
 // --- dnd-kit wrappers ---
-function DraggableFileItemDnd({ id, file, ...props }: any) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+function DraggableFileItemDnd({ id, file, userRole, showSaveToProfile, ...props }: any) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ 
+    id,
+    disabled: userRole !== "admin" // Disable dragging for non-admin users
+  });
   return (
     <div ref={setNodeRef} {...attributes} {...listeners} style={{ opacity: isDragging ? 0.5 : 1 }}>
       <DraggableFileItem
@@ -1005,14 +1027,19 @@ function DraggableFileItemDnd({ id, file, ...props }: any) {
         author={file.author}
         date={file.date}
         file={file}
+        userRole={userRole}
+        showSaveToProfile={showSaveToProfile}
         {...props}
       />
     </div>
   );
 }
 
-function DroppableFolder({ id, folder, isOpen, onToggle, renderFileItem, actions, ...props }: any) {
-  const { setNodeRef, isOver } = useDroppable({ id });
+function DroppableFolder({ id, folder, isOpen, onToggle, renderFileItem, actions, userRole, ...props }: any) {
+  const { setNodeRef, isOver } = useDroppable({ 
+    id,
+    disabled: userRole !== "admin" // Disable dropping for non-admin users
+  });
   return (
     <div ref={setNodeRef} style={{ background: isOver ? '#222e' : undefined }}>
       <DraggableFolder
@@ -1024,7 +1051,7 @@ function DroppableFolder({ id, folder, isOpen, onToggle, renderFileItem, actions
         isOpen={isOpen}
         onToggle={onToggle}
         renderFileItem={renderFileItem}
-        userRole={props.userRole}
+        userRole={userRole}
         onRenameFolder={props.onRenameFolder}
         onRenameFile={props.onRenameFile}
         actions={actions}

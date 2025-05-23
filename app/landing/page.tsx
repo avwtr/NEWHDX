@@ -27,6 +27,7 @@ import { CreateLab } from "@/components/create-lab"
 import { ExploreContribute } from "@/components/explore-contribute"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
+import { LoadingAnimation } from "@/components/loading-animation"
 
 // Custom color
 const CUSTOM_GREEN = "#A0FFDD"
@@ -231,6 +232,27 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState("create")
   const { user, signOut } = useAuth()
   const [username, setUsername] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [hasCheckedNavigation, setHasCheckedNavigation] = useState(false)
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    const isNavigating = sessionStorage.getItem("isNavigatingToLanding") === "true";
+    if (isNavigating) {
+      setIsLoading(true);
+      sessionStorage.removeItem("isNavigatingToLanding");
+      timer = setTimeout(() => {
+        setIsLoading(false);
+        setHasCheckedNavigation(true);
+      }, 1000);
+    } else {
+      setIsLoading(false);
+      setHasCheckedNavigation(true);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -254,7 +276,14 @@ export default function LandingPage() {
   }, [user]);
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-black">
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <LoadingAnimation />
+        </div>
+      )}
+
       {/* Header with Logo */}
       <header className="fixed top-0 left-0 w-full z-50 p-4 md:p-6 bg-black/80 backdrop-blur-sm">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
@@ -301,7 +330,7 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-black text-white pt-28 pb-20 px-4 md:px-6 lg:px-8">
+      <section className="relative overflow-hidden bg-black text-white pt-28 pb-20 px-4 md:px-6 lg:px-8 z-10">
         {/* Floating Scientists Background - Positioned as first child for proper layering */}
         <FloatingScientists />
 
@@ -350,9 +379,10 @@ export default function LandingPage() {
                       <Button
                         size="lg"
                         variant="ghost"
-                        className="w-full sm:w-auto"
+                        className="w-full sm:w-auto flex items-center gap-2"
                         onClick={() => router.push("/explore")}
                       >
+                        <Globe className="h-5 w-5 mr-2" />
                         EXPLORE
                       </Button>
                     </>
@@ -425,20 +455,7 @@ export default function LandingPage() {
 
           <div id="explore-section">
             {activeTab === "create" ? (
-              user ? (
-                <CreateLab />
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground mb-4">Please sign in to create a lab</p>
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push("/signup")}
-                    style={{ borderColor: CUSTOM_GREEN, color: CUSTOM_GREEN }}
-                  >
-                    Create Account
-                  </Button>
-                </div>
-              )
+              <CreateLab />
             ) : (
               <ExploreContribute />
             )}
@@ -481,10 +498,11 @@ export default function LandingPage() {
                 </Button>
                 <Button
                   size="lg"
-                  className="hover:bg-opacity-90 w-full sm:w-auto"
+                  className="hover:bg-opacity-90 w-full sm:w-auto flex items-center gap-2"
                   style={{ backgroundColor: CUSTOM_GREEN, color: "#000" }}
                   onClick={() => router.push("/explore")}
                 >
+                  <Globe className="h-5 w-5 mr-2" />
                   EXPLORE
                 </Button>
               </>

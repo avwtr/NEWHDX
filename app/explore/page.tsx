@@ -31,6 +31,7 @@ import { researchAreas } from "@/lib/research-areas"
 import { useAuth } from "@/components/auth-provider"
 import { createPortal } from "react-dom"
 import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from "date-fns"
+import { LoadingAnimation } from "@/components/loading-animation"
 
 // Add this after imports, before the ExplorePage component
 const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
@@ -303,6 +304,8 @@ export default function ExplorePage() {
   const [sortOption, setSortOption] = useState("recent")
   const [showFilters, setShowFilters] = useState(true)
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
+  const [allCategories, setAllCategories] = useState<string[]>([])
 
   // Move grants state and fetching logic here
   const [grantsData, setGrantsData] = useState<any[]>([])
@@ -321,35 +324,28 @@ export default function ExplorePage() {
   const [experimentsLoading, setExperimentsLoading] = useState(false);
   const [experimentsError, setExperimentsError] = useState<any>(null);
 
+  const [isNavigating, setIsNavigating] = useState(false)
+
+  // Fetch all data on initial load
   useEffect(() => {
-    if (activeTab === "labs") {
-      setLabsLoading(true);
-      setLabsError(null);
-      (async () => {
-        // 1. Fetch labs (without researchAreas)
-        const { data: labs, error: labsErrorObj } = await supabase
+    const fetchAllData = async () => {
+      setIsLoading(true);
+      try {
+        // Fetch labs
+        const { data: labs, error: labsError } = await supabase
           .from("labs")
           .select("labId, labName, description, profilePic, org_id, createdBy, created_at")
           .order("created_at", { ascending: false });
-        console.log('[Labs Fetch] labs:', labs);
-        console.log('[Labs Fetch] labsError:', labsErrorObj);
-        if (labsErrorObj || !labs) {
-          setLabsError(labsErrorObj);
-          setLabsData([]);
-          setLabsLoading(false);
-          return;
-        }
-        // 2. Fetch categories for all labs
+
+        if (labsError) throw labsError;
+
+        // Fetch lab categories
         const labIds = labs.map(l => l.labId);
         let categoriesMap: Record<string, string[]> = {};
-        let labCategories = [];
         if (labIds.length > 0) {
-          const { data: fetchedLabCategories, error: catError } = await supabase
+          const { data: labCategories } = await supabase
             .from("labCategories")
             .select("lab_id, category");
-          labCategories = fetchedLabCategories || [];
-          console.log('[Labs Fetch] labCategories:', labCategories);
-          if (catError) console.log('[Labs Fetch] labCategories error:', catError);
           if (labCategories) {
             labCategories.forEach(cat => {
               if (!categoriesMap[cat.lab_id]) categoriesMap[cat.lab_id] = [];
@@ -357,8 +353,8 @@ export default function ExplorePage() {
             });
           }
         }
-        console.log('[Labs Fetch] categoriesMap:', categoriesMap);
-        // 3. Fetch org info
+
+        // Fetch org info
         const orgIds = [...new Set(labs.map(l => l.org_id).filter(Boolean))];
         let orgMap: Record<string, any> = {};
         if (orgIds.length > 0) {
@@ -370,7 +366,8 @@ export default function ExplorePage() {
             orgs.forEach(o => { orgMap[o.org_id] = o });
           }
         }
-        // 4. Fetch members count for each lab
+
+        // Fetch members count
         let membersMap: Record<string, number> = {};
         if (labIds.length > 0) {
           const { data: members } = await supabase
@@ -383,7 +380,8 @@ export default function ExplorePage() {
             });
           }
         }
-        // 5. Fetch funding info for each lab
+
+        // Fetch funding info
         let fundingMap: Record<string, { goal: number, raised: number }> = {};
         if (labIds.length > 0) {
           const { data: fundingGoals } = await supabase
@@ -397,7 +395,8 @@ export default function ExplorePage() {
             });
           }
         }
-        // 6. Fetch experiments count for each lab
+
+        // Fetch experiments count
         let experimentsMap: Record<string, number> = {};
         if (labIds.length > 0) {
           const { data: experiments } = await supabase
@@ -409,8 +408,9 @@ export default function ExplorePage() {
             });
           }
         }
-        // 7. Fetch files count for each lab
-        let filesMap: Record<string, number> = {};
+
+        // Fetch lab files count
+        let labFilesMap: Record<string, number> = {};
         if (labIds.length > 0) {
           const { data: files } = await supabase
             .from("files")
@@ -418,192 +418,188 @@ export default function ExplorePage() {
           if (files) {
             files.forEach(f => {
               if (f.fileTag !== 'folder') {
-                filesMap[f.labID] = (filesMap[f.labID] || 0) + 1;
+                labFilesMap[f.labID] = (labFilesMap[f.labID] || 0) + 1;
               }
             });
           }
         }
-        // 8. Map labs to display model, using all metrics
+
+        // Map labs data
         const mappedLabs = labs.map(lab => ({
           id: lab.labId,
           name: lab.labName,
           description: lab.description,
           categories: categoriesMap[lab.labId] || [],
-          pi: '', // Optionally fetch PI/creator username if needed
+          pi: '',
           creatorId: lab.createdBy,
           institution: orgMap[lab.org_id]?.org_name || '',
           orgProfilePic: orgMap[lab.org_id]?.profilePic || '',
           org_id: lab.org_id,
           org_slug: orgMap[lab.org_id]?.slug || '',
           members: membersMap[lab.labId] || 0,
-          files: filesMap[lab.labId] || 0,
+          files: labFilesMap[lab.labId] || 0,
           fundingGoal: fundingMap[lab.labId]?.goal || 0,
           fundingCurrent: fundingMap[lab.labId]?.raised || 0,
           projects: experimentsMap[lab.labId] || 0,
-          publications: 0, // Optionally fetch publications if available
+          publications: 0,
           lastUpdated: lab.created_at ? `${Math.round((Date.now() - new Date(lab.created_at).getTime()) / (1000*60*60*24))} days ago` : '',
           image: lab.profilePic || '/placeholder.svg?height=80&width=80',
         }));
-        console.log('[Labs Fetch] mappedLabs:', mappedLabs);
-        setLabsData(mappedLabs);
-        setLabsLoading(false);
-      })();
-    }
 
-    if (activeTab === "experiments") {
-      setExperimentsLoading(true);
-      setExperimentsError(null);
-      (async () => {
-        try {
-          // 1. Fetch experiments
-          const { data: experiments, error: experimentsError } = await supabase
-            .from("experiments")
-            .select("*")
-            .order("created_at", { ascending: false });
+        // Fetch experiments
+        const { data: experiments, error: experimentsError } = await supabase
+          .from("experiments")
+          .select("*")
+          .order("created_at", { ascending: false });
 
-          if (experimentsError) throw experimentsError;
+        if (experimentsError) throw experimentsError;
 
-          // 2. Fetch labs for all experiments
-          const labIds = [...new Set(experiments.map(e => e.lab_id).filter(Boolean))];
-          let labMap: Record<string, any> = {};
-          if (labIds.length > 0) {
-            const { data: labs } = await supabase
-              .from("labs")
-              .select("labId, labName, profilePic")
-              .in("labId", labIds);
-            if (labs) {
-              labs.forEach(lab => { labMap[lab.labId] = lab });
-            }
+        // Fetch experiment contributors
+        let contributorsMap: Record<string, any[]> = {};
+        if (experiments.length > 0) {
+          const { data: contributors } = await supabase
+            .from("experiment_contributors")
+            .select("experiment_id, user_id, profile:profiles(username, avatar_url)");
+          if (contributors) {
+            contributors.forEach(c => {
+              if (!contributorsMap[c.experiment_id]) contributorsMap[c.experiment_id] = [];
+              contributorsMap[c.experiment_id].push(c);
+            });
           }
-
-          // 4. Fetch contributors for all experiments
-          let contributorsMap: Record<string, any[]> = {};
-          if (labIds.length > 0) {
-            const { data: contributors } = await supabase
-              .from("experiment_contributors")
-              .select("experiment_id, user_id, profile:profiles(username, avatar_url)");
-            if (contributors) {
-              contributors.forEach(c => {
-                if (!contributorsMap[c.experiment_id]) contributorsMap[c.experiment_id] = [];
-                contributorsMap[c.experiment_id].push(c);
-              });
-            }
-          }
-
-          // 5. Fetch files for all experiments
-          let filesMap: Record<string, any[]> = {};
-          if (labIds.length > 0) {
-            const { data: files } = await supabase
-              .from("files")
-              .select("id, name, file_path, experiment_id, uploaded_by, created_at");
-            if (files) {
-              files.forEach(f => {
-                if (!filesMap[f.experiment_id]) filesMap[f.experiment_id] = [];
-                filesMap[f.experiment_id].push(f);
-              });
-            }
-          }
-
-          // 6. Map experiments to display model
-          const mappedExperiments = experiments.map(exp => ({
-            id: exp.id,
-            name: exp.name,
-            description: exp.description,
-            objective: exp.objective,
-            categories: Array.isArray(exp.categories) ? exp.categories : [],
-            lab: labMap[exp.lab_id]?.labName || "Unknown Lab",
-            labId: exp.lab_id,
-            participantsNeeded: exp.participants_needed || 0,
-            participantsCurrent: exp.participants_current || 0,
-            deadline: exp.deadline,
-            compensation: exp.compensation || "No compensation",
-            timeCommitment: exp.time_commitment || "Not specified",
-            lastUpdated: exp.created_at ? `${Math.round((Date.now() - new Date(exp.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
-            status: exp.status || "DRAFT",
-            closed_status: exp.closed_status,
-            end_date: exp.end_date,
-            created_at: exp.created_at,
-            contributors: contributorsMap[exp.id] || [],
-            files: filesMap[exp.id] || [],
-          }));
-
-          setExperimentsData(mappedExperiments);
-        } catch (error) {
-          console.error('Error fetching experiments:', error);
-          setExperimentsError(error);
-        } finally {
-          setExperimentsLoading(false);
         }
-      })();
-    }
-  }, [activeTab]);
+
+        // Fetch experiment files
+        let experimentFilesMap: Record<string, any[]> = {};
+        if (experiments.length > 0) {
+          const { data: files } = await supabase
+            .from("files")
+            .select("id, name, file_path, experiment_id, uploaded_by, created_at");
+          if (files) {
+            files.forEach(f => {
+              if (!experimentFilesMap[f.experiment_id]) experimentFilesMap[f.experiment_id] = [];
+              experimentFilesMap[f.experiment_id].push(f);
+            });
+          }
+        }
+
+        // Map experiments data
+        const mappedExperiments = experiments.map(exp => ({
+          id: exp.id,
+          name: exp.name,
+          description: exp.description,
+          objective: exp.objective,
+          categories: Array.isArray(exp.categories) ? exp.categories : [],
+          lab: exp.lab_id,
+          labId: exp.lab_id,
+          participantsNeeded: exp.participants_needed || 0,
+          participantsCurrent: exp.participants_current || 0,
+          deadline: exp.deadline,
+          compensation: exp.compensation || "No compensation",
+          timeCommitment: exp.time_commitment || "Not specified",
+          lastUpdated: exp.created_at ? `${Math.round((Date.now() - new Date(exp.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
+          status: exp.status || "DRAFT",
+          closed_status: exp.closed_status,
+          end_date: exp.end_date,
+          created_at: exp.created_at,
+          contributors: contributorsMap[exp.id] || [],
+          files: experimentFilesMap[exp.id] || [],
+        }));
+
+        // Fetch grants
+        const { data: grants, error: grantsError } = await supabase
+          .from("grants")
+          .select("grant_id, grant_name, grant_description, grant_categories, grant_amount, deadline, created_at, created_by, org_id")
+          .order("created_at", { ascending: false });
+
+        if (grantsError) throw grantsError;
+
+        // Fetch profiles for grant creators
+        const userIds = [...new Set(grants.map(g => g.created_by).filter(Boolean))];
+        let profileMap: Record<string, any> = {};
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("user_id, username")
+            .in("user_id", userIds);
+          if (profiles) {
+            profiles.forEach(p => { profileMap[p.user_id] = p });
+          }
+        }
+
+        // Fetch organizations for grants
+        const grantOrgIds = [...new Set(grants.map(g => g.org_id).filter(Boolean))];
+        let grantOrgMap: Record<string, any> = {};
+        if (grantOrgIds.length > 0) {
+          const { data: orgs } = await supabase
+            .from("organizations")
+            .select("org_id, org_name, profilePic")
+            .in("org_id", grantOrgIds);
+          if (orgs) {
+            orgs.forEach(o => { grantOrgMap[o.org_id] = o });
+          }
+        }
+
+        // Map grants data
+        const mappedGrants = grants.map((g: any) => ({
+          id: g.grant_id || `temp-${g.created_at}`,
+          name: g.grant_name,
+          description: g.grant_description,
+          categories: g.grant_categories || [],
+          funder: "",
+          amount: g.grant_amount ? `$${g.grant_amount.toLocaleString()}` : "",
+          deadline: g.deadline,
+          eligibility: "",
+          applicationProcess: "",
+          lastUpdated: g.created_at ? `${Math.round((Date.now() - new Date(g.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
+          creatorUsername: profileMap[g.created_by]?.username || "",
+          orgName: grantOrgMap[g.org_id]?.org_name || "",
+          orgProfilePic: grantOrgMap[g.org_id]?.profilePic || "",
+          created_by: g.created_by,
+        }));
+
+        // After fetching all data, collect unique categories
+        const uniqueCategories = new Set<string>();
+        
+        // Add lab categories
+        mappedLabs.forEach(lab => {
+          if (Array.isArray(lab.categories)) {
+            lab.categories.forEach(cat => uniqueCategories.add(cat));
+          }
+        });
+
+        // Add experiment categories
+        mappedExperiments.forEach(exp => {
+          if (Array.isArray(exp.categories)) {
+            exp.categories.forEach(cat => uniqueCategories.add(cat));
+          }
+        });
+
+        // Add grant categories
+        mappedGrants.forEach(grant => {
+          if (Array.isArray(grant.categories)) {
+            grant.categories.forEach(cat => uniqueCategories.add(cat));
+          }
+        });
+
+        // Set all unique categories
+        setAllCategories(Array.from(uniqueCategories).sort());
+
+        // Set the data
+        setLabsData(mappedLabs);
+        setExperimentsData(mappedExperiments);
+        setGrantsData(mappedGrants);
+
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAllData();
+  }, []); // Empty dependency array means this runs once on mount
 
   const { user } = useAuth();
-
-  // Fetch grants from DB when grants tab is active
-  useEffect(() => {
-    if (activeTab === "grants") {
-      setGrantsLoading(true)
-      // 1. Fetch grants (no join)
-      supabase
-        .from("grants")
-        .select("grant_id, grant_name, grant_description, grant_categories, grant_amount, deadline, created_at, created_by, org_id")
-        .order("created_at", { ascending: false })
-        .then(async ({ data: grants, error }) => {
-          if (error || !grants) {
-            setGrantsData([])
-            setGrantsLoading(false)
-            return
-          }
-          // 2. Collect unique user IDs
-          const userIds = [...new Set(grants.map(g => g.created_by).filter(Boolean))]
-          // 3. Fetch profiles
-          let profileMap: Record<string, any> = {}
-          if (userIds.length > 0) {
-            const { data: profiles } = await supabase
-              .from("profiles")
-              .select("user_id, username")
-              .in("user_id", userIds)
-            if (profiles) {
-              profiles.forEach(p => { profileMap[p.user_id] = p })
-            }
-          }
-          // 4. Collect unique org IDs
-          const orgIds = [...new Set(grants.map(g => g.org_id).filter(Boolean))]
-          // 5. Fetch organizations
-          let orgMap: Record<string, any> = {}
-          if (orgIds.length > 0) {
-            const { data: orgs } = await supabase
-              .from("organizations")
-              .select("org_id, org_name, profilePic")
-              .in("org_id", orgIds)
-            if (orgs) {
-              orgs.forEach(o => { orgMap[o.org_id] = o })
-            }
-          }
-          // 6. Merge usernames and org info into grants
-          setGrantsData(
-            grants.map((g: any) => ({
-              id: g.grant_id || `temp-${g.created_at}`,
-              name: g.grant_name,
-              description: g.grant_description,
-              categories: g.grant_categories || [],
-              funder: "",
-              amount: g.grant_amount ? `$${g.grant_amount.toLocaleString()}` : "",
-              deadline: g.deadline,
-              eligibility: "",
-              applicationProcess: "",
-              lastUpdated: g.created_at ? `${Math.round((Date.now() - new Date(g.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
-              creatorUsername: profileMap[g.created_by]?.username || "",
-              orgName: orgMap[g.org_id]?.org_name || "",
-              orgProfilePic: orgMap[g.org_id]?.profilePic || "",
-              created_by: g.created_by,
-            }))
-          )
-          setGrantsLoading(false)
-        })
-    }
-  }, [activeTab])
 
   // Science categories with their corresponding badge classes
   const scienceCategories = {
@@ -821,20 +817,8 @@ export default function ExplorePage() {
 
   // Get unique categories for the current tab
   const getUniqueCategories = useCallback(() => {
-    const data = getCurrentData()
-    console.log('[Categories] Current data:', data)
-    const categories = new Set<string>()
-
-    data.forEach((item) => {
-      if (item.categories && Array.isArray(item.categories)) {
-        item.categories.forEach((cat: string) => categories.add(cat))
-      }
-    })
-
-    const uniqueCats = Array.from(categories).sort()
-    console.log('[Categories] Unique categories:', uniqueCats)
-    return uniqueCats
-  }, [activeTab])
+    return allCategories;
+  }, [allCategories]);
 
   const currentData = getCurrentData()
   const filteredData = sortData(filterData(currentData))
@@ -878,7 +862,12 @@ export default function ExplorePage() {
   }
 
   return (
-    <div className="container mx-auto pt-4 pb-8">
+    <div className="container mx-auto pt-4 pb-8 relative">
+      {isLoading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <LoadingAnimation />
+        </div>
+      )}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h1 className="text-2xl font-bold uppercase tracking-wide">Explore</h1>
 
@@ -956,7 +945,7 @@ export default function ExplorePage() {
                 <CollapsibleContent>
                   <ScrollArea className="h-[300px] pr-4">
                     <div className="space-y-2 pt-2">
-                      {uniqueCategories.map((category) => (
+                      {getUniqueCategories().map((category) => (
                         <div key={category} className="flex items-center space--x-2">
                           <Checkbox
                             id={`category-${category}`}
@@ -1145,7 +1134,11 @@ export default function ExplorePage() {
                               </a>
                             </div>
                           )}
-                          <Link href={`/lab/${lab.id}`} className="block p-4 hover:bg-secondary/50">
+                          <Link 
+                            href={`/lab/${lab.id}`} 
+                            className="block p-4 hover:bg-secondary/50"
+                            onClick={() => setIsNavigating(true)}
+                          >
                             <div className="flex items-start gap-3">
                               <Avatar className="h-12 w-12">
                                 <AvatarImage src={lab.image || "/placeholder.svg"} alt={lab.name} />

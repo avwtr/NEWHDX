@@ -18,6 +18,7 @@ import type { Contribution } from "@/components/contribution-detail-modal"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
 import { isFollowingLab, followLab, unfollowLab } from "@/lib/followLab"
+import { LoadingAnimation } from "@/components/loading-animation"
 
 // Sub-components
 import LabProfile from "@/components/lab-view/lab-profile"
@@ -588,9 +589,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   return (
     <div className="container mx-auto pt-4 pb-8">
       {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-accent"></div>
-        </div>
+        <LoadingAnimation />
       ) : (
         <>
           {/* Contribution Dialog for non-admin users */}

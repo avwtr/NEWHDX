@@ -134,8 +134,13 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess }: { labI
 
   return (
     <>
-      <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsDialogOpen(true)}>
-        CONTRIBUTE
+      <Button
+        className="w-full bg-accent text-primary-foreground hover:bg-accent/90"
+        onClick={() => user ? setIsDialogOpen(true) : undefined}
+        disabled={!user}
+        title={!user ? "You must be logged in to donate" : ""}
+      >
+        {user ? "CONTRIBUTE" : "LOGIN TO DONATE"}
       </Button>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>

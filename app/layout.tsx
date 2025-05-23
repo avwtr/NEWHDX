@@ -54,10 +54,11 @@ export default function RootLayout({
 }
 
 export const metadata = {
+  title: "HDX",
   generator: 'HDX LABS',
   icons: {
     icon: [
-      { url: '/favicon.ico' }
+      { url: '/iconlogo2.png' }
     ]
   }
 };

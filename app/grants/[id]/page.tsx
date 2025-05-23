@@ -457,14 +457,28 @@ export default function GrantPreviewPage() {
                 )}
               </div>
               {/* Apply Button */}
-              <div className="flex justify-center mt-8">
-                <Button 
-                  size="lg" 
-                  className="px-8 py-6 text-lg"
-                  onClick={() => router.push(`/grants/${grantId}/apply`)}
-                >
-                  Apply for this Grant
-                </Button>
+              <div className="flex flex-col items-center mt-8 gap-3">
+                {user ? (
+                  <Button 
+                    size="lg" 
+                    className="px-8 py-6 text-lg"
+                    onClick={() => router.push(`/grants/${grantId}/apply`)}
+                  >
+                    Apply for this Grant
+                  </Button>
+                ) : (
+                  <>
+                    <Button 
+                      size="lg" 
+                      className="px-8 py-6 text-lg"
+                      disabled
+                      title="You must be logged in to apply"
+                    >
+                      Log in to apply for this Grant
+                    </Button>
+                    <a href="/login" className="mt-2 text-blue-600 underline text-sm">Go to Login</a>
+                  </>
+                )}
               </div>
             </>
           )}

@@ -883,8 +883,13 @@ export function LabFundingTab({
               <CardDescription className="text-center text-base mb-4 max-w-xl">
                 Poke this lab to suggest they setup funding so you can donate!
               </CardDescription>
-              <Button className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2" onClick={() => setShowPokeDialog(true)}>
-                Poke Lab
+              <Button 
+                className="bg-accent text-primary-foreground px-8 py-3 text-lg font-semibold rounded shadow hover:bg-accent/90 mt-2" 
+                onClick={() => setShowPokeDialog(true)}
+                disabled={!user}
+                title={!user ? "You must be logged in to poke this lab" : "Poke this lab"}
+              >
+                {!user ? "LOGIN TO POKE" : "Poke Lab"}
               </Button>
             </CardHeader>
             <CardContent>
@@ -1042,41 +1047,15 @@ export function LabFundingTab({
                   </Button>
                 )
               ) : isGuest ? (
-                <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleGuestAction} disabled={!isMembershipActive}>
-                  {isMembershipActive ? "SUBSCRIBE" : "SET UP"}
+                <Button 
+                  className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
+                  onClick={handleGuestAction} 
+                  disabled={!isMembershipActive || !user}
+                  title={!user ? "You must be logged in to subscribe" : ""}
+                >
+                  {isMembershipActive ? (!user ? "LOGIN TO SUBSCRIBE" : "SUBSCRIBE") : "SET UP"}
                 </Button>
-              ) : userSubscription && isMembershipActive ? (
-                <div className="flex flex-col w-full items-center gap-2">
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-green-600 text-white">SUBSCRIBED</Badge>
-                    <span className="text-accent font-semibold">${userSubscription.monthlyAmount?.toFixed(2) || membershipAmount.toFixed(2)} / month</span>
-                    {/* Optionally show months paid if available */}
-                    {userSubscription.monthsPaid && (
-                      <span className="text-muted-foreground">({userSubscription.monthsPaid} months paid)</span>
-                    )}
-                  </div>
-                  <Button variant="destructive" onClick={() => setShowCancelDialog(true)} disabled={cancelling} className="w-full mt-2">
-                    {cancelling ? "Cancelling..." : "Cancel Membership"}
-                  </Button>
-                  <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Cancel Membership?</DialogTitle>
-                        <DialogDescription>
-                          Are you sure you want to cancel your recurring membership? You will not be billed again.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowCancelDialog(false)} disabled={cancelling}>Keep Membership</Button>
-                        <Button variant="destructive" onClick={handleCancelSubscription} disabled={cancelling}>
-                          {cancelling ? "Cancelling..." : "Confirm Cancel"}
-                        </Button>
-                      </DialogFooter>
-                      {subscribeError && <div className="text-red-500 text-sm mt-2">{subscribeError}</div>}
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              ) : (!userSubscription && isMembershipActive) ? (
+              ) : (!userSubscription && isMembershipActive && user) ? (
                 <>
                   <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setShowSubscribeDialog(true)}>
                     SUBSCRIBE

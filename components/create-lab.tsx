@@ -265,22 +265,6 @@ export function CreateLab() {
         </div>
 
         {/* Lab Details Fields */}
-        <div className="space-y-4">
-          <div className="mb-4">
-            <label htmlFor="lab-description" className="block text-sm font-bold mb-2">
-              Description
-            </label>
-            <textarea
-              id="lab-description"
-              name="description"
-              value={labDetails.description}
-              onChange={handleInputChange}
-              className="w-full border rounded px-3 py-2 bg-background text-foreground"
-              rows={4}
-              placeholder="Describe your lab's mission and research focus..."
-            />
-          </div>
-        </div>
       </div>
     </div>
   )

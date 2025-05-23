@@ -370,9 +370,8 @@ export default function ProfilePage() {
         {/* Main Content Area */}
         <div className="md:col-span-2">
           <Tabs defaultValue="labs" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="labs">My Labs</TabsTrigger>
-              <TabsTrigger value="publications">Publications</TabsTrigger>
               <TabsTrigger value="activity">Activity</TabsTrigger>
               <TabsTrigger value="collections">Saved Stuff</TabsTrigger>
             </TabsList>
@@ -380,17 +379,11 @@ export default function ProfilePage() {
             <TabsContent value="labs" className="mt-6">
               {userData && <UserLabsSection userId={userData.id} onLabsCountChange={setLabsCount} />}
             </TabsContent>
-
-            <TabsContent value="publications" className="mt-6">
-              <UserPublications />
-            </TabsContent>
-
             <TabsContent value="activity" className="mt-6">
               <UserActivityLogs userId={userData.id} userName={userData.username} userProfilePic={userData.avatar} />
             </TabsContent>
-
             <TabsContent value="collections" className="mt-6">
-              <UserCollections />
+              <UserCollections userId={userData.id} />
             </TabsContent>
           </Tabs>
         </div>

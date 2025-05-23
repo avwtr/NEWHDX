@@ -518,17 +518,6 @@ export function LabOverviewTab({
                             <p className="text-xs text-muted-foreground">{daysRemaining !== undefined ? `${daysRemaining} days remaining` : 'No deadline'}</p>
                           </div>
                         </div>
-                        {!isAdmin && (
-                          <div className="mt-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full text-accent border-accent/20 hover:bg-accent/10"
-                            >
-                              CONTRIBUTE $
-                            </Button>
-                          </div>
-                        )}
                       </div>
                     </CardContent>
                   </Card>

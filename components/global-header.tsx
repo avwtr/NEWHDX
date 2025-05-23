@@ -36,6 +36,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabase"
 import { Badge } from "@/components/ui/badge"
+import { useRouter, usePathname } from "next/navigation"
 
 export function GlobalHeader() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -53,6 +54,30 @@ export function GlobalHeader() {
   const [showDropdown, setShowDropdown] = useState(false)
   const searchTimeout = useRef<any>(null)
   const searchRef = useRef<HTMLDivElement>(null)
+
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Helper to handle navigation
+  const handleNav = (href: string, e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (href === "/") {
+      sessionStorage.setItem("isNavigatingToLanding", "true");
+    }
+    if (href === "/profile") {
+      sessionStorage.setItem("isNavigatingToProfile", "true");
+    }
+    if (href === "/create-lab") {
+      sessionStorage.setItem("isNavigatingToCreateLab", "true");
+    }
+    if (href === "/grants/new") {
+      sessionStorage.setItem("isNavigatingToCreateGrant", "true");
+    }
+    if (href === "/orgCreate") {
+      sessionStorage.setItem("isNavigatingToCreateOrg", "true");
+    }
+    router.push(href);
+  };
 
   // Debounced search
   useEffect(() => {
@@ -185,9 +210,9 @@ export function GlobalHeader() {
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-6">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
+          <a href="/" className="flex items-center gap-2" onClick={e => handleNav("/", e)}>
             <span className="text-xl font-bold tracking-tight text-accent uppercase">HDX</span>
-          </Link>
+          </a>
 
           {/* Search Bar */}
           <div className="relative hidden md:block" ref={searchRef}>
@@ -293,15 +318,14 @@ export function GlobalHeader() {
 
         <div className="flex items-center gap-4">
           {/* Explore Link */}
-          <Link href="/explore">
-            <Button
-              variant="ghost"
-              className="gap-1 text-foreground hover:bg-secondary hover:text-accent text-xs uppercase tracking-wide"
-            >
-              <Globe className="h-4 w-4 mr-2" />
-              Explore
-            </Button>
-          </Link>
+          <Button
+            variant="ghost"
+            className="gap-1 text-foreground hover:bg-secondary hover:text-accent text-xs uppercase tracking-wide"
+            onClick={() => handleNav("/explore")}
+          >
+            <Globe className="h-4 w-4 mr-2" />
+            Explore
+          </Button>
 
           {/* Create New Dropdown - Simplified */}
           <DropdownMenu>
@@ -319,22 +343,22 @@ export function GlobalHeader() {
               <DropdownMenuLabel className="uppercase text-xs tracking-wide">Create New</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled={!user} className={!user ? "opacity-50 cursor-not-allowed" : ""}>
-                <Link href="/create-lab" className="flex w-full items-center">
+                <a href="/create-lab" className="flex w-full items-center" onClick={e => handleNav("/create-lab", e)}>
                   <FileText className="h-4 w-4 mr-2" />
                   Lab
-                </Link>
+                </a>
               </DropdownMenuItem>
               <DropdownMenuItem disabled={!user} className={!user ? "opacity-50 cursor-not-allowed" : ""}>
-                <Link href="/orgCreate" className="flex w-full items-center">
+                <a href="/orgCreate" className="flex w-full items-center" onClick={e => handleNav("/orgCreate", e)}>
                   <Building2 className="h-4 w-4 mr-2" />
                   Organization
-                </Link>
+                </a>
               </DropdownMenuItem>
               <DropdownMenuItem disabled={!user} className={!user ? "opacity-50 cursor-not-allowed" : ""}>
-                <Link href="/grants/new" className="flex w-full items-center">
+                <a href="/grants/new" className="flex w-full items-center" onClick={e => handleNav("/grants/new", e)}>
                   <Award className="h-4 w-4 mr-2" />
                   Grant
-                </Link>
+                </a>
               </DropdownMenuItem>
               {!user && (
                 <div className="px-2 py-1.5 text-xs text-muted-foreground">
@@ -361,16 +385,16 @@ export function GlobalHeader() {
                 <DropdownMenuLabel className="uppercase text-xs tracking-wide">My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/profile" className="gap-2 flex items-center w-full">
+                  <a href="/profile" className="gap-2 flex items-center w-full" onClick={e => handleNav("/profile", e)}>
                     <User className="h-4 w-4" />
                     <span>Profile</span>
-                  </Link>
+                  </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/profile?tab=settings" className="gap-2 flex items-center w-full">
+                  <a href="/profile?tab=settings" className="gap-2 flex items-center w-full" onClick={e => handleNav("/profile?tab=settings", e)}>
                     <Settings className="h-4 w-4" />
                     <span>Settings</span>
-                  </Link>
+                  </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <a href="https://heterodoxlabs.org" target="_blank" rel="noopener noreferrer" className="gap-2 flex items-center">
@@ -424,14 +448,8 @@ export function GlobalHeader() {
             </DropdownMenu>
           ) : (
             <div className="flex items-center gap-2">
-              <Link href="/login">
-                <Button variant="ghost" size="sm">
-                  Login
-                </Button>
-              </Link>
-              <Link href="/signup">
-                <Button size="sm">Sign Up</Button>
-              </Link>
+              <Button variant="ghost" size="sm" onClick={() => handleNav("/login")}>Login</Button>
+              <Button size="sm" onClick={() => handleNav("/signup")}>Sign Up</Button>
             </div>
           )}
         </div>

@@ -1394,9 +1394,10 @@ const RealNetworkGraph = ({ labName, userSummary }: { labName: string, userSumma
 
 interface ActivityExplorerProps {
   labId: string
+  isAdmin?: boolean
 }
 
-export default function ActivityExplorer({ labId }: ActivityExplorerProps) {
+export default function ActivityExplorer({ labId, isAdmin = false }: ActivityExplorerProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCustomEventModalOpen, setIsCustomEventModalOpen] = useState(false)
   const [activities, setActivities] = useState<any[]>([])
@@ -1508,13 +1509,15 @@ export default function ActivityExplorer({ labId }: ActivityExplorerProps) {
               <div className="bg-card/50 border border-secondary rounded-lg p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-medium uppercase">ACTIVITY TIMELINE</h3>
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsCustomEventModalOpen(true)}
-                    className="border-accent text-accent hover:bg-secondary"
-                  >
-                    LOG CUSTOM EVENT
-                  </Button>
+                  {isAdmin && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsCustomEventModalOpen(true)}
+                      className="border-accent text-accent hover:bg-secondary"
+                    >
+                      LOG CUSTOM EVENT
+                    </Button>
+                  )}
                 </div>
                 <ActivityTimeline activities={activities} userProfiles={userProfiles} />
               </div>
