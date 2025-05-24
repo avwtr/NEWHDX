@@ -42,6 +42,7 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
 import { FileViewerDialog } from "@/components/file-viewer-dialog"
 import { toast } from "@/components/ui/use-toast"
+import { LoadingAnimation } from "@/components/loading-animation"
 
 // Add science categories mapping
 const scienceCategories = {
@@ -899,7 +900,7 @@ export default function ExperimentViewPage() {
     }
   };
 
-  if (loading) return <div>Loading...</div>
+  if (loading) return <LoadingAnimation />
   if (!experiment) return <div>Experiment not found.</div>
 
   return (

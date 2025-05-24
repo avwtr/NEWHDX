@@ -208,8 +208,8 @@ export default function SignupPage() {
         })
       } else {
         toast({
-          title: "Account created",
-          description: "Please check your email to confirm your account.",
+          title: "Welcome to HDX!",
+          description: "Your account has been created successfully.",
         })
 
         // If email confirmation is not required, redirect to explore
