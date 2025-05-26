@@ -482,28 +482,42 @@ export default function ExplorePage() {
           }
         }
 
+        // After mapping mappedLabs:
+        const labInfoMap = {};
+        mappedLabs.forEach(lab => {
+          labInfoMap[lab.id] = {
+            name: lab.name,
+            image: lab.image,
+          };
+        });
+
         // Map experiments data
-        const mappedExperiments = experiments.map(exp => ({
-          id: exp.id,
-          name: exp.name,
-          description: exp.description,
-          objective: exp.objective,
-          categories: Array.isArray(exp.categories) ? exp.categories : [],
-          lab: exp.lab_id,
-          labId: exp.lab_id,
-          participantsNeeded: exp.participants_needed || 0,
-          participantsCurrent: exp.participants_current || 0,
-          deadline: exp.deadline,
-          compensation: exp.compensation || "No compensation",
-          timeCommitment: exp.time_commitment || "Not specified",
-          lastUpdated: exp.created_at ? `${Math.round((Date.now() - new Date(exp.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
-          status: exp.status || "DRAFT",
-          closed_status: exp.closed_status,
-          end_date: exp.end_date,
-          created_at: exp.created_at,
-          contributors: contributorsMap[exp.id] || [],
-          files: experimentFilesMap[exp.id] || [],
-        }));
+        const mappedExperiments = experiments.map(exp => {
+          const labInfo = labInfoMap[exp.lab_id] || {};
+          return {
+            id: exp.id,
+            name: exp.name,
+            description: exp.description,
+            objective: exp.objective,
+            categories: Array.isArray(exp.categories) ? exp.categories : [],
+            lab: exp.lab_id,
+            labId: exp.lab_id,
+            labName: labInfo.name || "",
+            labProfilePic: labInfo.image || "/placeholder.svg",
+            participantsNeeded: exp.participants_needed || 0,
+            participantsCurrent: exp.participants_current || 0,
+            deadline: exp.deadline,
+            compensation: exp.compensation || "No compensation",
+            timeCommitment: exp.time_commitment || "Not specified",
+            lastUpdated: exp.created_at ? `${Math.round((Date.now() - new Date(exp.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
+            status: exp.status || "DRAFT",
+            closed_status: exp.closed_status,
+            end_date: exp.end_date,
+            created_at: exp.created_at,
+            contributors: contributorsMap[exp.id] || [],
+            files: experimentFilesMap[exp.id] || [],
+          };
+        });
 
         // Fetch grants
         const { data: grants, error: grantsError } = await supabase
@@ -730,8 +744,8 @@ export default function ExplorePage() {
         // Search filter
         const matchesSearch =
           searchQuery === "" ||
-          item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.description.toLowerCase().includes(searchQuery.toLowerCase())
+          (item.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (item.description || "").toLowerCase().includes(searchQuery.toLowerCase())
 
         // Category filter (show labs with no categories if no filter is selected)
         const matchesCategory =
@@ -1092,7 +1106,10 @@ export default function ExplorePage() {
                                 </div>
                               )}
                               <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                                <span>{experiment.lab}</span>
+                                <span className="flex items-center gap-2">
+                                  <img src={experiment.labProfilePic} alt={experiment.labName} className="h-5 w-5 rounded-full object-cover border" />
+                                  {experiment.labName}
+                                </span>
                                 <span>{experiment.lastUpdated}</span>
                               </div>
                             </Link>

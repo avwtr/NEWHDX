@@ -40,6 +40,14 @@ import { Badge } from "@/components/ui/badge"
 import { useRouter, usePathname } from "next/navigation"
 
 export function GlobalHeader() {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Don't render header on landing page
+  if (pathname === "/" || pathname === "/landing") {
+    return null;
+  }
+
   const [searchQuery, setSearchQuery] = useState("")
   const { user, signOut, isLoading } = useAuth()
   const [helpOpen, setHelpOpen] = useState(false)
@@ -50,14 +58,11 @@ export function GlobalHeader() {
   const [helpError, setHelpError] = useState<string | null>(null)
 
   // Search state
-  const [searchResults, setSearchResults] = useState<any>({ users: [], labs: [], grants: [], experiments: [] })
+  const [searchResults, setSearchResults] = useState<any>({ users: [], labs: [], grants: [], experiments: [], orgs: [] })
   const [searchLoading, setSearchLoading] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const searchTimeout = useRef<any>(null)
   const searchRef = useRef<HTMLDivElement>(null)
-
-  const router = useRouter();
-  const pathname = usePathname();
 
   const [issueModalOpen, setIssueModalOpen] = useState(false)
   const [issueSubject, setIssueSubject] = useState("")
@@ -90,7 +95,7 @@ export function GlobalHeader() {
   // Debounced search
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setSearchResults({ users: [], labs: [], grants: [], experiments: [] })
+      setSearchResults({ users: [], labs: [], grants: [], experiments: [], orgs: [] })
       setShowDropdown(false)
       return
     }
@@ -98,12 +103,19 @@ export function GlobalHeader() {
     setShowDropdown(true)
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
     searchTimeout.current = setTimeout(async () => {
-      // Query users
-      const [{ data: users }, { data: labs, error: labsError }, { data: grants }, { data: experiments }] = await Promise.all([
+      // Query users, labs, grants, experiments, and organizations
+      const [
+        { data: users },
+        { data: labs, error: labsError },
+        { data: grants },
+        { data: experiments },
+        { data: orgs }
+      ] = await Promise.all([
         supabase.from("profiles").select("user_id, username, profilePic, research_interests").ilike("username", `%${searchQuery}%`).limit(5),
         supabase.from("labs").select("labId, labName, description").ilike("labName", `%${searchQuery}%`).limit(5),
         supabase.from("grants").select("id, title, description").ilike("title", `%${searchQuery}%`).limit(5),
         supabase.from("experiments").select("id, name, objective").ilike("name", `%${searchQuery}%`).limit(5),
+        supabase.from("organizations").select("org_id, org_name, description, profilePic, slug").ilike("org_name", `%${searchQuery}%`).limit(5),
       ])
       let labsWithCategories = labs || [];
       if (labs && labs.length > 0) {
@@ -122,12 +134,12 @@ export function GlobalHeader() {
       if (labsError) {
         console.error("Labs search error:", labsError)
       }
-      console.log("Labs search result:", labsWithCategories)
       setSearchResults({
         users: users || [],
         labs: labsWithCategories,
         grants: grants || [],
         experiments: experiments || [],
+        orgs: orgs || [],
       })
       setSearchLoading(false)
       setShowDropdown(true)
@@ -275,7 +287,7 @@ export function GlobalHeader() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search for users, labs, experiments"
+                placeholder="Search for users, labs, experiments, orgs"
                 className="w-[300px] lg:w-[400px] pl-8 bg-secondary border-secondary text-foreground"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -288,7 +300,7 @@ export function GlobalHeader() {
                     <div className="p-4 text-center text-muted-foreground">Searching...</div>
                   ) : (
                     <>
-                      {searchResults.users.length === 0 && searchResults.labs.length === 0 && searchResults.grants.length === 0 && searchResults.experiments.length === 0 ? (
+                      {searchResults.users.length === 0 && searchResults.labs.length === 0 && searchResults.grants.length === 0 && searchResults.experiments.length === 0 && searchResults.orgs.length === 0 ? (
                         <div className="p-4 text-center text-muted-foreground">No results found.</div>
                       ) : (
                         <>
@@ -351,6 +363,24 @@ export function GlobalHeader() {
                               ))}
                             </div>
                           )}
+                          {/* Organizations */}
+                          {searchResults.orgs && searchResults.orgs.length > 0 && (
+                            <div>
+                              <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase">Organizations</div>
+                              {searchResults.orgs.map((org: any) => (
+                                <Link key={org.org_id} href={`/orgs/${org.slug || org.org_id}`} className="flex items-center gap-3 px-4 py-2 hover:bg-secondary/50">
+                                  <Avatar className="h-7 w-7">
+                                    <AvatarImage src={org.profilePic || "/placeholder.svg"} alt={org.org_name} />
+                                    <AvatarFallback>{(org.org_name || "O").charAt(0).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <span className="font-medium">{org.org_name}</span>
+                                    <div className="block text-xs text-muted-foreground">{org.description}</div>
+                                  </div>
+                                </Link>
+                              ))}
+                            </div>
+                          )}
                           {/* Experiments */}
                           {searchResults.experiments.length > 0 && (
                             <div>
@@ -375,8 +405,8 @@ export function GlobalHeader() {
           <div className="flex items-center gap-4">
             {/* Explore Link */}
             <Button
-              variant="ghost"
-              className="gap-1 text-foreground hover:bg-secondary hover:text-accent text-xs uppercase tracking-wide"
+              variant={pathname === "/explore" ? "secondary" : "ghost"}
+              className={`gap-1 text-foreground hover:bg-secondary hover:text-accent text-xs uppercase tracking-wide ${pathname === "/explore" ? "bg-accent text-primary-foreground" : ""}`}
               onClick={() => handleNav("/explore")}
             >
               <Globe className="h-4 w-4 mr-2" />

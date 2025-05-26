@@ -1,12 +1,12 @@
 import type React from "react"
 import { JetBrains_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
-import { SiteHeader } from "@/components/site-header"
 import { AuthProvider } from "@/components/auth-provider"
 import { RoleProvider } from "@/contexts/role-context"
 import "@/app/globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { GlobalLoader } from "@/components/GlobalLoader"
+import { HeaderWrapper } from "@/components/header-wrapper"
 
 // Initialize the JetBrains Mono font
 const jetbrainsMono = JetBrains_Mono({
@@ -41,7 +41,7 @@ export default function RootLayout({
             <RoleProvider>
               <GlobalLoader />
               <div className="relative flex min-h-screen flex-col">
-                <SiteHeader />
+                <HeaderWrapper />
                 <div className="flex-1">{children}</div>
               </div>
             </RoleProvider>
