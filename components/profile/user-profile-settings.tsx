@@ -249,9 +249,11 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const accountId = params.get('account')
+    console.log('[PAYOUT] Stripe Connect callback:', { stripe: params.get('stripe'), accountId })
     if (params.get('stripe') === 'success' && accountId) {
       (async () => {
-        await fetch('/api/stripe/save-funding-id', {
+        console.log('[PAYOUT] Saving funding_id to Supabase:', { userId: user.id, funding_id: accountId })
+        const res = await fetch('/api/stripe/save-funding-id', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -259,6 +261,8 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
           },
           body: JSON.stringify({ funding_id: accountId }),
         })
+        const data = await res.json()
+        console.log('[PAYOUT] Save funding_id response:', data)
         setFundingId(accountId)
         setSuccess(true)
         // Remove query params from URL
@@ -309,7 +313,10 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
     try {
       const res = await fetch('/api/stripe/create-connect-link', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user.id,
+        },
         body: JSON.stringify({ businessType }),
       })
       const data = await res.json()
