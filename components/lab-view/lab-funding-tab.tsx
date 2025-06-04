@@ -968,272 +968,313 @@ export function LabFundingTab({
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Membership Tile */}
-          <Card className={`border-accent ${isMembershipSetUp && !isMembershipActive ? "opacity-60" : ""}`}>
-            <CardHeader className="pb-2">
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">{membership?.name || "LAB MEMBERSHIP"}</CardTitle>
-                  <CardDescription>{membership?.description || "No description yet."}</CardDescription>
+          <div className="relative">
+            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground/60 uppercase tracking-wide">
+              MONTHLY SUBSCRIPTION
+            </div>
+            <Card className={`border-accent ${isMembershipSetUp && !isMembershipActive ? "opacity-60" : ""}`}>
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-lg">{membership?.name || "LAB MEMBERSHIP"}</CardTitle>
+                    <CardDescription>{membership?.description || "No description yet."}</CardDescription>
+                  </div>
+                  {isAdmin && isMembershipSetUp && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={(isMembershipActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
+                      onClick={handleToggleMembershipActive}
+                    >
+                      {isMembershipActive ? (
+                        <>
+                          <PowerOff className="h-4 w-4 mr-1" />
+                          DEACTIVATE
+                        </>
+                      ) : (
+                        <>
+                          <Power className="h-4 w-4 mr-1" />
+                          ACTIVATE
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
-                {isAdmin && isMembershipSetUp && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={(isMembershipActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
-                    onClick={handleToggleMembershipActive}
-                  >
-                    {isMembershipActive ? (
-                      <>
-                        <PowerOff className="h-4 w-4 mr-1" />
-                        DEACTIVATE
-                      </>
-                    ) : (
-                      <>
-                        <Power className="h-4 w-4 mr-1" />
-                        ACTIVATE
-                      </>
-                    )}
-                  </Button>
+                {!isMembershipActive && isAdmin && isMembershipSetUp && (
+                  <div className="mt-2 text-sm text-amber-500 font-medium">MEMBERSHIPS CURRENTLY DISABLED</div>
                 )}
-              </div>
-              {!isMembershipActive && isAdmin && isMembershipSetUp && (
-                <div className="mt-2 text-sm text-amber-500 font-medium">MEMBERSHIPS CURRENTLY DISABLED</div>
-              )}
-            </CardHeader>
-            <CardContent>
-              {isMembershipSetUp && (
-                <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                  <div className="bg-secondary/50 rounded px-2 py-1">
-                    <span className="font-semibold text-accent">${membership.monthly_amount || 0}</span> / month
+              </CardHeader>
+              <CardContent>
+                {isMembershipSetUp && (
+                  <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                    <div className="bg-secondary/50 rounded px-2 py-1">
+                      <span className="font-semibold text-accent">${membership.monthly_amount || 0}</span> / month
+                    </div>
+                    <div className="bg-secondary/50 rounded px-2 py-1">
+                      Subscribers: <span className="font-semibold text-accent">{subscriberCount}</span>
+                    </div>
                   </div>
-                  <div className="bg-secondary/50 rounded px-2 py-1">
-                    Subscribers: <span className="font-semibold text-accent">{subscriberCount}</span>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-            <CardFooter>
-              {isAdmin ? (
-                isMembershipSetUp ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 border-accent text-accent hover:bg-secondary"
-                    onClick={async () => {
-                      setEditMembershipLoading(true);
-                      const { data, error } = await supabase
-                        .from("recurring_funding")
-                        .select("*")
-                        .eq("id", membership.id)
-                        .single();
-                      if (!error && data) {
-                        setEditMembershipName(data.name || "LAB MEMBERSHIP");
-                        setEditMembershipDescription(data.description || "");
-                        setEditMembershipAmount(data.monthly_amount?.toString() || "");
-                      }
-                      setEditMembershipLoading(false);
-                      setShowEditMembershipDialog(true);
-                    }}
-                  >
-                    <Edit2 className="h-4 w-4 mr-2" />
-                    EDIT
-                  </Button>
-                ) : (
+                )}
+              </CardContent>
+              <CardFooter>
+                {isAdmin ? (
+                  isMembershipSetUp ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 border-accent text-accent hover:bg-secondary"
+                      onClick={async () => {
+                        setEditMembershipLoading(true);
+                        const { data, error } = await supabase
+                          .from("recurring_funding")
+                          .select("*")
+                          .eq("id", membership.id)
+                          .single();
+                        if (!error && data) {
+                          setEditMembershipName(data.name || "LAB MEMBERSHIP");
+                          setEditMembershipDescription(data.description || "");
+                          setEditMembershipAmount(data.monthly_amount?.toString() || "");
+                        }
+                        setEditMembershipLoading(false);
+                        setShowEditMembershipDialog(true);
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4 mr-2" />
+                      EDIT
+                    </Button>
+                  ) : (
+                    <Button 
+                      className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
+                      onClick={() => setShowSetupMembershipDialog(true)}
+                    >
+                      SET UP
+                    </Button>
+                  )
+                ) : isGuest ? (
                   <Button 
                     className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
-                    onClick={() => setShowSetupMembershipDialog(true)}
+                    onClick={handleGuestAction} 
+                    disabled={!isMembershipActive || !user}
+                    title={!user ? "You must be logged in to subscribe" : ""}
                   >
-                    SET UP
+                    {isMembershipActive ? (!user ? "LOGIN TO SUBSCRIBE" : "SUBSCRIBE") : "SET UP"}
                   </Button>
-                )
-              ) : isGuest ? (
-                <Button 
-                  className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
-                  onClick={handleGuestAction} 
-                  disabled={!isMembershipActive || !user}
-                  title={!user ? "You must be logged in to subscribe" : ""}
-                >
-                  {isMembershipActive ? (!user ? "LOGIN TO SUBSCRIBE" : "SUBSCRIBE") : "SET UP"}
-                </Button>
-              ) : (!userSubscription && isMembershipActive && user) ? (
-                <>
-                  <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setShowSubscribeDialog(true)}>
-                    SUBSCRIBE
-                  </Button>
-                  <Dialog open={showSubscribeDialog} onOpenChange={setShowSubscribeDialog}>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Subscribe to Lab Membership</DialogTitle>
-                        <DialogDescription>
-                          Support this lab with a recurring monthly membership. Select a fund/goal for your membership to support.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <Label>Select Fund/Goal</Label>
-                          <RadioGroup value={selectedMembershipFund} onValueChange={setSelectedMembershipFund} className="max-h-[40vh] overflow-y-auto pr-2">
-                            {funds.map((fund) => (
-                              <div key={fund.id} className="flex items-start space-x-2 p-2 rounded-md hover:bg-secondary/50 mb-2">
-                                <RadioGroupItem value={fund.id} id={`membership-fund-${fund.id}`} className="mt-1" />
-                                <div className="grid gap-1.5 leading-none">
-                                  <Label htmlFor={`membership-fund-${fund.id}`} className="font-medium">
-                                    {fund.goalName || fund.name}
-                                  </Label>
-                                  <p className="text-sm text-muted-foreground">{fund.goal_description || fund.description}</p>
+                ) : (!userSubscription && isMembershipActive && user) ? (
+                  <>
+                    <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setShowSubscribeDialog(true)}>
+                      SUBSCRIBE
+                    </Button>
+                    <Dialog open={showSubscribeDialog} onOpenChange={setShowSubscribeDialog}>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Subscribe to Lab Membership</DialogTitle>
+                          <DialogDescription>
+                            Support this lab with a recurring monthly membership. Select a fund/goal for your membership to support.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div>
+                            <Label>Select Fund/Goal</Label>
+                            <RadioGroup value={selectedMembershipFund} onValueChange={setSelectedMembershipFund} className="max-h-[40vh] overflow-y-auto pr-2">
+                              {funds.map((fund) => (
+                                <div key={fund.id} className="flex items-start space-x-2 p-2 rounded-md hover:bg-secondary/50 mb-2">
+                                  <RadioGroupItem value={fund.id} id={`membership-fund-${fund.id}`} className="mt-1" />
+                                  <div className="grid gap-1.5 leading-none">
+                                    <Label htmlFor={`membership-fund-${fund.id}`} className="font-medium">
+                                      {fund.goalName || fund.name}
+                                    </Label>
+                                    <p className="text-sm text-muted-foreground">{fund.goal_description || fund.description}</p>
+                                  </div>
                                 </div>
+                              ))}
+                            </RadioGroup>
+                          </div>
+                          <div>
+                            <Label>Monthly Amount</Label>
+                            <div className="text-md font-semibold">${membershipAmount.toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <Label>HDX Fee (2.5%)</Label>
+                            <div className="text-md">${membershipFee.toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <Label>Net to Lab</Label>
+                            <div className="text-md font-semibold text-green-700">${membershipNet.toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <Label>Payment Method</Label>
+                            {loadingMembershipPM ? (
+                              <div>Loading...</div>
+                            ) : membershipPaymentMethod ? (
+                              <div className="flex items-center gap-3">
+                                <span>{membershipPaymentMethod.brand?.toUpperCase() || membershipPaymentMethod.bank_name}</span>
+                                <span>•••• {membershipPaymentMethod.last4}</span>
+                                {membershipPaymentMethod.exp_month && membershipPaymentMethod.exp_year && (
+                                  <span>Exp: {membershipPaymentMethod.exp_month}/{membershipPaymentMethod.exp_year}</span>
+                                )}
+                                <Button size="sm" variant="outline" className="ml-2" asChild>
+                                  <a href="/profile">Change</a>
+                                </Button>
+                                <Button size="sm" variant="destructive" className="ml-1" asChild>
+                                  <a href="/profile">Remove</a>
+                                </Button>
                               </div>
-                            ))}
-                          </RadioGroup>
+                            ) : (
+                              <div className="text-red-500">No payment method found. <a href="/profile" className="underline">Add one in your profile</a>.</div>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <Label>Monthly Amount</Label>
-                          <div className="text-md font-semibold">${membershipAmount.toFixed(2)}</div>
-                        </div>
-                        <div>
-                          <Label>HDX Fee (2.5%)</Label>
-                          <div className="text-md">${membershipFee.toFixed(2)}</div>
-                        </div>
-                        <div>
-                          <Label>Net to Lab</Label>
-                          <div className="text-md font-semibold text-green-700">${membershipNet.toFixed(2)}</div>
-                        </div>
-                        <div>
-                          <Label>Payment Method</Label>
-                          {loadingMembershipPM ? (
-                            <div>Loading...</div>
-                          ) : membershipPaymentMethod ? (
-                            <div className="flex items-center gap-3">
-                              <span>{membershipPaymentMethod.brand?.toUpperCase() || membershipPaymentMethod.bank_name}</span>
-                              <span>•••• {membershipPaymentMethod.last4}</span>
-                              {membershipPaymentMethod.exp_month && membershipPaymentMethod.exp_year && (
-                                <span>Exp: {membershipPaymentMethod.exp_month}/{membershipPaymentMethod.exp_year}</span>
-                              )}
-                              <Button size="sm" variant="outline" className="ml-2" asChild>
-                                <a href="/profile">Change</a>
-                              </Button>
-                              <Button size="sm" variant="destructive" className="ml-1" asChild>
-                                <a href="/profile">Remove</a>
-                              </Button>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setShowSubscribeDialog(false)} disabled={subscribing}>Cancel</Button>
+                          <Button className="bg-accent text-primary-foreground" onClick={handleSubscribe} disabled={subscribing || !membershipPaymentMethod || !user}>
+                            {subscribing ? "Subscribing..." : `Confirm $${membershipAmount.toFixed(2)} / month`}
+                          </Button>
+                          {(user === null || membershipPaymentMethod === null) && (
+                            <div className="text-xs text-red-500 mt-2">
+                              {!user && "You must be logged in to subscribe."}
+                              {!membershipPaymentMethod && user && "You must add a payment method in your profile before subscribing."}
                             </div>
-                          ) : (
-                            <div className="text-red-500">No payment method found. <a href="/profile" className="underline">Add one in your profile</a>.</div>
                           )}
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowSubscribeDialog(false)} disabled={subscribing}>Cancel</Button>
-                        <Button className="bg-accent text-primary-foreground" onClick={handleSubscribe} disabled={subscribing || !membershipPaymentMethod || !user}>
-                          {subscribing ? "Subscribing..." : `Confirm $${membershipAmount.toFixed(2)} / month`}
-                        </Button>
-                        {(user === null || membershipPaymentMethod === null) && (
-                          <div className="text-xs text-red-500 mt-2">
-                            {!user && "You must be logged in to subscribe."}
-                            {!membershipPaymentMethod && user && "You must add a payment method in your profile before subscribing."}
+                        </DialogFooter>
+                        {subscribeError && <div className="text-red-500 text-sm mt-2">{subscribeError}</div>}
+                        {subscribeSuccess && (
+                          <div className="flex flex-col items-center mt-4">
+                            <div className="text-green-600 text-lg font-semibold mb-2">Subscription successful!</div>
+                            <div className="text-muted-foreground text-sm">Thank you for supporting this lab.</div>
                           </div>
                         )}
-                      </DialogFooter>
-                      {subscribeError && <div className="text-red-500 text-sm mt-2">{subscribeError}</div>}
-                      {subscribeSuccess && (
-                        <div className="flex flex-col items-center mt-4">
-                          <div className="text-green-600 text-lg font-semibold mb-2">Subscription successful!</div>
-                          <div className="text-muted-foreground text-sm">Thank you for supporting this lab.</div>
-                        </div>
-                      )}
-                    </DialogContent>
-                  </Dialog>
-                </>
-              ) : null}
-            </CardFooter>
-          </Card>
+                      </DialogContent>
+                    </Dialog>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      className="w-full bg-red-500 text-white hover:bg-red-600"
+                      onClick={() => setShowCancelDialog(true)}
+                    >
+                      Cancel Membership
+                    </Button>
+                    <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Cancel Membership?</DialogTitle>
+                          <DialogDescription>
+                            Are you sure you want to cancel your recurring membership? This action cannot be undone.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
+                            Keep Membership
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={handleCancelSubscription}
+                            disabled={cancelling}
+                          >
+                            {cancelling ? "Cancelling..." : "Confirm Cancel"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </>
+                )}
+              </CardFooter>
+            </Card>
+          </div>
 
           {/* One-Time Donation Tile */}
-          <Card className={`border-secondary ${isDonationSetUp && !isDonationActive ? "opacity-60" : ""}`}>
-            <CardHeader className="pb-2">
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">{oneTimeDonation?.donation_setup_name || "ONE-TIME DONATION"}</CardTitle>
-                  <CardDescription>{oneTimeDonation?.donation_description || "No description yet."}</CardDescription>
+          <div className="relative">
+            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground/60 uppercase tracking-wide">
+              ONE-TIME DONATION
+            </div>
+            <Card className={`border-secondary ${isDonationSetUp && !isDonationActive ? "opacity-60" : ""}`}>
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-lg">{oneTimeDonation?.donation_setup_name || "ONE-TIME DONATION"}</CardTitle>
+                    <CardDescription>{oneTimeDonation?.donation_description || "No description yet."}</CardDescription>
+                  </div>
+                  {isAdmin && isDonationSetUp && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={(isDonationActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
+                      onClick={handleToggleDonationActive}
+                    >
+                      {isDonationActive ? (
+                        <>
+                          <PowerOff className="h-4 w-4 mr-1" />
+                          DEACTIVATE
+                        </>
+                      ) : (
+                        <>
+                          <Power className="h-4 w-4 mr-1" />
+                          ACTIVATE
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
-                {isAdmin && isDonationSetUp && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={(isDonationActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
-                    onClick={handleToggleDonationActive}
-                  >
-                    {isDonationActive ? (
-                      <>
-                        <PowerOff className="h-4 w-4 mr-1" />
-                        DEACTIVATE
-                      </>
-                    ) : (
-                      <>
-                        <Power className="h-4 w-4 mr-1" />
-                        ACTIVATE
-                      </>
-                    )}
-                  </Button>
+                {!isDonationActive && isAdmin && isDonationSetUp && (
+                  <div className="mt-2 text-sm text-amber-500 font-medium">DONATIONS CURRENTLY DISABLED</div>
                 )}
-              </div>
-              {!isDonationActive && isAdmin && isDonationSetUp && (
-                <div className="mt-2 text-sm text-amber-500 font-medium">DONATIONS CURRENTLY DISABLED</div>
-              )}
-            </CardHeader>
-            <CardContent>
-              {isDonationSetUp && (
-                <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                  <div className="bg-secondary/50 rounded px-2 py-1">
-                    Donors: <span className="font-semibold text-accent">{donorStatsLoading ? '...' : donorCount}</span>
+              </CardHeader>
+              <CardContent>
+                {isDonationSetUp && (
+                  <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                    <div className="bg-secondary/50 rounded px-2 py-1">
+                      Donors: <span className="font-semibold text-accent">{donorStatsLoading ? '...' : donorCount}</span>
+                    </div>
+                    <div className="bg-secondary/50 rounded px-2 py-1">
+                      Avg. Donation: <span className="font-semibold text-accent">{donorStatsLoading ? '...' : `$${avgDonation}`}</span>
+                    </div>
                   </div>
-                  <div className="bg-secondary/50 rounded px-2 py-1">
-                    Avg. Donation: <span className="font-semibold text-accent">{donorStatsLoading ? '...' : `$${avgDonation}`}</span>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-            <CardFooter>
-              {isAdmin ? (
-                isDonationSetUp ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 border-accent text-accent hover:bg-secondary"
-                    onClick={async () => {
-                      setEditDonationLoading(true);
-                      const { data, error } = await supabase
-                        .from("donation_funding")
-                        .select("*")
-                        .eq("id", oneTimeDonation.id)
-                        .single();
-                      if (!error && data) {
-                        setEditDonationName(data.donation_setup_name || "One-Time Donation");
-                        setEditDonationDescription(data.donation_description || "");
-                        setEditDonationAmounts(data.suggested_amounts || []);
-                      }
-                      setEditDonationLoading(false);
-                      setShowEditDonationDialog(true);
-                    }}
-                  >
-                    <Edit2 className="h-4 w-4 mr-2" />
-                    EDIT
+                )}
+              </CardContent>
+              <CardFooter>
+                {isAdmin ? (
+                  isDonationSetUp ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 border-accent text-accent hover:bg-secondary"
+                      onClick={async () => {
+                        setEditDonationLoading(true);
+                        const { data, error } = await supabase
+                          .from("donation_funding")
+                          .select("*")
+                          .eq("id", oneTimeDonation.id)
+                          .single();
+                        if (!error && data) {
+                          setEditDonationName(data.donation_setup_name || "One-Time Donation");
+                          setEditDonationDescription(data.donation_description || "");
+                          setEditDonationAmounts(data.suggested_amounts || []);
+                        }
+                        setEditDonationLoading(false);
+                        setShowEditDonationDialog(true);
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4 mr-2" />
+                      EDIT
+                    </Button>
+                  ) : (
+                    <Button 
+                      className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
+                      onClick={() => setShowDonationDialog(true)}
+                    >
+                      SET UP
+                    </Button>
+                  )
+                ) : isGuest ? (
+                  <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleGuestAction} disabled={!isDonationActive}>
+                    {isDonationActive ? "DONATE" : "SET UP"}
                   </Button>
                 ) : (
-                  <Button 
-                    className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
-                    onClick={() => setShowDonationDialog(true)}
-                  >
-                    SET UP
-                  </Button>
-                )
-              ) : isGuest ? (
-                <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleGuestAction} disabled={!isDonationActive}>
-                  {isDonationActive ? "DONATE" : "SET UP"}
-                </Button>
-              ) : (
-                <OneTimeDonation labId={labId} funds={funds} onDonationSuccess={handleDonationSuccess} />
-              )}
-            </CardFooter>
-          </Card>
+                  <OneTimeDonation labId={labId} funds={funds} onDonationSuccess={handleDonationSuccess} isDonationActive={isDonationActive} />
+                )}
+              </CardFooter>
+            </Card>
+          </div>
         </div>
 
         {/* Only show funding goals if at least one funding option is active */}

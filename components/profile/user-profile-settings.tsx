@@ -132,7 +132,7 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
   const [username, setUsername] = useState(user.username)
   const [bio, setBio] = useState(user.bio)
   const [selectedInterests, setSelectedInterests] = useState<string[]>(user.interests)
-  const [tab, setTab] = useState(defaultTab)
+  const [tab, setTab] = useState("profile")
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarUrl, setAvatarUrl] = useState(user.avatar)
   const [uploading, setUploading] = useState(false)
@@ -549,7 +549,7 @@ export function UserProfileSettings({ user, onClose, defaultTab = "profile" }: U
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="profile">Profile Information</TabsTrigger>
           <TabsTrigger value="contributions">My Contributions</TabsTrigger>
           <TabsTrigger value="bank">Bank Accounts</TabsTrigger>

@@ -98,6 +98,8 @@ export async function POST(req: NextRequest) {
 
   // 5. Create the subscription, explicitly set default_payment_method
   let subscription;
+  let paymentIntentStatus = null;
+  let paymentIntentError = null;
   try {
     subscription = await stripe.subscriptions.create({
       customer: userProfile.payment_acc_id,
@@ -108,25 +110,85 @@ export async function POST(req: NextRequest) {
       payment_behavior: "default_incomplete",
       default_payment_method: defaultPaymentMethodId,
       off_session: true,
-      // Stripe will use the default payment method for recurring billing
+      expand: ['latest_invoice.payment_intent'],
     });
+    console.log('[create-membership-subscription] Subscription created:', JSON.stringify(subscription, null, 2));
+
+    // After creating the subscription, fetch the latest invoice and confirm its payment intent
+    const invoiceId = typeof subscription.latest_invoice === 'string'
+      ? subscription.latest_invoice
+      : subscription.latest_invoice?.id;
+
+    if (invoiceId) {
+      // Retrieve the invoice and log the raw response
+      const invoiceResponse = await stripe.invoices.retrieve(invoiceId, { expand: ['payment_intent'] });
+      console.log('[create-membership-subscription] Raw invoice response:', JSON.stringify(invoiceResponse, null, 2));
+      let invoice: any = invoiceResponse;
+      if (!invoice.payment_intent && invoice.data && invoice.data.payment_intent) {
+        invoice = invoice.data;
+      }
+      // If invoice is open and not auto-advanced, finalize it to generate payment intent
+      if (invoice.status === 'open' && invoice.auto_advance === false) {
+        try {
+          const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id, {});
+          invoice = finalizedInvoice; // Use the finalized invoice for next steps
+          console.log('[create-membership-subscription] Finalized invoice:', JSON.stringify(finalizedInvoice, null, 2));
+        } catch (err) {
+          console.error('[create-membership-subscription] Error finalizing invoice:', err);
+        }
+      }
+      // Now, extract the payment intent
+      const paymentIntentId = typeof invoice.payment_intent === 'string'
+        ? invoice.payment_intent
+        : invoice.payment_intent?.id;
+      console.log('[create-membership-subscription] Extracted paymentIntentId:', paymentIntentId);
+      if (paymentIntentId) {
+        try {
+          const confirmedIntent = await stripe.paymentIntents.confirm(paymentIntentId, { off_session: true });
+          console.log('[create-membership-subscription] Confirmed payment intent:', JSON.stringify(confirmedIntent, null, 2));
+          if (confirmedIntent.status !== 'succeeded') {
+            console.error('Payment intent not succeeded:', confirmedIntent.status, confirmedIntent.last_payment_error);
+          }
+        } catch (err) {
+          console.error('[create-membership-subscription] Error confirming payment intent:', err);
+        }
+      } else {
+        console.error('[create-membership-subscription] No payment intent ID found to confirm.');
+      }
+    }
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
 
-  // 6. Store in labSubscribers
+  // Convert monthlyAmount to cents (integer)
+  const monthlyAmountCents = Math.round(Number(monthlyAmount) * 100);
+
+  // 6. Store in labSubscribers (amount in cents)
   const { error: subError } = await supabase.from("labSubscribers").insert({
-    userId,
+    userId: normalizedUserId,
     labId,
-    monthlyAmount,
+    monthlyAmount: monthlyAmountCents, // store as integer cents
     stripe_id: subscription.id,
     created_at: new Date().toISOString(),
   });
+  
   if (subError) {
-    return NextResponse.json({ error: "Failed to store subscription." }, { status: 500 });
+    console.error("[Membership Subscription] Failed to store subscription:", {
+      error: subError,
+      data: {
+        userId: normalizedUserId,
+        labId,
+        monthlyAmount: monthlyAmountCents,
+        stripe_id: subscription.id
+      }
+    });
+    return NextResponse.json({ 
+      error: "Failed to store subscription.", 
+      details: subError 
+    }, { status: 500 });
   }
 
-  // 7. Increment amount_contributed for the selected funding goal
+  // 7. Increment amount_contributed for the selected funding goal (in cents)
   if (goalId) {
     // Fetch current amount_contributed
     const { data: goal, error: goalError } = await supabase
@@ -135,7 +197,7 @@ export async function POST(req: NextRequest) {
       .eq("id", goalId)
       .single();
     if (!goalError && goal) {
-      const newAmount = Number(goal.amount_contributed || 0) + Number(monthlyAmount);
+      const newAmount = Number(goal.amount_contributed || 0) + monthlyAmountCents;
       await supabase
         .from("funding_goals")
         .update({ amount_contributed: newAmount })
@@ -143,5 +205,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, subscriptionId: subscription.id });
+  // At the end, return payment intent status and error for debugging
+  return NextResponse.json({ success: true, subscriptionId: subscription.id, paymentIntentStatus, paymentIntentError });
 } 

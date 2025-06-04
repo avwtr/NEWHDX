@@ -522,7 +522,7 @@ export default function ExplorePage() {
         // Fetch grants
         const { data: grants, error: grantsError } = await supabase
           .from("grants")
-          .select("grant_id, grant_name, grant_description, grant_categories, grant_amount, deadline, created_at, created_by, org_id")
+          .select("grant_id, grant_name, grant_description, grant_categories, grant_amount, deadline, created_at, created_by, org_id, closure_status")
           .order("created_at", { ascending: false });
 
         if (grantsError) throw grantsError;
@@ -569,6 +569,7 @@ export default function ExplorePage() {
           orgName: grantOrgMap[g.org_id]?.org_name || "",
           orgProfilePic: grantOrgMap[g.org_id]?.profilePic || "",
           created_by: g.created_by,
+          closure_status: g.closure_status,
         }));
 
         // After fetching all data, collect unique categories
@@ -1242,10 +1243,11 @@ export default function ExplorePage() {
                     // Route to review page if user is creator
                     const isCreator = user && grant.created_by && user.id === grant.created_by;
                     const grantUrl = isCreator ? `/grants/review/${grant.id}` : `/grants/${grant.id}`;
-                    // Determine if the grant is closed/awarded
-                    const isClosed = grant.status === 'awarded' || grant.status === 'closed' || grant.award_made;
+                    // Only consider closure_status === 'AWARDED' as awarded
+                    const isAwarded = grant.closure_status === 'AWARDED';
+                    console.log('Grant:', grant.name, 'closure_status:', grant.closure_status, 'isAwarded:', isAwarded);
                     return (
-                      <Card key={grant.id} className={`overflow-hidden relative transition-all duration-200 ${isClosed ? 'opacity-60 grayscale hover:opacity-80 hover:grayscale-0 cursor-pointer' : ''}`}>
+                      <Card key={grant.id} className={`overflow-hidden relative transition-all duration-200 ${isAwarded ? 'opacity-70 grayscale hover:opacity-90 hover:grayscale-0 cursor-pointer' : ''}`}>
                         <CardContent className="p-0">
                           <Link href={grantUrl} className="block p-4 hover:bg-secondary/50 relative">
                             {/* Top right: Org and user info */}
@@ -1297,9 +1299,12 @@ export default function ExplorePage() {
                               </div>
                             </div>
                             <div className="mt-3 flex items-center justify-between">
-                              <Badge variant="outline" className="text-xs font-semibold">
-                                {grant.amount}
-                              </Badge>
+                              <span
+                                className={`text-xs font-semibold px-2 py-1 rounded ${isAwarded ? 'bg-green-600 text-white border-none filter-none !filter-none relative z-10' : 'bg-secondary text-foreground border border-border'}`}
+                                style={isAwarded ? { filter: 'none' } : {}}
+                              >
+                                {grant.amount} {isAwarded && <span className="ml-2">AWARDED</span>}
+                              </span>
                               <span className="text-xs text-muted-foreground">Deadline: {formatDate(grant.deadline)}</span>
                             </div>
                             <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">

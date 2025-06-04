@@ -326,7 +326,11 @@ export function EditMembershipDialog({
           </div>
           <div>
             <Label>Monthly Amount ($)</Label>
-            <Input type="number" min="1" value={price} onChange={e => setPrice(e.target.value)} />
+            <Input type="number" min="1" step="1" value={price} onChange={e => {
+              // Only allow whole numbers
+              const val = e.target.value.replace(/[^\d]/g, "");
+              setPrice(val);
+            }} />
           </div>
         </div>
         <DialogFooter>

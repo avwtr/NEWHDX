@@ -477,12 +477,6 @@ export function GlobalHeader() {
                     </a>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <a href="/profile?tab=settings" className="gap-2 flex items-center w-full" onClick={e => handleNav("/profile?tab=settings", e)}>
-                      <Settings className="h-4 w-4" />
-                      <span>Settings</span>
-                    </a>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
                     <a href="https://heterodoxlabs.org" target="_blank" rel="noopener noreferrer" className="gap-2 flex items-center">
                       <FileText className="h-4 w-4" />
                       <span>HDX Foundation</span>

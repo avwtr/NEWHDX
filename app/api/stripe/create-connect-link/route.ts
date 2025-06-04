@@ -24,18 +24,18 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Failed to fetch user profile', details: profileError }), { status: 500 });
   }
 
-  // Fetch email from auth.users
-  const { data: userAuth, error: userAuthError } = await supabase
-    .from('users')
+  // Fetch email from user_emails view
+  const { data: userEmail, error: emailError } = await supabase
+    .from('user_emails')
     .select('email')
     .eq('id', userId)
     .single();
-  if (userAuthError) {
-    return new Response(JSON.stringify({ error: 'Failed to fetch user email', details: userAuthError }), { status: 500 });
+  if (emailError || !userEmail) {
+    return new Response(JSON.stringify({ error: 'Failed to fetch user email', details: emailError }), { status: 500 });
   }
+  const email = userEmail.email;
 
   let stripeAccountId = profile?.funding_id;
-  const email = userAuth?.email || 'user@example.com';
 
   // Read businessType from POST body
   const body = await req.json();

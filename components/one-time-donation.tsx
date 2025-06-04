@@ -16,7 +16,7 @@ import { useAuth } from "@/components/auth-provider"
 import { toast } from "@/components/ui/use-toast"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
-export function OneTimeDonation({ labId, funds = [], onDonationSuccess }: { labId: string, funds?: any[], onDonationSuccess?: () => void }) {
+export function OneTimeDonation({ labId, funds = [], onDonationSuccess, isDonationActive = true }: { labId: string, funds?: any[], onDonationSuccess?: () => void, isDonationActive?: boolean }) {
   const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [suggestedAmounts, setSuggestedAmounts] = useState(["25", "50", "100", "250"])
@@ -45,10 +45,10 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess }: { labI
     }
   }, [isDialogOpen, user?.id])
 
-  // Use dollars for all UI calculations
-  const amount = Number(selectedAmount || customAmount)
-  const fee = amount ? +(amount * 0.025).toFixed(2) : 0
-  const net = amount ? +(amount - fee).toFixed(2) : 0
+  // Use dollars for all UI calculations (whole numbers only)
+  const amount = Math.floor(Number(selectedAmount || customAmount));
+  const fee = amount ? +(amount * 0.025).toFixed(2) : 0;
+  const net = amount ? +(amount - fee).toFixed(2) : 0;
 
   const handleDonate = async () => {
     console.log('ONE-TIME-DONATION handleDonate called', { user, amount, selectedFund, paymentMethod });
@@ -136,11 +136,11 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess }: { labI
     <>
       <Button
         className="w-full bg-accent text-primary-foreground hover:bg-accent/90"
-        onClick={() => user ? setIsDialogOpen(true) : undefined}
-        disabled={!user}
-        title={!user ? "You must be logged in to donate" : ""}
+        onClick={() => (user && isDonationActive) ? setIsDialogOpen(true) : undefined}
+        disabled={!user || !isDonationActive}
+        title={!user ? "You must be logged in to donate" : (!isDonationActive ? "Donations are currently disabled" : "")}
       >
-        {user ? "CONTRIBUTE" : "LOGIN TO DONATE"}
+        {user ? "DONATE" : "LOGIN TO DONATE"}
       </Button>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
@@ -158,7 +158,12 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess }: { labI
                   </Button>
                 ))}
               </div>
-              <Input className="mt-2" placeholder="Other amount" value={customAmount} onChange={e => { setCustomAmount(e.target.value); setSelectedAmount("") }} type="number" min="1" />
+              <Input className="mt-2" placeholder="Other amount" value={customAmount} onChange={e => {
+                // Only allow whole numbers
+                const val = e.target.value.replace(/[^\d]/g, "");
+                setCustomAmount(val);
+                setSelectedAmount("");
+              }} type="number" min="1" step="1" />
             </div>
             <div>
               <Label>Select Fund</Label>
