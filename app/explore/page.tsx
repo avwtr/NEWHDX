@@ -1248,26 +1248,26 @@ export default function ExplorePage() {
                     console.log('Grant:', grant.name, 'closure_status:', grant.closure_status, 'isAwarded:', isAwarded);
                     return (
                       <Card key={grant.id} className={`overflow-hidden relative transition-all duration-200 ${isAwarded ? 'opacity-70 grayscale hover:opacity-90 hover:grayscale-0 cursor-pointer' : ''}`}>
-                        <CardContent className="p-0">
-                          <Link href={grantUrl} className="block p-4 hover:bg-secondary/50 relative">
-                            {/* Top right: Org and user info */}
-                            <div className="absolute top-4 right-4 flex flex-col items-end gap-1 z-10">
-                              {grant.orgName && (
-                                <div className="flex items-center gap-1 mb-0.5">
-                                  <img
-                                    src={grant.orgProfilePic || "/placeholder.svg"}
-                                    alt={grant.orgName}
-                                    className="h-6 w-6 rounded-full object-cover border"
-                                  />
-                                  <span className="text-xs font-medium text-muted-foreground truncate max-w-[100px]">{grant.orgName}</span>
-                                </div>
-                              )}
-                              {grant.creatorUsername && (
-                                <span className="text-[11px] text-muted-foreground font-normal mt-0.5">@{grant.creatorUsername}</span>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <h3 className="font-medium text-accent">{grant.name}</h3>
+                        <CardContent className="p-0 flex flex-col justify-between">
+                          <Link href={grantUrl} className="block p-4 hover:bg-secondary/50 relative h-full">
+                            <div className="space-y-1 flex flex-col mt-2 mb-2">
+                              <h3 className="font-medium text-accent break-words whitespace-normal overflow-hidden text-ellipsis max-h-[3.2em] leading-tight" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>{grant.name}</h3>
+                              {/* Org and user info row, below the name */}
+                              <div className="flex items-center gap-2 mt-1 mb-1 min-h-[1.5em]">
+                                {grant.orgName && (
+                                  <div className="flex items-center gap-1 max-w-[60%] truncate">
+                                    <img
+                                      src={grant.orgProfilePic || "/placeholder.svg"}
+                                      alt={grant.orgName}
+                                      className="h-5 w-5 rounded-full object-cover border"
+                                    />
+                                    <span className="text-xs font-medium text-muted-foreground truncate">{grant.orgName}</span>
+                                  </div>
+                                )}
+                                {grant.creatorUsername && (
+                                  <span className="text-xs text-muted-foreground font-normal truncate max-w-[40%]">@{grant.creatorUsername}</span>
+                                )}
+                              </div>
                               {/* Science categories as colored badges, up to 3, with ellipsis if more */}
                               <div className="flex flex-wrap gap-1 mt-2">
                                 {(expandedGrantIds.includes(grant.id) ? grant.categories : grant.categories.slice(0, 3)).map((category: string) => {
@@ -1325,3 +1325,21 @@ export default function ExplorePage() {
     </div>
   )
 }
+
+/* Add this style at the end of the file or in a global CSS file:
+.grant-name-truncate {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  max-height: 2.8em;
+}
+@media (max-width: 640px) {
+  .grant-name-truncate {
+    -webkit-line-clamp: 1;
+    max-height: 1.4em;
+  }
+}
+*/

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SettingsDialog } from "@/components/settings-dialog"
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { researchAreas } from "@/lib/research-areas"
 
 interface LabSettingsTabProps {
   activeSettingsTab: string

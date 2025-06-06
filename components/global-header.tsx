@@ -386,7 +386,7 @@ export function GlobalHeader() {
                             <div>
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase">Experiments</div>
                               {searchResults.experiments.map((exp: any) => (
-                                <Link key={exp.id} href={`/experiments/${exp.id}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <Link key={exp.id} href={`/newexperiments/${exp.id}`} className="block px-4 py-2 hover:bg-secondary/50">
                                   <span className="font-medium">{exp.name}</span>
                                   <span className="block text-xs text-muted-foreground">{exp.objective}</span>
                                 </Link>

@@ -1,5 +1,36 @@
 // Comprehensive list of research areas (flattened, no categories)
 export const researchAreas = [
+  // General
+  { value: "biology", label: "Biology" },
+  { value: "chemistry", label: "Chemistry" },
+  { value: "physics", label: "Physics" },
+  { value: "mathematics", label: "Mathematics" },
+  { value: "computer-science", label: "Computer Science" },
+  { value: "engineering", label: "Engineering" },
+  { value: "medicine", label: "Medicine" },
+  { value: "psychology", label: "Psychology" },
+  { value: "social-sciences", label: "Social Sciences" },
+  { value: "earth-sciences", label: "Earth Sciences" },
+  { value: "astronomy", label: "Astronomy" },
+  // Interdisciplinary/Modern
+  { value: "data-science", label: "Data Science" },
+  { value: "artificial-intelligence", label: "Artificial Intelligence" },
+  { value: "machine-learning", label: "Machine Learning" },
+  { value: "neuroscience", label: "Neuroscience" },
+  { value: "cognitive-science", label: "Cognitive Science" },
+  { value: "astrophysics", label: "Astrophysics" },
+  { value: "biotechnology", label: "Biotechnology" },
+  { value: "nanotechnology", label: "Nanotechnology" },
+  // Fringe/Novelty
+  { value: "quantum-biology", label: "Quantum Biology" },
+  { value: "ufos", label: "UFOs & UAPs" },
+  { value: "exoplanets", label: "Exoplanets" },
+  { value: "consciousness", label: "Consciousness Studies" },
+  { value: "parapsychology", label: "Parapsychology" },
+  { value: "cryptozoology", label: "Cryptozoology" },
+  { value: "astrobiology", label: "Astrobiology" },
+  { value: "transhumanism", label: "Transhumanism" },
+  { value: "simulation-theory", label: "Simulation Theory" },
   // Biology
   { value: "molecular-biology", label: "Molecular Biology" },
   { value: "cell-biology", label: "Cell Biology" },
@@ -10,14 +41,12 @@ export const researchAreas = [
   { value: "microbiology", label: "Microbiology" },
   { value: "virology", label: "Virology" },
   { value: "immunology", label: "Immunology" },
-  { value: "neuroscience", label: "Neuroscience" },
   { value: "developmental-biology", label: "Developmental Biology" },
   { value: "evolutionary-biology", label: "Evolutionary Biology" },
   { value: "ecology", label: "Ecology" },
   { value: "marine-biology", label: "Marine Biology" },
   { value: "botany", label: "Botany" },
   { value: "zoology", label: "Zoology" },
-
   // Chemistry
   { value: "organic-chemistry", label: "Organic Chemistry" },
   { value: "inorganic-chemistry", label: "Inorganic Chemistry" },
@@ -29,12 +58,10 @@ export const researchAreas = [
   { value: "materials-chemistry", label: "Materials Chemistry" },
   { value: "computational-chemistry", label: "Computational Chemistry" },
   { value: "environmental-chemistry", label: "Environmental Chemistry" },
-
   // Physics
   { value: "quantum-physics", label: "Quantum Physics" },
   { value: "particle-physics", label: "Particle Physics" },
   { value: "nuclear-physics", label: "Nuclear Physics" },
-  { value: "astrophysics", label: "Astrophysics" },
   { value: "cosmology", label: "Cosmology" },
   { value: "condensed-matter-physics", label: "Condensed Matter Physics" },
   { value: "optics", label: "Optics" },
@@ -42,7 +69,6 @@ export const researchAreas = [
   { value: "fluid-dynamics", label: "Fluid Dynamics" },
   { value: "plasma-physics", label: "Plasma Physics" },
   { value: "biophysics", label: "Biophysics" },
-
   // Earth Sciences
   { value: "geology", label: "Geology" },
   { value: "geophysics", label: "Geophysics" },
@@ -54,7 +80,6 @@ export const researchAreas = [
   { value: "seismology", label: "Seismology" },
   { value: "volcanology", label: "Volcanology" },
   { value: "paleontology", label: "Paleontology" },
-
   // Medicine & Health Sciences
   { value: "anatomy", label: "Anatomy" },
   { value: "physiology", label: "Physiology" },
@@ -69,22 +94,15 @@ export const researchAreas = [
   { value: "pediatrics", label: "Pediatrics" },
   { value: "geriatrics", label: "Geriatrics" },
   { value: "psychiatry", label: "Psychiatry" },
-
   // Engineering & Technology
   { value: "biomedical-engineering", label: "Biomedical Engineering" },
   { value: "chemical-engineering", label: "Chemical Engineering" },
   { value: "civil-engineering", label: "Civil Engineering" },
   { value: "electrical-engineering", label: "Electrical Engineering" },
   { value: "mechanical-engineering", label: "Mechanical Engineering" },
-  { value: "computer-science", label: "Computer Science" },
-  { value: "artificial-intelligence", label: "Artificial Intelligence" },
-  { value: "machine-learning", label: "Machine Learning" },
   { value: "robotics", label: "Robotics" },
-  { value: "nanotechnology", label: "Nanotechnology" },
   { value: "materials-science", label: "Materials Science" },
-
   // Interdisciplinary Fields
-  { value: "biotechnology", label: "Biotechnology" },
   { value: "systems-biology", label: "Systems Biology" },
   { value: "synthetic-biology", label: "Synthetic Biology" },
   { value: "computational-biology", label: "Computational Biology" },
@@ -92,7 +110,4 @@ export const researchAreas = [
   { value: "renewable-energy", label: "Renewable Energy" },
   { value: "sustainable-development", label: "Sustainable Development" },
   { value: "climate-science", label: "Climate Science" },
-  { value: "data-science", label: "Data Science" },
-  { value: "cognitive-science", label: "Cognitive Science" },
-  { value: "astrobiology", label: "Astrobiology" },
 ].sort((a, b) => a.label.localeCompare(b.label)) // Sort alphabetically by label 

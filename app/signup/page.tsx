@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useRef, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -14,105 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { X, Search, Check } from "lucide-react"
 import { signUp } from "@/lib/auth"
 import { useToast } from "@/hooks/use-toast"
-
-// Comprehensive list of research areas (flattened, no categories)
-const researchAreas = [
-  // Biology
-  { value: "molecular-biology", label: "Molecular Biology" },
-  { value: "cell-biology", label: "Cell Biology" },
-  { value: "genetics", label: "Genetics" },
-  { value: "genomics", label: "Genomics" },
-  { value: "proteomics", label: "Proteomics" },
-  { value: "bioinformatics", label: "Bioinformatics" },
-  { value: "microbiology", label: "Microbiology" },
-  { value: "virology", label: "Virology" },
-  { value: "immunology", label: "Immunology" },
-  { value: "neuroscience", label: "Neuroscience" },
-  { value: "developmental-biology", label: "Developmental Biology" },
-  { value: "evolutionary-biology", label: "Evolutionary Biology" },
-  { value: "ecology", label: "Ecology" },
-  { value: "marine-biology", label: "Marine Biology" },
-  { value: "botany", label: "Botany" },
-  { value: "zoology", label: "Zoology" },
-
-  // Chemistry
-  { value: "organic-chemistry", label: "Organic Chemistry" },
-  { value: "inorganic-chemistry", label: "Inorganic Chemistry" },
-  { value: "physical-chemistry", label: "Physical Chemistry" },
-  { value: "analytical-chemistry", label: "Analytical Chemistry" },
-  { value: "biochemistry", label: "Biochemistry" },
-  { value: "medicinal-chemistry", label: "Medicinal Chemistry" },
-  { value: "polymer-chemistry", label: "Polymer Chemistry" },
-  { value: "materials-chemistry", label: "Materials Chemistry" },
-  { value: "computational-chemistry", label: "Computational Chemistry" },
-  { value: "environmental-chemistry", label: "Environmental Chemistry" },
-
-  // Physics
-  { value: "quantum-physics", label: "Quantum Physics" },
-  { value: "particle-physics", label: "Particle Physics" },
-  { value: "nuclear-physics", label: "Nuclear Physics" },
-  { value: "astrophysics", label: "Astrophysics" },
-  { value: "cosmology", label: "Cosmology" },
-  { value: "condensed-matter-physics", label: "Condensed Matter Physics" },
-  { value: "optics", label: "Optics" },
-  { value: "thermodynamics", label: "Thermodynamics" },
-  { value: "fluid-dynamics", label: "Fluid Dynamics" },
-  { value: "plasma-physics", label: "Plasma Physics" },
-  { value: "biophysics", label: "Biophysics" },
-
-  // Earth Sciences
-  { value: "geology", label: "Geology" },
-  { value: "geophysics", label: "Geophysics" },
-  { value: "geochemistry", label: "Geochemistry" },
-  { value: "meteorology", label: "Meteorology" },
-  { value: "climatology", label: "Climatology" },
-  { value: "oceanography", label: "Oceanography" },
-  { value: "hydrology", label: "Hydrology" },
-  { value: "seismology", label: "Seismology" },
-  { value: "volcanology", label: "Volcanology" },
-  { value: "paleontology", label: "Paleontology" },
-
-  // Medicine & Health Sciences
-  { value: "anatomy", label: "Anatomy" },
-  { value: "physiology", label: "Physiology" },
-  { value: "pathology", label: "Pathology" },
-  { value: "pharmacology", label: "Pharmacology" },
-  { value: "toxicology", label: "Toxicology" },
-  { value: "epidemiology", label: "Epidemiology" },
-  { value: "public-health", label: "Public Health" },
-  { value: "cardiology", label: "Cardiology" },
-  { value: "neurology", label: "Neurology" },
-  { value: "oncology", label: "Oncology" },
-  { value: "pediatrics", label: "Pediatrics" },
-  { value: "geriatrics", label: "Geriatrics" },
-  { value: "psychiatry", label: "Psychiatry" },
-
-  // Engineering & Technology
-  { value: "biomedical-engineering", label: "Biomedical Engineering" },
-  { value: "chemical-engineering", label: "Chemical Engineering" },
-  { value: "civil-engineering", label: "Civil Engineering" },
-  { value: "electrical-engineering", label: "Electrical Engineering" },
-  { value: "mechanical-engineering", label: "Mechanical Engineering" },
-  { value: "computer-science", label: "Computer Science" },
-  { value: "artificial-intelligence", label: "Artificial Intelligence" },
-  { value: "machine-learning", label: "Machine Learning" },
-  { value: "robotics", label: "Robotics" },
-  { value: "nanotechnology", label: "Nanotechnology" },
-  { value: "materials-science", label: "Materials Science" },
-
-  // Interdisciplinary Fields
-  { value: "biotechnology", label: "Biotechnology" },
-  { value: "systems-biology", label: "Systems Biology" },
-  { value: "synthetic-biology", label: "Synthetic Biology" },
-  { value: "computational-biology", label: "Computational Biology" },
-  { value: "quantum-computing", label: "Quantum Computing" },
-  { value: "renewable-energy", label: "Renewable Energy" },
-  { value: "sustainable-development", label: "Sustainable Development" },
-  { value: "climate-science", label: "Climate Science" },
-  { value: "data-science", label: "Data Science" },
-  { value: "cognitive-science", label: "Cognitive Science" },
-  { value: "astrobiology", label: "Astrobiology" },
-].sort((a, b) => a.label.localeCompare(b.label)) // Sort alphabetically by label
+import { researchAreas } from "@/lib/research-areas"
 
 export default function SignupPage() {
   const router = useRouter()

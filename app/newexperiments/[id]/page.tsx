@@ -1272,14 +1272,12 @@ export default function ExperimentViewPage() {
                         if (!e.target.files) return;
                         const selected = Array.from(e.target.files);
                         setNewFiles(prev => {
-                          // Filter out duplicates by name and size
                           const all = [...prev, ...selected];
                           const unique = all.filter((file, idx, arr) =>
                             arr.findIndex(f => f.name === file.name && f.size === file.size) === idx
                           );
                           return unique;
                         });
-                        // Reset input value so the same file can be selected again if needed
                         e.target.value = "";
                       }}
                     />

@@ -25,6 +25,7 @@ import { format } from "date-fns"
 import { CalendarIcon, Beaker } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { supabase } from "@/lib/supabase"
+import { researchAreas } from "@/lib/research-areas"
 
 interface CreateExperimentDialogProps {
   isOpen: boolean
@@ -254,12 +255,9 @@ export function CreateExperimentDialog({ isOpen, onClose, labId }: CreateExperim
                 <SelectValue placeholder="Select categories" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="neuroscience">NEUROSCIENCE</SelectItem>
-                <SelectItem value="brain-mapping">BRAIN MAPPING</SelectItem>
-                <SelectItem value="cognitive-science">COGNITIVE SCIENCE</SelectItem>
-                <SelectItem value="ai">ARTIFICIAL INTELLIGENCE</SelectItem>
-                <SelectItem value="machine-learning">MACHINE LEARNING</SelectItem>
-                <SelectItem value="neural-networks">NEURAL NETWORKS</SelectItem>
+                {researchAreas.map(area => (
+                  <SelectItem key={area.value} value={area.value}>{area.label.toUpperCase()}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
 

@@ -265,7 +265,7 @@ export default function ExperimentsPage() {
                 </div>
 
                 <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" asChild>
-                  <Link href="/experiments/view">
+                  <Link href={`/newexperiments/${experiment.id}`}>
                     <FlaskConical className="h-4 w-4 mr-2" />
                     View Experiment
                   </Link>
