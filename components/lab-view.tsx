@@ -506,15 +506,30 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
     )
   }
 
-  const toggleDonations = () => {
-    setIsDonationsActive(!isDonationsActive)
-    toast({
-      title: isDonationsActive ? "Donations Deactivated" : "Donations Activated",
-      description: isDonationsActive
-        ? "One-time donations have been deactivated"
-        : "One-time donations have been activated",
-    })
-  }
+  const toggleDonations = async () => {
+    if (!lab?.labId) return;
+    const newValue = !isDonationsActive;
+    const { error } = await supabase
+      .from("labs")
+      .update({ one_time_donation_option: newValue })
+      .eq("labId", lab.labId);
+    if (!error) {
+      setIsDonationsActive(newValue);
+      toast({
+        title: newValue ? "Donations Activated" : "Donations Deactivated",
+        description: newValue
+          ? "One-time donations have been activated"
+          : "One-time donations have been deactivated",
+      });
+      refetchLab && refetchLab();
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to update donation status.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const filteredContributions = contributions
     .filter((contribution) => {
@@ -790,13 +805,12 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                   toggleExpand={toggleExpand}
                   funds={funds}
                   setFunds={setFunds}
+                  membership={membership}
+                  oneTimeDonation={oneTimeDonation}
                   isDonationsActive={isDonationsActive}
                   toggleDonations={toggleDonations}
                   handleGuestAction={localHandleGuestAction}
-                  handleManageMembership={handleManageMembership}
                   labId={lab.labId}
-                  membership={membership}
-                  oneTimeDonation={oneTimeDonation}
                   labsMembershipOption={labsMembershipOption}
                   refetchMembership={refetchMembership}
                   refetchOneTimeDonation={refetchOneTimeDonation}

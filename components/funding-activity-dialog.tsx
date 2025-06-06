@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,153 +13,76 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-
-// Sample funding activity data
-const fundingActivityData = [
-  {
-    id: 1,
-    type: "donation",
-    user: {
-      name: "Alex Wong",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "AW",
-    },
-    amount: 50,
-    fund: "NEW EQUIPMENT FUND",
-    date: "2024-03-18T14:32:00Z",
-    message: "Keep up the great research!",
-  },
-  {
-    id: 2,
-    type: "subscription",
-    user: {
-      name: "Maria Rodriguez",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "MR",
-    },
-    amount: 25,
-    fund: "GENERAL FUND",
-    date: "2024-03-17T09:15:00Z",
-  },
-  {
-    id: 3,
-    type: "donation",
-    user: {
-      name: "John Smith",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "JS",
-    },
-    amount: 100,
-    fund: "RESEARCH ASSISTANT STIPEND",
-    date: "2024-03-15T16:45:00Z",
-    message: "Supporting the next generation of researchers!",
-  },
-  {
-    id: 4,
-    type: "subscription",
-    user: {
-      name: "Emily Chen",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "EC",
-    },
-    amount: 25,
-    fund: "CONFERENCE TRAVEL",
-    date: "2024-03-14T11:20:00Z",
-  },
-  {
-    id: 5,
-    type: "donation",
-    user: {
-      name: "David Kim",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "DK",
-    },
-    amount: 75,
-    fund: "NEW EQUIPMENT FUND",
-    date: "2024-03-12T13:10:00Z",
-  },
-  {
-    id: 6,
-    type: "donation",
-    user: {
-      name: "Sarah Johnson",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "SJ",
-    },
-    amount: 200,
-    fund: "GENERAL FUND",
-    date: "2024-03-10T15:30:00Z",
-    message: "Excited to see where this research leads!",
-  },
-  {
-    id: 7,
-    type: "subscription",
-    user: {
-      name: "Michael Brown",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "MB",
-    },
-    amount: 25,
-    fund: "RESEARCH ASSISTANT STIPEND",
-    date: "2024-03-08T10:45:00Z",
-  },
-  {
-    id: 8,
-    type: "donation",
-    user: {
-      name: "Lisa Park",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "LP",
-    },
-    amount: 150,
-    fund: "CONFERENCE TRAVEL",
-    date: "2024-03-05T09:20:00Z",
-    message: "Hope this helps researchers share their findings!",
-  },
-  {
-    id: 9,
-    type: "subscription",
-    user: {
-      name: "Robert Garcia",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "RG",
-    },
-    amount: 25,
-    fund: "GENERAL FUND",
-    date: "2024-03-03T14:15:00Z",
-  },
-  {
-    id: 10,
-    type: "donation",
-    user: {
-      name: "Jennifer Lee",
-      avatar: "/placeholder.svg?height=40&width=40",
-      initials: "JL",
-    },
-    amount: 50,
-    fund: "NEW EQUIPMENT FUND",
-    date: "2024-03-01T11:30:00Z",
-  },
-]
+import { supabase } from "@/lib/supabase"
 
 interface FundingActivityDialogProps {
   isOpen?: boolean
   onOpenChange?: (open: boolean) => void
+  labId: string
 }
 
-export function FundingActivityDialog({ isOpen, onOpenChange }: FundingActivityDialogProps) {
-  // Local state for uncontrolled mode
+export function FundingActivityDialog({ isOpen, onOpenChange, labId }: FundingActivityDialogProps) {
   const [localOpen, setLocalOpen] = useState(false)
+  const [activities, setActivities] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [userMap, setUserMap] = useState<Record<string, { name: string; initials: string; avatar?: string }>>({})
 
-  // Format date to a more readable format
+  useEffect(() => {
+    if (!labId) return;
+    setLoading(true)
+    async function fetchActivity() {
+      // Funding-related activity types
+      const fundingTypes = [
+        'lab_subscribed',
+        'funding_goal',
+        'donation_edited',
+        'funding_created',
+        'funding_edited',
+        'lab_poked',
+        'membership_edited',
+        'donation_made',
+        'membership_subscribed',
+      ]
+      const { data, error } = await supabase
+        .from('activity')
+        .select('*')
+        .eq('lab_from', labId)
+        .in('activity_type', fundingTypes)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (error) {
+        setActivities([])
+        setLoading(false)
+        return
+      }
+      setActivities(data || [])
+      // Fetch user info for all unique performed_by
+      const userIds = Array.from(new Set((data || []).map((a: any) => a.performed_by).filter(Boolean)))
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id,username,profilePic')
+          .in('user_id', userIds)
+        const map: Record<string, { name: string; initials: string; avatar?: string }> = {}
+        profiles?.forEach((profile: any) => {
+          const initials = profile.username ? profile.username.split(' ').map((n: string) => n[0]).join('').toUpperCase() : '??'
+          map[profile.user_id] = { name: profile.username || 'Unknown', initials, avatar: profile.profilePic }
+        })
+        setUserMap(map)
+      }
+      setLoading(false)
+    }
+    fetchActivity()
+  }, [labId])
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
-    return new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "numeric",
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
       hour12: true,
     }).format(date)
   }
@@ -168,45 +91,57 @@ export function FundingActivityDialog({ isOpen, onOpenChange }: FundingActivityD
     <>
       <DialogHeader>
         <DialogTitle>FUNDING ACTIVITY</DialogTitle>
-        <DialogDescription>Recent donations and subscriptions supporting our research</DialogDescription>
+        <DialogDescription>Recent funding-related activity for this lab</DialogDescription>
       </DialogHeader>
-
       <ScrollArea className="h-[60vh] pr-4">
         <div className="space-y-4 py-2">
-          {fundingActivityData.map((activity) => (
-            <div
-              key={activity.id}
-              className="flex items-start gap-3 p-3 rounded-md border border-secondary hover:bg-secondary/20 transition-colors"
-            >
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={activity.user.avatar} alt={activity.user.name} />
-                <AvatarFallback>{activity.user.initials}</AvatarFallback>
-              </Avatar>
-
-              <div className="flex-1 space-y-1">
-                <div className="flex items-center justify-between">
-                  <div className="font-medium">{activity.user.name}</div>
-                  <Badge className={activity.type === "subscription" ? "bg-blue-600" : "bg-accent"}>
-                    {activity.type === "subscription" ? "SUBSCRIPTION" : "DONATION"}
-                  </Badge>
+          {loading ? (
+            <div className="text-center text-muted-foreground py-8">Loading activity...</div>
+          ) : activities.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No funding activity found.</div>
+          ) : (
+            activities.map((activity) => {
+              const user = userMap[activity.performed_by] || { name: 'Unknown', initials: '??', avatar: undefined }
+              let typeLabel = 'ACTIVITY'
+              let desc = activity.activity_name || ''
+              if (activity.activity_type === 'lab_subscribed' || activity.activity_type === 'membership_subscribed') typeLabel = 'SUBSCRIPTION'
+              if (activity.activity_type === 'donation_made') typeLabel = 'DONATION'
+              if (activity.activity_type === 'funding_goal' || activity.activity_type === 'funding_created' || activity.activity_type === 'funding_edited') typeLabel = 'FUNDING GOAL'
+              if (activity.activity_type === 'lab_poked') typeLabel = 'POKE'
+              if (activity.activity_type === 'donation_edited') typeLabel = 'DONATION EDITED'
+              if (activity.activity_type === 'membership_edited') typeLabel = 'MEMBERSHIP EDITED'
+              return (
+                <div
+                  key={activity.activity_id || activity.id || activity.created_at}
+                  className="flex items-start gap-3 p-3 rounded-md border border-secondary hover:bg-secondary/20 transition-colors"
+                >
+                  <Avatar className="h-10 w-10">
+                    {user.avatar ? (
+                      <AvatarImage src={user.avatar} alt={user.name} />
+                    ) : (
+                      <AvatarFallback>{user.initials}</AvatarFallback>
+                    )}
+                  </Avatar>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">{user.name}</div>
+                      <Badge className={typeLabel === 'SUBSCRIPTION' ? 'bg-blue-600' : typeLabel === 'DONATION' ? 'bg-accent' : 'bg-secondary'}>
+                        {typeLabel}
+                      </Badge>
+                    </div>
+                    <p className="text-sm">{desc}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(activity.created_at)}</p>
+                  </div>
                 </div>
-
-                <p className="text-sm">
-                  {activity.type === "subscription"
-                    ? `Paid monthly membership of $${activity.amount} towards ${activity.fund}`
-                    : `Donated $${activity.amount} to ${activity.fund}`}
-                </p>
-                {activity.message && <p className="text-sm text-muted-foreground">{activity.message}</p>}
-                <p className="text-xs text-muted-foreground">{formatDate(activity.date)}</p>
-              </div>
-            </div>
-          ))}
+              )
+            })
+          )}
         </div>
       </ScrollArea>
     </>
   )
 
-  if (typeof isOpen === "boolean" && onOpenChange) {
+  if (typeof isOpen === 'boolean' && onOpenChange) {
     return content
   }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -38,7 +38,6 @@ interface LabFundingTabProps {
   isDonationsActive: boolean
   toggleDonations: () => void
   handleGuestAction: () => void
-  handleManageMembership: () => void
   labId: string
   labsMembershipOption: boolean
   refetchMembership: () => Promise<void>
@@ -59,7 +58,6 @@ export function LabFundingTab({
   isDonationsActive,
   toggleDonations,
   handleGuestAction,
-  handleManageMembership,
   labId,
   labsMembershipOption,
   refetchMembership,
@@ -74,7 +72,6 @@ export function LabFundingTab({
     isMembershipActive: !!membership && labsMembershipOption
   })
   const [showDonationDialog, setShowDonationDialog] = useState(false)
-  const [showMembershipDialog, setShowMembershipDialog] = useState(false)
   const [donationName, setDonationName] = useState("")
   const [donationDescription, setDonationDescription] = useState("")
   const [donationActive, setDonationActive] = useState(true)
@@ -106,23 +103,18 @@ export function LabFundingTab({
   const [pokeLoading, setPokeLoading] = useState(false)
   const [pokeFeed, setPokeFeed] = useState<any[]>([])
   const [usernameMap, setUsernameMap] = useState<Record<string, string>>({})
-  const [editMembershipLoading, setEditMembershipLoading] = useState(false)
   const [editDonationLoading, setEditDonationLoading] = useState(false)
   const [donorCount, setDonorCount] = useState<number | null>(null)
   const [avgDonation, setAvgDonation] = useState<number | null>(null)
   const [donorStatsLoading, setDonorStatsLoading] = useState(true)
   const [subscriberCount, setSubscriberCount] = useState(0)
-  const [userSubscription, setUserSubscription] = useState<any>(null)
   const [showSubscribeDialog, setShowSubscribeDialog] = useState(false)
-  const [membershipPaymentMethod, setMembershipPaymentMethod] = useState<any>(null)
-  const [loadingMembershipPM, setLoadingMembershipPM] = useState(false)
-  const [showCancelDialog, setShowCancelDialog] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
   const [pendingDeleteFundId, setPendingDeleteFundId] = useState<string | null>(null)
   const [selectedMembershipFund, setSelectedMembershipFund] = useState(funds[0]?.id || "")
   const [subscribing, setSubscribing] = useState(false)
   const [subscribeSuccess, setSubscribeSuccess] = useState(false)
   const [subscribeError, setSubscribeError] = useState("")
+  const hasCreatedGeneralFund = useRef(false)
 
   // Helper to determine if membership is set up and active
   const isMembershipSetUp = !!membership
@@ -182,6 +174,34 @@ export function LabFundingTab({
     refetchFunds();
   }, [labId]);
 
+  // Automatically create GENERAL FUND when funding is set up and GENERAL FUND does not exist
+  useEffect(() => {
+    if (!fundingSetup || !labId || hasCreatedGeneralFund.current) return;
+    async function ensureGeneralFund() {
+      // Check if GENERAL FUND exists
+      const { data, error } = await supabase
+        .from("funding_goals")
+        .select("id")
+        .eq("lab_id", labId)
+        .eq("goalName", "GENERAL FUND")
+        .maybeSingle();
+      if (!data && !error) {
+        // Create GENERAL FUND
+        await supabase.from("funding_goals").insert({
+          lab_id: labId,
+          goalName: "GENERAL FUND",
+          goal_description: "Support the lab's general operations and needs.",
+          goal_amount: null,
+          amount_contributed: 0,
+          created_by: user?.id || null,
+        });
+        await refetchFunds();
+      }
+      hasCreatedGeneralFund.current = true;
+    }
+    ensureGeneralFund();
+  }, [fundingSetup, labId]);
+
   // Handler to refetch funds after creation
   const handleFundCreated = async (logActivity = false) => {
     // Refetch funds
@@ -224,31 +244,6 @@ export function LabFundingTab({
     }
   };
 
-  // Handler to save membership setup
-  const handleSaveMembership = async (data: any) => {
-    try {
-      const { error } = await supabase
-        .from("recurring_funding")
-        .insert({
-          name: data.name,
-          description: data.description,
-          monthly_amount: data.amount,
-          labId: labId,
-          created_by: user?.id || null,
-        });
-      if (error) throw error;
-      // Log activity for membership setup
-      await handleFundCreated(true)
-      toast({ title: "Success", description: "Membership setup has been saved." });
-      setShowSetupMembershipDialog(false);
-      await refetchMembership();
-    } catch (err) {
-      let message = "Failed to save membership setup";
-      if (err instanceof Error) message = err.message;
-      toast({ title: "Error", description: message });
-    }
-  };
-
   // Handler to edit donation
   const handleEditDonation = async (data: any) => {
     try {
@@ -266,28 +261,6 @@ export function LabFundingTab({
       await refetchOneTimeDonation();
     } catch (err) {
       let message = "Failed to update donation settings";
-      if (err instanceof Error) message = err.message;
-      toast({ title: "Error", description: message });
-    }
-  }
-
-  // Handler to edit membership
-  const handleEditMembership = async (data: any) => {
-    try {
-      const { error } = await supabase
-        .from("recurring_funding")
-        .update({
-          name: data.name,
-          description: data.description,
-          monthly_amount: data.amount,
-        })
-        .eq("id", membership.id);
-      if (error) throw error;
-      toast({ title: "Success", description: "Membership settings have been updated." });
-      setShowEditMembershipDialog(false);
-      await refetchMembership();
-    } catch (err) {
-      let message = "Failed to update membership settings";
       if (err instanceof Error) message = err.message;
       toast({ title: "Error", description: message });
     }
@@ -507,118 +480,6 @@ export function LabFundingTab({
     }
   }
 
-  useEffect(() => {
-    async function fetchUserSubscription() {
-      if (!user?.id || !labId) {
-        setUserSubscription(null);
-        return;
-      }
-      const { data, error } = await supabase
-        .from('labSubscribers')
-        .select('*')
-        .eq('userId', user.id)
-        .eq('labId', labId)
-        .single();
-      if (!error && data) setUserSubscription(data);
-      else setUserSubscription(null);
-    }
-    fetchUserSubscription();
-  }, [user?.id, labId]);
-
-  // Fetch payment method when subscribe dialog opens
-  useEffect(() => {
-    if (showSubscribeDialog && user?.id) {
-      setLoadingMembershipPM(true);
-      fetch("/api/stripe/get-payment-info", {
-        method: "POST",
-        headers: { "x-user-id": user.id },
-      })
-        .then(res => res.json())
-        .then(data => {
-          setMembershipPaymentMethod(data.error ? null : data);
-        })
-        .finally(() => setLoadingMembershipPM(false));
-    } else if (!showSubscribeDialog) {
-      setMembershipPaymentMethod(null);
-    }
-  }, [showSubscribeDialog, user?.id]);
-
-  // Handle subscribe
-  async function handleSubscribe() {
-    if (!user || !selectedMembershipFund) return;
-    setSubscribing(true);
-    setSubscribeError("");
-    try {
-      const res = await fetch("/api/stripe/create-membership-subscription", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          labId,
-          goalId: selectedMembershipFund,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        // Log activity for successful subscription
-        const selectedFund = funds.find(f => f.id === selectedMembershipFund);
-        const activityData = {
-          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          created_at: new Date().toISOString(),
-          activity_name: `Lab Membership: Subscribed $${membershipAmount.toFixed(2)}/mo to ${selectedFund?.goalName || 'Lab Membership'}`,
-          activity_type: "lab_subscribed",
-          performed_by: user.id,
-          lab_from: labId
-        };
-        
-        const { error: activityError } = await supabase.from("activity").insert(activityData);
-        if (activityError) {
-          console.error("Failed to log subscription activity:", activityError);
-        }
-
-        setSubscribeSuccess(true);
-        setTimeout(() => {
-          setShowSubscribeDialog(false);
-          setSubscribeSuccess(false);
-          refetchMembership();
-        }, 2000);
-      } else {
-        setSubscribeError(data.error || "Subscription failed. Please try again.");
-      }
-    } catch (err) {
-      setSubscribeError("An unexpected error occurred. Please try again.");
-    } finally {
-      setSubscribing(false);
-    }
-  }
-
-  // Handler to cancel membership subscription
-  async function handleCancelSubscription() {
-    if (!userSubscription) return;
-    setCancelling(true);
-    setSubscribeError("");
-    try {
-      const res = await fetch("/api/stripe/cancel-membership-subscription", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscriptionId: userSubscription.stripe_id }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setShowCancelDialog(false);
-        setUserSubscription(null);
-        toast({ title: "Subscription Cancelled", description: "Your membership has been cancelled." });
-        refetchMembership();
-      } else {
-        setSubscribeError(data.error || "Cancellation failed. Please try again.");
-      }
-    } catch (err) {
-      setSubscribeError("An unexpected error occurred. Please try again.");
-    } finally {
-      setCancelling(false);
-    }
-  }
-
   // Handler to delete a funding goal
   const handleDeleteFund = async (goalId: string) => {
     try {
@@ -636,44 +497,6 @@ export function LabFundingTab({
       }
     } catch (err) {
       toast({ title: "Error", description: "An unexpected error occurred." });
-    }
-  };
-
-  // Handler to toggle membership active/inactive
-  const handleToggleMembershipActive = async () => {
-    if (!labId) return;
-    try {
-      const { error } = await supabase
-        .from('labs')
-        .update({ membership_option: !labsMembershipOption })
-        .eq('labId', labId);
-      if (error) {
-        toast({ title: 'Error', description: 'Failed to update membership status.' });
-        return;
-      }
-      toast({ title: labsMembershipOption ? 'Membership Deactivated' : 'Membership Activated' });
-      await refetchMembership();
-    } catch (err) {
-      toast({ title: 'Error', description: 'An unexpected error occurred.' });
-    }
-  };
-
-  // Handler to toggle one-time donation active/inactive
-  const handleToggleDonationActive = async () => {
-    if (!labId) return;
-    try {
-      const { error } = await supabase
-        .from('labs')
-        .update({ one_time_donation_option: !isDonationsActive })
-        .eq('labId', labId);
-      if (error) {
-        toast({ title: 'Error', description: 'Failed to update donation status.' });
-        return;
-      }
-      toast({ title: isDonationsActive ? 'Donations Deactivated' : 'Donations Activated' });
-      await refetchOneTimeDonation();
-    } catch (err) {
-      toast({ title: 'Error', description: 'An unexpected error occurred.' });
     }
   };
 
@@ -966,224 +789,8 @@ export function LabFundingTab({
         )}
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Membership Tile */}
-          <div className="relative">
-            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground/60 uppercase tracking-wide">
-              MONTHLY SUBSCRIPTION
-            </div>
-            <Card className={`border-accent ${isMembershipSetUp && !isMembershipActive ? "opacity-60" : ""}`}>
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">{membership?.name || "LAB MEMBERSHIP"}</CardTitle>
-                    <CardDescription>{membership?.description || "No description yet."}</CardDescription>
-                  </div>
-                  {isAdmin && isMembershipSetUp && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={(isMembershipActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
-                      onClick={handleToggleMembershipActive}
-                    >
-                      {isMembershipActive ? (
-                        <>
-                          <PowerOff className="h-4 w-4 mr-1" />
-                          DEACTIVATE
-                        </>
-                      ) : (
-                        <>
-                          <Power className="h-4 w-4 mr-1" />
-                          ACTIVATE
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-                {!isMembershipActive && isAdmin && isMembershipSetUp && (
-                  <div className="mt-2 text-sm text-amber-500 font-medium">MEMBERSHIPS CURRENTLY DISABLED</div>
-                )}
-              </CardHeader>
-              <CardContent>
-                {isMembershipSetUp && (
-                  <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                    <div className="bg-secondary/50 rounded px-2 py-1">
-                      <span className="font-semibold text-accent">${membership.monthly_amount || 0}</span> / month
-                    </div>
-                    <div className="bg-secondary/50 rounded px-2 py-1">
-                      Subscribers: <span className="font-semibold text-accent">{subscriberCount}</span>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter>
-                {isAdmin ? (
-                  isMembershipSetUp ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 border-accent text-accent hover:bg-secondary"
-                      onClick={async () => {
-                        setEditMembershipLoading(true);
-                        const { data, error } = await supabase
-                          .from("recurring_funding")
-                          .select("*")
-                          .eq("id", membership.id)
-                          .single();
-                        if (!error && data) {
-                          setEditMembershipName(data.name || "LAB MEMBERSHIP");
-                          setEditMembershipDescription(data.description || "");
-                          setEditMembershipAmount(data.monthly_amount?.toString() || "");
-                        }
-                        setEditMembershipLoading(false);
-                        setShowEditMembershipDialog(true);
-                      }}
-                    >
-                      <Edit2 className="h-4 w-4 mr-2" />
-                      EDIT
-                    </Button>
-                  ) : (
-                    <Button 
-                      className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
-                      onClick={() => setShowSetupMembershipDialog(true)}
-                    >
-                      SET UP
-                    </Button>
-                  )
-                ) : isGuest ? (
-                  <Button 
-                    className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 
-                    onClick={handleGuestAction} 
-                    disabled={!isMembershipActive || !user}
-                    title={!user ? "You must be logged in to subscribe" : ""}
-                  >
-                    {isMembershipActive ? (!user ? "LOGIN TO SUBSCRIBE" : "SUBSCRIBE") : "SET UP"}
-                  </Button>
-                ) : (!userSubscription && isMembershipActive && user) ? (
-                  <>
-                    <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setShowSubscribeDialog(true)}>
-                      SUBSCRIBE
-                    </Button>
-                    <Dialog open={showSubscribeDialog} onOpenChange={setShowSubscribeDialog}>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Subscribe to Lab Membership</DialogTitle>
-                          <DialogDescription>
-                            Support this lab with a recurring monthly membership. Select a fund/goal for your membership to support.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <div>
-                            <Label>Select Fund/Goal</Label>
-                            <RadioGroup value={selectedMembershipFund} onValueChange={setSelectedMembershipFund} className="max-h-[40vh] overflow-y-auto pr-2">
-                              {funds.map((fund) => (
-                                <div key={fund.id} className="flex items-start space-x-2 p-2 rounded-md hover:bg-secondary/50 mb-2">
-                                  <RadioGroupItem value={fund.id} id={`membership-fund-${fund.id}`} className="mt-1" />
-                                  <div className="grid gap-1.5 leading-none">
-                                    <Label htmlFor={`membership-fund-${fund.id}`} className="font-medium">
-                                      {fund.goalName || fund.name}
-                                    </Label>
-                                    <p className="text-sm text-muted-foreground">{fund.goal_description || fund.description}</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </RadioGroup>
-                          </div>
-                          <div>
-                            <Label>Monthly Amount</Label>
-                            <div className="text-md font-semibold">${membershipAmount.toFixed(2)}</div>
-                          </div>
-                          <div>
-                            <Label>HDX Fee (2.5%)</Label>
-                            <div className="text-md">${membershipFee.toFixed(2)}</div>
-                          </div>
-                          <div>
-                            <Label>Net to Lab</Label>
-                            <div className="text-md font-semibold text-green-700">${membershipNet.toFixed(2)}</div>
-                          </div>
-                          <div>
-                            <Label>Payment Method</Label>
-                            {loadingMembershipPM ? (
-                              <div>Loading...</div>
-                            ) : membershipPaymentMethod ? (
-                              <div className="flex items-center gap-3">
-                                <span>{membershipPaymentMethod.brand?.toUpperCase() || membershipPaymentMethod.bank_name}</span>
-                                <span>•••• {membershipPaymentMethod.last4}</span>
-                                {membershipPaymentMethod.exp_month && membershipPaymentMethod.exp_year && (
-                                  <span>Exp: {membershipPaymentMethod.exp_month}/{membershipPaymentMethod.exp_year}</span>
-                                )}
-                                <Button size="sm" variant="outline" className="ml-2" asChild>
-                                  <a href="/profile">Change</a>
-                                </Button>
-                                <Button size="sm" variant="destructive" className="ml-1" asChild>
-                                  <a href="/profile">Remove</a>
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="text-red-500">No payment method found. <a href="/profile" className="underline">Add one in your profile</a>.</div>
-                            )}
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setShowSubscribeDialog(false)} disabled={subscribing}>Cancel</Button>
-                          <Button className="bg-accent text-primary-foreground" onClick={handleSubscribe} disabled={subscribing || !membershipPaymentMethod || !user}>
-                            {subscribing ? "Subscribing..." : `Confirm $${membershipAmount.toFixed(2)} / month`}
-                          </Button>
-                          {(user === null || membershipPaymentMethod === null) && (
-                            <div className="text-xs text-red-500 mt-2">
-                              {!user && "You must be logged in to subscribe."}
-                              {!membershipPaymentMethod && user && "You must add a payment method in your profile before subscribing."}
-                            </div>
-                          )}
-                        </DialogFooter>
-                        {subscribeError && <div className="text-red-500 text-sm mt-2">{subscribeError}</div>}
-                        {subscribeSuccess && (
-                          <div className="flex flex-col items-center mt-4">
-                            <div className="text-green-600 text-lg font-semibold mb-2">Subscription successful!</div>
-                            <div className="text-muted-foreground text-sm">Thank you for supporting this lab.</div>
-                          </div>
-                        )}
-                      </DialogContent>
-                    </Dialog>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      className="w-full bg-red-500 text-white hover:bg-red-600"
-                      onClick={() => setShowCancelDialog(true)}
-                    >
-                      Cancel Membership
-                    </Button>
-                    <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Cancel Membership?</DialogTitle>
-                          <DialogDescription>
-                            Are you sure you want to cancel your recurring membership? This action cannot be undone.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
-                            Keep Membership
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={handleCancelSubscription}
-                            disabled={cancelling}
-                          >
-                            {cancelling ? "Cancelling..." : "Confirm Cancel"}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </>
-                )}
-              </CardFooter>
-            </Card>
-          </div>
-
-          {/* One-Time Donation Tile */}
-          <div className="relative">
+        <div className="flex justify-center items-center w-full">
+          <div className="relative w-full max-w-md">
             <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground/60 uppercase tracking-wide">
               ONE-TIME DONATION
             </div>
@@ -1199,7 +806,7 @@ export function LabFundingTab({
                       variant="outline"
                       size="sm"
                       className={(isDonationActive ? "text-red-500 border-red-500" : "text-green-500 border-green-500") + " px-2 py-1 text-xs h-7 min-w-[90px]"}
-                      onClick={handleToggleDonationActive}
+                      onClick={toggleDonations}
                     >
                       {isDonationActive ? (
                         <>
@@ -1265,12 +872,28 @@ export function LabFundingTab({
                       SET UP
                     </Button>
                   )
-                ) : isGuest ? (
-                  <Button className="w-full bg-accent text-primary-foreground hover:bg-accent/90" onClick={handleGuestAction} disabled={!isDonationActive}>
-                    {isDonationActive ? "DONATE" : "SET UP"}
-                  </Button>
                 ) : (
-                  <OneTimeDonation labId={labId} funds={funds} onDonationSuccess={handleDonationSuccess} isDonationActive={isDonationActive} />
+                  <>
+                    <Button
+                      className="w-full bg-accent text-primary-foreground hover:bg-accent/90"
+                      onClick={handleGuestAction}
+                      disabled={!isDonationActive || !user}
+                      title={
+                        !isDonationActive
+                          ? "Donations are disabled"
+                          : !user
+                            ? "You must be logged in to donate"
+                            : "Donate to this lab"
+                      }
+                    >
+                      {isDonationActive
+                        ? (!user ? "LOGIN TO DONATE" : "DONATE")
+                        : "DONATE"}
+                    </Button>
+                    {!isDonationActive && (
+                      <div className="text-center text-amber-500 text-xs mt-2 font-medium">Donations are disabled</div>
+                    )}
+                  </>
                 )}
               </CardFooter>
             </Card>
@@ -1379,7 +1002,7 @@ export function LabFundingTab({
       <OverlayDialog open={showFundingActivity} onOpenChange={setShowFundingActivity}>
         <OverlayDialogContent className="max-w-3xl">
           <OverlayDialogTitle>Funding Activity</OverlayDialogTitle>
-          <FundingActivityDialog isOpen={showFundingActivity} onOpenChange={setShowFundingActivity} />
+          <FundingActivityDialog isOpen={showFundingActivity} onOpenChange={setShowFundingActivity} labId={labId} />
         </OverlayDialogContent>
       </OverlayDialog>
       {/* Donation Setup Dialog */}
@@ -1459,75 +1082,6 @@ export function LabFundingTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Membership Setup Dialog */}
-      <Dialog open={showSetupMembershipDialog} onOpenChange={setShowSetupMembershipDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Set Up Lab Membership</DialogTitle>
-            <DialogDescription>
-              Configure the options for recurring lab memberships.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Name</Label>
-              <Input value={editMembershipName} onChange={e => setEditMembershipName(e.target.value)} />
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea value={editMembershipDescription} onChange={e => setEditMembershipDescription(e.target.value)} />
-            </div>
-            <div>
-              <Label>Monthly Amount ($)</Label>
-              <Input 
-                type="number" 
-                min="1" 
-                value={editMembershipAmount} 
-                onChange={e => setEditMembershipAmount(e.target.value)} 
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSetupMembershipDialog(false)}>
-              Cancel
-            </Button>
-            <Button 
-              className="bg-accent text-primary-foreground"
-              onClick={() => handleSaveMembership({
-                name: editMembershipName,
-                description: editMembershipDescription,
-                amount: Number(editMembershipAmount)
-              })}
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Donation Dialog */}
-      <EditDonationDialog
-        initialName={editDonationName}
-        initialDescription={editDonationDescription}
-        initialSuggestedAmounts={editDonationAmounts}
-        isOpen={showEditDonationDialog}
-        onOpenChange={setShowEditDonationDialog}
-        onSave={handleEditDonation}
-        initialBenefits={[]}
-      />
-
-      {/* Edit Membership Dialog */}
-      <EditMembershipDialog
-        initialName={editMembershipName}
-        initialDescription={editMembershipDescription}
-        initialPrice={Number(editMembershipAmount) || 0}
-        open={showEditMembershipDialog}
-        onOpenChange={setShowEditMembershipDialog}
-        onSave={handleEditMembership}
-        initialIsActive={isMembershipActive}
-        initialBenefits={[]}
-      />
     </Card>
   )
 }
