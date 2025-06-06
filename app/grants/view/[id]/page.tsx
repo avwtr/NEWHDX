@@ -43,7 +43,7 @@ import { supabase } from "@/lib/supabase"
 export default function GrantPreviewPage() {
   const params = useParams();
   const router = useRouter();
-  const grantId = params.id as string;
+  const grantId = (params?.id ?? "") as string;
   const { user, signOut } = useAuth()
   const [currentStep, setCurrentStep] = useState<"userConfirmation" | "questions">("userConfirmation")
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -153,56 +153,6 @@ export default function GrantPreviewPage() {
     return <div className="container py-8 max-w-4xl text-center text-destructive">Grant not found.</div>
   }
 
-  // Function to render markdown-like formatting
-  const renderDescription = (text: string) => {
-    return text.split("\n\n").map((paragraph, i) => {
-      // Handle headings
-      if (paragraph.startsWith("## ")) {
-        return (
-          <h2 key={i} className="text-xl font-bold mt-6 mb-3">
-            {paragraph.substring(3)}
-          </h2>
-        )
-      }
-
-      // Handle lists
-      if (paragraph.includes("\n- ")) {
-        const [listTitle, ...items] = paragraph.split("\n- ")
-        return (
-          <div key={i} className="my-3">
-            <p className="mb-2">{listTitle}</p>
-            <ul className="list-disc pl-5 space-y-1">
-              {items.map((item, j) => (
-                <li key={j}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        )
-      }
-
-      // Handle bullet lists with *
-      if (paragraph.includes("\n* ")) {
-        const [listTitle, ...items] = paragraph.split("\n* ")
-        return (
-          <div key={i} className="my-3">
-            <p className="mb-2">{listTitle}</p>
-            <ul className="list-disc pl-5 space-y-1">
-              {items.map((item, j) => (
-                <li key={j}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        )
-      }
-
-      return (
-        <p key={i} className="my-3">
-          {paragraph}
-        </p>
-      )
-    })
-  }
-
   const handleNextQuestion = () => {
     if (currentQuestionIndex < grant.questions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1)
@@ -216,7 +166,14 @@ export default function GrantPreviewPage() {
   }
 
   // Map questions from Supabase to expected structure
-  const questions = (grant.questions || []).map((q: any) => ({
+  type GrantQuestion = {
+    id: number;
+    question_text: string;
+    question_type: string;
+    options?: string[];
+    character_limit?: number;
+  };
+  const questions = (grant.questions || []).map((q: GrantQuestion) => ({
     id: q.id,
     text: q.question_text,
     type: q.question_type,
@@ -242,7 +199,7 @@ export default function GrantPreviewPage() {
   }
 
   const handleSubmit = () => {
-    const allAnswered = questions.every((q) => answers[q.id])
+    const allAnswered = questions.every((q: { id: number }) => answers[q.id])
     if (!allAnswered) {
       alert("Please answer all questions before submitting.")
       return
