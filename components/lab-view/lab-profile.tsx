@@ -249,9 +249,11 @@ export default function LabProfile({
                   <Button
                     variant="default"
                     size="lg"
-                    className="font-bold px-6 py-2 text-base"
+                    className={`font-bold px-6 py-2 text-base${!user ? ' opacity-60 cursor-not-allowed' : ''}`}
                     onClick={onOpenContributeDialog}
                     data-testid="contribute-button"
+                    disabled={!user}
+                    title={!user ? 'Login to contribute' : undefined}
                   >
                     CONTRIBUTE +
                   </Button>
@@ -260,11 +262,14 @@ export default function LabProfile({
                   variant={isFollowing ? "default" : "outline"}
                   size="sm"
                   className={
-                    isFollowing
+                    (isFollowing
                       ? "bg-background text-foreground hover:bg-background/90"
-                      : "bg-accent text-background hover:bg-accent/90"
+                      : "bg-accent text-background hover:bg-accent/90") +
+                    (!user ? " opacity-60 cursor-not-allowed" : "")
                   }
                   onClick={isGuest ? handleGuestAction : setIsFollowing}
+                  disabled={!user}
+                  title={!user ? 'Login to follow labs' : undefined}
                 >
                   {isFollowing ? "FOLLOWING" : "FOLLOW"}
                 </Button>
