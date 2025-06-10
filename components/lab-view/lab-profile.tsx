@@ -29,7 +29,7 @@ interface LabProfileProps {
   membersBreakdown?: { total: number, founders: number, admins: number, donors: number, contributors: number }
   onOpenContributeDialog?: () => void
   orgInfo?: { org_name: string; profilePic?: string } | null
-  user?: boolean
+  user?: any
 }
 
 const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
@@ -249,7 +249,7 @@ export default function LabProfile({
                   <Button
                     variant="default"
                     size="lg"
-                    className={`font-bold px-6 py-2 text-base${!user ? ' opacity-60 cursor-not-allowed' : ''}`}
+                    className="font-bold px-6 py-2 text-base"
                     onClick={onOpenContributeDialog}
                     data-testid="contribute-button"
                     disabled={!user}
@@ -262,10 +262,9 @@ export default function LabProfile({
                   variant={isFollowing ? "default" : "outline"}
                   size="sm"
                   className={
-                    (isFollowing
+                    isFollowing
                       ? "bg-background text-foreground hover:bg-background/90"
-                      : "bg-accent text-background hover:bg-accent/90") +
-                    (!user ? " opacity-60 cursor-not-allowed" : "")
+                      : "bg-accent text-background hover:bg-accent/90"
                   }
                   onClick={isGuest ? handleGuestAction : setIsFollowing}
                   disabled={!user}

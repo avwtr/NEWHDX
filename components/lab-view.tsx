@@ -666,6 +666,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
               membersBreakdown={membersBreakdown}
               onOpenContributeDialog={() => setContributionDialogOpen(true)}
               orgInfo={orgInfo}
+              user={user}
             />
           </div>
 

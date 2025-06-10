@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { login } from "@/lib/auth"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
+import { supabase } from "@/lib/supabase"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -22,9 +23,12 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showMigrateModal, setShowMigrateModal] = useState(false)
+  const [pendingResetEmail, setPendingResetEmail] = useState("")
+  const [resetting, setResetting] = useState(false)
 
   // Get redirect URL from query params
-  const redirectTo = searchParams.get("redirectTo") || "/explore"
+  const redirectTo = searchParams?.get("redirectTo") || "/explore"
 
   // Redirect if already logged in
   useEffect(() => {
@@ -36,6 +40,29 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+
+    // Check if user is migrated before attempting login
+    const { data: emailData, error: emailError } = await supabase
+      .from('email')
+      .select('id')
+      .eq('email', email)
+      .single();
+    console.log('Email view result:', emailData, emailError);
+    if (!emailError && emailData && emailData.id) {
+      const user_id = emailData.id;
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('migrated')
+        .eq('user_id', user_id)
+        .single();
+      console.log('Profiles result:', profile, profileError);
+      if (!profileError && profile && profile.migrated === true) {
+        setPendingResetEmail(email);
+        setShowMigrateModal(true);
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     try {
       const { user, session, error } = await login({
@@ -70,6 +97,26 @@ export default function LoginPage() {
     }
   }
 
+  // Handle password reset for migrated users
+  const handleMigrateReset = async () => {
+    setResetting(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(pendingResetEmail)
+    setResetting(false)
+    setShowMigrateModal(false)
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send password reset email.",
+        variant: "destructive",
+      })
+    } else {
+      toast({
+        title: "Check your email",
+        description: "A password reset link has been sent to your email address.",
+      })
+    }
+  }
+
   // Show loading state while checking auth
   if (isLoading) {
     return (
@@ -88,6 +135,9 @@ export default function LoginPage() {
     <div className="min-h-screen w-full bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <Card>
+          <div className="p-4 text-sm text-yellow-700 bg-yellow-100 rounded-t-md border-b border-yellow-200">
+            If you already had created an account on our previous version, you will be prompted to update your password.
+          </div>
           <form onSubmit={handleSubmit}>
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold">Login</CardTitle>
@@ -138,6 +188,24 @@ export default function LoginPage() {
           </form>
         </Card>
       </div>
+
+      {/* Migrated user modal */}
+      {showMigrateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
+            <h2 className="text-lg font-bold mb-2">Password Reset Required</h2>
+            <p className="mb-4 text-sm text-gray-700">
+              This account was migrated from our previous system. You must reset your password before logging in.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowMigrateModal(false)} disabled={resetting}>Cancel</Button>
+              <Button onClick={handleMigrateReset} disabled={resetting} className="bg-accent text-primary-foreground hover:bg-accent/90">
+                {resetting ? "Sending..." : "Send Reset Email"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

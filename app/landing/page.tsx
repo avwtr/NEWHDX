@@ -448,7 +448,7 @@ export default function LandingPage() {
               { id: "create", label: "CREATE YOUR OWN LAB" },
               { id: "explore", label: "EXPLORE AND CONTRIBUTE" },
             ]}
-            defaultTabId={user ? "create" : "explore"}
+            defaultTabId="create"
             onChange={setActiveTab}
             className="mb-8"
           />
