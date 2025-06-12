@@ -26,26 +26,36 @@ export default function ResetPasswordPage() {
       const hash = window.location.hash
       if (!params.get("access_token") && hash && hash.includes("access_token")) {
         const hashParams = new URLSearchParams(hash.substring(1))
-        const access_token = hashParams.get("access_token")
-        const type = hashParams.get("type")
+        const access_token = hashParams.get("access_token") || ""
+        const refresh_token = hashParams.get("refresh_token") || access_token
+        const type = hashParams.get("type") || ""
         if (access_token && type) {
-          const newUrl = `${window.location.pathname}?access_token=${encodeURIComponent(access_token)}&type=${encodeURIComponent(type)}`
+          const newUrl = `${window.location.pathname}?access_token=${encodeURIComponent(access_token)}&refresh_token=${encodeURIComponent(refresh_token)}&type=${encodeURIComponent(type)}`
           window.location.replace(newUrl)
           return
         }
       }
     }
-    // Always use the query string after possible redirect
     if (!searchParams) {
       setTokenChecked(true)
       return
     }
-    const access_token = searchParams.get("access_token")
-    const type = searchParams.get("type")
+    const access_token = searchParams.get("access_token") || ""
+    const refresh_token = searchParams.get("refresh_token") || access_token
+    const type = searchParams.get("type") || ""
+    // Debug: log tokens and type
+    console.log("access_token:", access_token, "refresh_token:", refresh_token, "type:", type)
     if (access_token && type === "recovery") {
-      supabase.auth.setSession({ access_token, refresh_token: access_token })
-        .then(() => setTokenChecked(true))
-        .catch(() => setTokenChecked(true))
+      supabase.auth.setSession({ access_token, refresh_token })
+        .then(async () => {
+          const { data: sessionData } = await supabase.auth.getSession()
+          console.log("Session after setSession:", sessionData)
+          setTokenChecked(true)
+        })
+        .catch((err) => {
+          console.error("Error setting session:", err)
+          setTokenChecked(true)
+        })
     } else {
       setTokenChecked(true)
     }
