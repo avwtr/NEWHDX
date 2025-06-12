@@ -7,6 +7,8 @@ import "@/app/globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { GlobalLoader } from "@/components/GlobalLoader"
 import { HeaderWrapper } from "@/components/header-wrapper"
+import { Analytics } from '@vercel/analytics/react'
+import Script from 'next/script'
 
 // Initialize the JetBrains Mono font
 const jetbrainsMono = JetBrains_Mono({
@@ -48,6 +50,25 @@ export default function RootLayout({
           </AuthProvider>
         </ThemeProvider>
         <Toaster />
+        {/* Vercel Analytics */}
+        <Analytics />
+        {/* Plausible Analytics */}
+        <Script
+          strategy="afterInteractive"
+          data-domain="heterodoxlabs.com"
+          src="https://plausible.io/js/script.file-downloads.hash.outbound-links.pageview-props.revenue.tagged-events.js"
+        />
+        <Script
+          id="plausible-init"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.plausible = window.plausible || function() {
+                (window.plausible.q = window.plausible.q || []).push(arguments)
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   )
