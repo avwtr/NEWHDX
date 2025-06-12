@@ -20,8 +20,8 @@ export default function ResetPasswordPage() {
 
   // On mount, check for access_token in URL and set it in Supabase
   useEffect(() => {
-    // If access_token and type are not in the query string, but are in the hash, move them to the query string
     if (typeof window !== "undefined") {
+      // Move hash params to query string if needed
       const params = new URLSearchParams(window.location.search)
       const hash = window.location.hash
       if (!params.get("access_token") && hash && hash.includes("access_token")) {
@@ -29,12 +29,16 @@ export default function ResetPasswordPage() {
         const access_token = hashParams.get("access_token")
         const type = hashParams.get("type")
         if (access_token && type) {
-          // Move to query string and reload
           const newUrl = `${window.location.pathname}?access_token=${encodeURIComponent(access_token)}&type=${encodeURIComponent(type)}`
           window.location.replace(newUrl)
           return
         }
       }
+    }
+    // Always use the query string after possible redirect
+    if (!searchParams) {
+      setTokenChecked(true)
+      return
     }
     const access_token = searchParams.get("access_token")
     const type = searchParams.get("type")
@@ -59,6 +63,17 @@ export default function ResetPasswordPage() {
     }
     setIsSubmitting(true)
     try {
+      // Check session before updating password
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData?.session) {
+        toast({
+          title: "Error",
+          description: "Auth session missing. Please use the link from your email again.",
+          variant: "destructive",
+        })
+        setIsSubmitting(false)
+        return
+      }
       const { error } = await supabase.auth.updateUser({ password })
       if (error) {
         toast({
