@@ -63,6 +63,7 @@ interface ContributionDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onReject: (id: string, reason: string) => void;
+  onContributionStatusChange?: (contributionId: string, newStatus: string) => void;
 }
 
 export function ContributionDetailModal({
@@ -71,6 +72,7 @@ export function ContributionDetailModal({
   isOpen,
   onClose,
   onReject,
+  onContributionStatusChange,
 }: ContributionDetailModalProps) {
   if (!contribution) return null;
   // All hooks below this line
@@ -208,7 +210,6 @@ export function ContributionDetailModal({
       const updatePayload = {
         status: 'accepted',
         reviewed_by: user.id,
-        reviewed_at: new Date().toISOString(),
         files: fileSummaries,
       };
       const { error: updateError } = await supabase
@@ -217,53 +218,9 @@ export function ContributionDetailModal({
         .eq('id', Number(contribution.id));
       if (updateError) throw updateError;
 
-      // Activity logging for contribution acceptance
-      const acceptedFileNames = contribution.files.map(f => f.name).join(', ');
-      const activityId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
-      const activityName = `Contribution Accepted: ${contribution.title} (Files: ${acceptedFileNames})`;
-      const { error: activityError } = await supabase.from('activity').insert({
-        activity_id: activityId,
-        activity_name: activityName,
-        activity_type: 'contribution_accepted',
-        performed_by: user.id,
-        lab_from: labId,
-        created_at: new Date().toISOString(),
-      });
-      if (activityError) console.error('Activity log error:', activityError);
-
-      // Upsert/increment labContributors
-      if (contribution.submittedBy) {
-        // Try to update first
-        const { data: existingRows, error: fetchError } = await supabase
-          .from('labContributors')
-          .select('id, numContributions')
-          .eq('labId', labId)
-          .eq('userId', contribution.submittedBy)
-        if (fetchError) {
-          console.error('Error fetching labContributors:', fetchError)
-        } else if (existingRows && existingRows.length > 0) {
-          // Row exists, increment
-          const row = existingRows[0]
-          const { error: updateError } = await supabase
-            .from('labContributors')
-            .update({
-              numContributions: (row.numContributions || 0) + 1,
-              lastContributed: new Date().toISOString(),
-            })
-            .eq('id', row.id)
-          if (updateError) console.error('Error updating labContributors:', updateError)
-        } else {
-          // Insert new
-          const { error: insertError } = await supabase
-            .from('labContributors')
-            .insert({
-              labId: labId,
-              userId: contribution.submittedBy,
-              numContributions: 1,
-              lastContributed: new Date().toISOString(),
-            })
-          if (insertError) console.error('Error inserting into labContributors:', insertError)
-        }
+      // Notify parent component of status change
+      if (onContributionStatusChange) {
+        onContributionStatusChange(contribution.id, 'accepted');
       }
 
       toast({
@@ -273,15 +230,6 @@ export function ContributionDetailModal({
       onClose();
     } catch (error) {
       console.error('[MODAL APPROVE] Error:', error);
-      try {
-        console.error('Stringified error:', JSON.stringify(error, null, 2));
-      } catch (e) {
-        console.error('Error could not be stringified:', e);
-      }
-      if (error instanceof Error) {
-        console.error('Error.message:', error.message);
-        console.error('Error.stack:', error.stack);
-      }
       toast({
         title: 'Error',
         description: 'Failed to approve contribution',
@@ -315,13 +263,19 @@ export function ContributionDetailModal({
         .update(updatePayload)
         .eq('id', Number(contribution.id));
       if (updateError) throw updateError;
+
+      // Notify parent component of status change
+      if (onContributionStatusChange) {
+        onContributionStatusChange(contribution.id, 'rejected');
+      }
+
       toast({
         title: 'Contribution Rejected',
         description: `You have rejected "${contribution.title}" and files have been deleted.`,
       });
       onClose();
     } catch (error) {
-      console.error('[MODAL REJECT] Error:', error);
+      console.error('Error rejecting contribution:', error);
       toast({
         title: 'Error',
         description: 'Failed to reject contribution',

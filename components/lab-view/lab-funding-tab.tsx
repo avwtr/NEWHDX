@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
 import { EditFundDialog } from "@/components/edit-fund-dialog"
-import { Dialog as OverlayDialog, DialogContent as OverlayDialogContent, DialogTitle as OverlayDialogTitle } from "@/components/ui/dialog"
+import { Dialog as OverlayDialog, DialogContent as OverlayDialogContent } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -992,7 +992,6 @@ export function LabFundingTab({
       {/* Create Funding Goal Dialog */}
       <OverlayDialog open={showCreateFundDialog} onOpenChange={setShowCreateFundDialog}>
         <OverlayDialogContent className="sm:max-w-[525px]">
-          <OverlayDialogTitle>Create New Funding Goal</OverlayDialogTitle>
           <CreateFundDialog
             labId={labId}
             onFundCreated={() => {
@@ -1007,7 +1006,6 @@ export function LabFundingTab({
       {/* Funding Activity Dialog */}
       <OverlayDialog open={showFundingActivity} onOpenChange={setShowFundingActivity}>
         <OverlayDialogContent className="max-w-3xl">
-          <OverlayDialogTitle>Funding Activity</OverlayDialogTitle>
           <FundingActivityDialog isOpen={showFundingActivity} onOpenChange={setShowFundingActivity} labId={labId} />
         </OverlayDialogContent>
       </OverlayDialog>

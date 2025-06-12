@@ -15,28 +15,29 @@ interface LabDialogsProps {
   isAdmin: boolean
   isUser: boolean
   inviteMemberDialogOpen: boolean
-  setInviteMemberDialogOpen: (value: boolean) => void
+  setInviteMemberDialogOpen: (open: boolean) => void
   uploadFileDialogOpen: boolean
-  setUploadFileDialogOpen: (value: boolean) => void
+  setUploadFileDialogOpen: (open: boolean) => void
   createExperimentDialogOpen: boolean
-  setCreateExperimentDialogOpen: (value: boolean) => void
+  setCreateExperimentDialogOpen: (open: boolean) => void
   editFundDialogOpen: boolean
-  setEditFundDialogOpen: (value: boolean) => void
+  setEditFundDialogOpen: (open: boolean) => void
   currentEditFund: any
   handleSaveFund: (fund: any) => void
   contributionDetailOpen: boolean
-  setContributionDetailOpen: (value: boolean) => void
+  setContributionDetailOpen: (open: boolean) => void
   selectedContribution: any
   setSelectedContribution: (contribution: any) => void
   handleApproveContribution: (id: string) => void
   handleRejectContribution: (id: string, reason: string) => void
   logEventDialogOpen: boolean
-  setLogEventDialogOpen: (value: boolean) => void
+  setLogEventDialogOpen: (open: boolean) => void
   editMembershipDialogOpen: boolean
-  setEditMembershipDialogOpen: (value: boolean) => void
+  setEditMembershipDialogOpen: (open: boolean) => void
   labId: string
   lab: any
   userId: string
+  onContributionStatusChange?: (contributionId: string, newStatus: string) => void
 }
 
 export function LabDialogs({
@@ -65,6 +66,7 @@ export function LabDialogs({
   labId,
   lab,
   userId,
+  onContributionStatusChange,
 }: LabDialogsProps) {
   return (
     <>
@@ -110,14 +112,15 @@ export function LabDialogs({
 
           {contributionDetailOpen && selectedContribution && (
             <ContributionDetailModal
+              labId={labId}
               contribution={selectedContribution}
               isOpen={contributionDetailOpen}
               onClose={() => {
                 setContributionDetailOpen(false)
                 setSelectedContribution(null)
               }}
-              onApprove={handleApproveContribution}
               onReject={handleRejectContribution}
+              onContributionStatusChange={onContributionStatusChange}
             />
           )}
 

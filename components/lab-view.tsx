@@ -601,6 +601,22 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
     setIsDonationsActive(labData?.one_time_donation_option ?? false);
   };
 
+  const handleContributionStatusChange = (contributionId: string, newStatus: string) => {
+    setContributions(prevContributions => 
+      prevContributions.map(contribution => 
+        contribution.id === contributionId 
+          ? { ...contribution, status: newStatus }
+          : contribution
+      )
+    )
+    // Update pending count
+    setPendingCount(prevCount => 
+      newStatus === 'accepted' || newStatus === 'rejected' 
+        ? prevCount - 1 
+        : prevCount
+    )
+  }
+
   return (
     <div className="container mx-auto pt-4 pb-8">
       {loading ? (
@@ -879,6 +895,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
             labId={lab.labId}
             lab={lab}
             userId={user?.id || ""}
+            onContributionStatusChange={handleContributionStatusChange}
           />
         </>
       )}

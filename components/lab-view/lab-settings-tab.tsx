@@ -26,6 +26,7 @@ interface LabSettingsTabProps {
   filteredContributions: any[]
   handleViewContribution: (contribution: any) => void
   SettingsDialogComponent?: React.ReactNode
+  onContributionStatusChange?: (contributionId: string, newStatus: string) => void
 }
 
 export function LabSettingsTab({
@@ -40,6 +41,7 @@ export function LabSettingsTab({
   filteredContributions,
   handleViewContribution,
   SettingsDialogComponent,
+  onContributionStatusChange,
   ...props
 }: LabSettingsTabProps & { labId?: string }) {
   const [contributions, setContributions] = useState<any[]>([])
@@ -49,6 +51,19 @@ export function LabSettingsTab({
   const [admins, setAdmins] = useState<any[]>([])
   const [adminProfiles, setAdminProfiles] = useState<{ [userId: string]: any }>({})
   const labId = props.labId
+
+  const handleContributionStatusChange = (contributionId: string, newStatus: string) => {
+    setContributions(prevContributions => 
+      prevContributions.map(contribution => 
+        contribution.id === contributionId 
+          ? { ...contribution, status: newStatus }
+          : contribution
+      )
+    )
+    if (onContributionStatusChange) {
+      onContributionStatusChange(contributionId, newStatus)
+    }
+  }
 
   useEffect(() => {
     if (!labId) return
