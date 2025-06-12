@@ -17,17 +17,20 @@ export default function FirstLogin() {
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (!data?.session) {
-        toast({ title: "Session missing", description: "Click the login link again.", variant: "destructive" })
+      const { data: sessionData } = await supabase.auth.getSession()
+      console.log("Session data:", sessionData)
+
+      if (!sessionData?.session) {
+        toast({
+          title: "Session missing",
+          description: "Click the login link from your email again.",
+          variant: "destructive",
+        })
         return
       }
 
-      const { data: userData } = await supabase.auth.getUser()
-      if (userData?.user?.id) {
-        setUserId(userData.user.id)
-      }
-
+      const { data: user } = await supabase.auth.getUser()
+      setUserId(user?.user?.id ?? null)
       setSessionReady(true)
     }
 
@@ -46,16 +49,16 @@ export default function FirstLogin() {
       return
     }
 
-    // ✅ Update profile to mark as fully migrated
     if (userId) {
-      await supabase.from("profiles").update({ migrated: false }).eq("user_id", userId)
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ migrated: false })
+        .eq("user_id", userId)
+
+      if (updateError) console.error("Failed to update 'migrated' flag:", updateError)
     }
 
-    toast({
-      title: "Password updated",
-      description: "You can now log in normally with your new password.",
-    })
-
+    toast({ title: "Password set", description: "You're good to go!" })
     router.push("/dashboard")
   }
 
@@ -72,7 +75,7 @@ export default function FirstLogin() {
       <div className="w-full max-w-md space-y-6">
         <h1 className="text-2xl font-bold">Welcome Back</h1>
         <p className="text-muted-foreground text-sm">
-          We've logged you in with a temporary password. To finish setting up your account, please choose a new password.
+          You've been signed in with a temporary password. Please update it now to finish setting up your account.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
