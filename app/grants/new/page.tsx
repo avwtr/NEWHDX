@@ -404,18 +404,18 @@ export default function NewGrantPage() {
                     type="number"
                     value={amount}
                     onChange={(e) => {
-                      const value = Math.min(Number(e.target.value), 5000);
+                      const value = Math.min(Number(e.target.value), 500);
                       setAmount(value.toString());
                     }}
-                    placeholder="e.g., 5000"
+                    placeholder="e.g., 500"
                     className="pl-10 border-muted-foreground/20 focus:border-primary"
                     min="0"
-                    max="5000"
+                    max="500"
                     required
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Maximum grant amount is $5,000. This is a micro-grant platform.
+                  While still in testing, we are only allowing for users to post grants for $500 or less.
                 </p>
               </div>
             </div>
