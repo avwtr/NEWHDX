@@ -2,14 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/components/auth-provider"
@@ -18,7 +10,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 export function OneTimeDonation({ labId, funds = [], onDonationSuccess, isDonationActive = true }: { labId: string, funds?: any[], onDonationSuccess?: () => void, isDonationActive?: boolean }) {
   const { user } = useAuth();
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [suggestedAmounts, setSuggestedAmounts] = useState(["25", "50", "100", "250"])
   const [selectedAmount, setSelectedAmount] = useState("")
   const [customAmount, setCustomAmount] = useState("")
@@ -29,9 +20,9 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess, isDonati
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
   const [caption, setCaption] = useState("")
 
-  // Fetch payment method on modal open
+  // Fetch payment method on component mount
   useEffect(() => {
-    if (isDialogOpen && user?.id) {
+    if (user?.id) {
       setLoadingPM(true)
       fetch("/api/stripe/get-payment-info", {
         method: "POST",
@@ -43,7 +34,7 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess, isDonati
         })
         .finally(() => setLoadingPM(false))
     }
-  }, [isDialogOpen, user?.id])
+  }, [user?.id])
 
   // Use dollars for all UI calculations (whole numbers only)
   const amount = Math.floor(Number(selectedAmount || customAmount));
@@ -90,7 +81,6 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess, isDonati
       
       if (data.success) {
         toast({ title: "Thank you!", description: "Your donation was successful." })
-        setIsDialogOpen(false)
         setSelectedAmount("")
         setCustomAmount("")
         setCaption("")
@@ -133,116 +123,96 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess, isDonati
   }
 
   return (
-    <>
-      <Button
-        className="w-full bg-accent text-primary-foreground hover:bg-accent/90"
-        onClick={() => (user && isDonationActive) ? setIsDialogOpen(true) : undefined}
-        disabled={!user || !isDonationActive}
-        title={!user ? "You must be logged in to donate" : (!isDonationActive ? "Donations are currently disabled" : "")}
-      >
-        {user ? "DONATE" : "LOGIN TO DONATE"}
-      </Button>
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>One-Time Donation</DialogTitle>
-            <DialogDescription>Support our research with a single contribution</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Amount</Label>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                {suggestedAmounts.map((amt) => (
-                  <Button key={amt} variant={selectedAmount === amt ? "default" : "outline"} className="w-full" onClick={() => { setSelectedAmount(amt); setCustomAmount("") }}>
-                    ${amt}
-                  </Button>
-                ))}
-              </div>
-              <Input className="mt-2" placeholder="Other amount" value={customAmount} onChange={e => {
-                // Only allow whole numbers
-                const val = e.target.value.replace(/[^\d]/g, "");
-                setCustomAmount(val);
-                setSelectedAmount("");
-              }} type="number" min="1" step="1" />
-            </div>
-            <div>
-              <Label>Select Fund</Label>
-              <RadioGroup value={selectedFund} onValueChange={setSelectedFund} className="max-h-[40vh] overflow-y-auto pr-2">
-                {funds.map((fund) => (
-                  <div key={fund.id} className="flex items-start space-x-2 p-2 rounded-md hover:bg-secondary/50 mb-2">
-                    <RadioGroupItem value={fund.id} id={`fund-${fund.id}`} className="mt-1" />
-                    <div className="grid gap-1.5 leading-none">
-                      <Label htmlFor={`fund-${fund.id}`} className="font-medium">
-                        {fund.goalName || fund.name}
-                      </Label>
-                      <p className="text-sm text-muted-foreground">{fund.goal_description || fund.description}</p>
-                      <div className="mt-1">
-                        <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                          <div className="h-full bg-accent" style={{ width: `${fund.percentFunded}%` }} />
-                        </div>
-                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                          <span>
-                            ${fund.currentAmount?.toLocaleString?.() ?? 0}/{fund.goalAmount?.toLocaleString?.() ?? 0}
-                          </span>
-                          {fund.daysRemaining && <span>{fund.daysRemaining} days remaining</span>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </RadioGroup>
-            </div>
-            <div>
-              <Label htmlFor="donation-caption">Add a caption (optional)</Label>
-              <Input id="donation-caption" placeholder="e.g. In honor of..." value={caption} onChange={e => setCaption(e.target.value)} maxLength={120} />
-              <div className="text-xs text-muted-foreground mt-1">This will be shown with your donation (optional, max 120 chars).</div>
-            </div>
-            <div>
-              <Label>HDX Fee (2.5%)</Label>
-              <div className="text-md">${fee ? fee.toFixed(2) : "-"}</div>
-            </div>
-            <div>
-              <Label>Net to Lab</Label>
-              <div className="text-md font-semibold text-green-700">${net ? net.toFixed(2) : "-"}</div>
-            </div>
-            <div>
-              <Label>Payment Method</Label>
-              {loadingPM ? (
-                <div>Loading...</div>
-              ) : paymentMethod ? (
-                <div className="flex items-center gap-3">
-                  <span>{paymentMethod.brand?.toUpperCase() || paymentMethod.bank_name}</span>
-                  <span>•••• {paymentMethod.last4}</span>
-                  {paymentMethod.exp_month && paymentMethod.exp_year && (
-                    <span>Exp: {paymentMethod.exp_month}/{paymentMethod.exp_year}</span>
-                  )}
-                  <Button size="sm" variant="outline" className="ml-2" asChild>
-                    <a href="/profile">Change</a>
-                  </Button>
-                  <Button size="sm" variant="destructive" className="ml-1" asChild>
-                    <a href="/profile">Remove</a>
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-red-500">No payment method found. <a href="/profile" className="underline">Add one in your profile</a>.</div>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleDonate} disabled={donating || !amount || !paymentMethod || !user || !selectedFund} className="w-full bg-accent text-primary-foreground hover:bg-accent/90">
-              {donating ? "Processing..." : `Confirm $${amount ? amount.toFixed(2) : "-"} Donation`}
+    <div className="space-y-4">
+      <div>
+        <Label>Amount</Label>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          {suggestedAmounts.map((amt) => (
+            <Button key={amt} variant={selectedAmount === amt ? "default" : "outline"} className="w-full" onClick={() => { setSelectedAmount(amt); setCustomAmount("") }}>
+              ${amt}
             </Button>
-            {(!user || !amount || !paymentMethod || !selectedFund) && (
-              <div className="text-xs text-red-500 mt-2">
-                {!user && "You must be logged in to donate."}
-                {!paymentMethod && user && "You must add a payment method in your profile before donating."}
-                {user && paymentMethod && !amount && "Please enter or select a donation amount."}
-                {user && !selectedFund && "Please select a fund or goal."}
+          ))}
+        </div>
+        <Input className="mt-2" placeholder="Other amount" value={customAmount} onChange={e => {
+          // Only allow whole numbers
+          const val = e.target.value.replace(/[^\d]/g, "");
+          setCustomAmount(val);
+          setSelectedAmount("");
+        }} type="number" min="1" step="1" />
+      </div>
+      <div>
+        <Label>Select Fund</Label>
+        <RadioGroup value={selectedFund} onValueChange={setSelectedFund} className="max-h-[40vh] overflow-y-auto pr-2">
+          {funds.map((fund) => (
+            <div key={fund.id} className="flex items-start space-x-2 p-2 rounded-md hover:bg-secondary/50 mb-2">
+              <RadioGroupItem value={fund.id} id={`fund-${fund.id}`} className="mt-1" />
+              <div className="grid gap-1.5 leading-none">
+                <Label htmlFor={`fund-${fund.id}`} className="font-medium">
+                  {fund.goalName || fund.name}
+                </Label>
+                <p className="text-sm text-muted-foreground">{fund.goal_description || fund.description}</p>
+                <div className="mt-1">
+                  <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full bg-accent" style={{ width: `${fund.percentFunded}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>
+                      ${fund.currentAmount?.toLocaleString?.() ?? 0}/{fund.goalAmount?.toLocaleString?.() ?? 0}
+                    </span>
+                    {fund.daysRemaining && <span>{fund.daysRemaining} days remaining</span>}
+                  </div>
+                </div>
               </div>
+            </div>
+          ))}
+        </RadioGroup>
+      </div>
+      <div>
+        <Label htmlFor="donation-caption">Add a caption (optional)</Label>
+        <Input id="donation-caption" placeholder="e.g. In honor of..." value={caption} onChange={e => setCaption(e.target.value)} maxLength={120} />
+        <div className="text-xs text-muted-foreground mt-1">This will be shown with your donation (optional, max 120 chars).</div>
+      </div>
+      <div>
+        <Label>HDX Fee (2.5%)</Label>
+        <div className="text-md">${fee ? fee.toFixed(2) : "-"}</div>
+      </div>
+      <div>
+        <Label>Net to Lab</Label>
+        <div className="text-md font-semibold text-green-700">${net ? net.toFixed(2) : "-"}</div>
+      </div>
+      <div>
+        <Label>Payment Method</Label>
+        {loadingPM ? (
+          <div>Loading...</div>
+        ) : paymentMethod ? (
+          <div className="flex items-center gap-3">
+            <span>{paymentMethod.brand?.toUpperCase() || paymentMethod.bank_name}</span>
+            <span>•••• {paymentMethod.last4}</span>
+            {paymentMethod.exp_month && paymentMethod.exp_year && (
+              <span>Exp: {paymentMethod.exp_month}/{paymentMethod.exp_year}</span>
             )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <Button size="sm" variant="outline" className="ml-2" asChild>
+              <a href="/profile">Change</a>
+            </Button>
+            <Button size="sm" variant="destructive" className="ml-1" asChild>
+              <a href="/profile">Remove</a>
+            </Button>
+          </div>
+        ) : (
+          <div className="text-red-500">No payment method found. <a href="/profile" className="underline">Add one in your profile</a>.</div>
+        )}
+      </div>
+      <Button onClick={handleDonate} disabled={donating || !amount || !paymentMethod || !user || !selectedFund} className="w-full bg-accent text-primary-foreground hover:bg-accent/90">
+        {donating ? "Processing..." : `Confirm $${amount ? amount.toFixed(2) : "-"} Donation`}
+      </Button>
+      {(!user || !amount || !paymentMethod || !selectedFund) && (
+        <div className="text-xs text-red-500 mt-2">
+          {!user && "You must be logged in to donate."}
+          {!paymentMethod && user && "You must add a payment method in your profile before donating."}
+          {user && paymentMethod && !amount && "Please enter or select a donation amount."}
+          {user && !selectedFund && "Please select a fund or goal."}
+        </div>
+      )}
       {showSuccessAnimation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl p-8 flex flex-col items-center animate-fade-in">
@@ -294,6 +264,6 @@ export function OneTimeDonation({ labId, funds = [], onDonationSuccess, isDonati
           `}</style>
         </div>
       )}
-    </>
+    </div>
   )
 }

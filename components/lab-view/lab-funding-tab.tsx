@@ -876,7 +876,10 @@ export function LabFundingTab({
                   <>
                     <Button
                       className="w-full bg-accent text-primary-foreground hover:bg-accent/90"
-                      onClick={handleGuestAction}
+                      onClick={() => {
+                        if (!user || !isDonationActive) return;
+                        setShowDonationDialog(true);
+                      }}
                       disabled={!isDonationActive || !user}
                       title={
                         !isDonationActive
@@ -1005,83 +1008,103 @@ export function LabFundingTab({
           <FundingActivityDialog isOpen={showFundingActivity} onOpenChange={setShowFundingActivity} labId={labId} />
         </OverlayDialogContent>
       </OverlayDialog>
-      {/* Donation Setup Dialog */}
-      <Dialog open={showDonationDialog} onOpenChange={setShowDonationDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Set Up One-Time Donations</DialogTitle>
-            <DialogDescription>
-              Configure the options for one-time donations to your lab.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Name</Label>
-              <Input value={donationName} onChange={e => setDonationName(e.target.value)} />
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea value={donationDescription} onChange={e => setDonationDescription(e.target.value)} />
-            </div>
-            <div>
-              <Label>Suggested Amounts</Label>
-              <div className="flex flex-wrap gap-2">
-                {donationAmounts.map((amount, index) => (
-                  <div key={index} className="flex items-center bg-secondary rounded-md px-2 py-1">
-                    <span className="mr-1">${amount}</span>
-                    <button className="text-red-500 hover:text-red-600" onClick={() => setDonationAmounts(donationAmounts.filter((_, i) => i !== index))}>
-                      ×
-                    </button>
-                  </div>
-                ))}
+      {/* Donation Dialog: show setup for admins, payment for non-admins */}
+      {isAdmin ? (
+        <Dialog open={showDonationDialog} onOpenChange={setShowDonationDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Set Up One-Time Donations</DialogTitle>
+              <DialogDescription>
+                Configure the options for one-time donations to your lab.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Name</Label>
+                <Input value={donationName} onChange={e => setDonationName(e.target.value)} />
               </div>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-lg">$</span>
-                <Input
-                  type="number"
-                  min="1"
-                  placeholder="Add amount..."
-                  value={donationAmountInput}
-                  onChange={(e) => setDonationAmountInput(e.target.value)}
-                  className="w-24"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      if (donationAmountInput) {
-                        setDonationAmounts([...donationAmounts, donationAmountInput])
-                        setDonationAmountInput("")
+              <div>
+                <Label>Description</Label>
+                <Textarea value={donationDescription} onChange={e => setDonationDescription(e.target.value)} />
+              </div>
+              <div>
+                <Label>Suggested Amounts</Label>
+                <div className="flex flex-wrap gap-2">
+                  {donationAmounts.map((amount, index) => (
+                    <div key={index} className="flex items-center bg-secondary rounded-md px-2 py-1">
+                      <span className="mr-1">${amount}</span>
+                      <button className="text-red-500 hover:text-red-600" onClick={() => setDonationAmounts(donationAmounts.filter((_, i) => i !== index))}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-lg">$</span>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Add amount..."
+                    value={donationAmountInput}
+                    onChange={(e) => setDonationAmountInput(e.target.value)}
+                    className="w-24"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        if (donationAmountInput) {
+                          setDonationAmounts([...donationAmounts, donationAmountInput])
+                          setDonationAmountInput("")
+                        }
                       }
+                    }}
+                  />
+                  <Button variant="outline" onClick={() => {
+                    if (donationAmountInput) {
+                      setDonationAmounts([...donationAmounts, donationAmountInput])
+                      setDonationAmountInput("")
                     }
-                  }}
-                />
-                <Button variant="outline" onClick={() => {
-                  if (donationAmountInput) {
-                    setDonationAmounts([...donationAmounts, donationAmountInput])
-                    setDonationAmountInput("")
-                  }
-                }}>
-                  Add
-                </Button>
+                  }}>
+                    Add
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDonationDialog(false)}>
-              Cancel
-            </Button>
-            <Button 
-              className="bg-accent text-primary-foreground"
-              onClick={() => handleSaveDonation({
-                name: donationName,
-                description: donationDescription,
-                amounts: donationAmounts.map(Number)
-              })}
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDonationDialog(false)}>
+                Cancel
+              </Button>
+              <Button 
+                className="bg-accent text-primary-foreground"
+                onClick={() => handleSaveDonation({
+                  name: donationName,
+                  description: donationDescription,
+                  amounts: donationAmounts.map(Number)
+                })}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Dialog open={showDonationDialog} onOpenChange={setShowDonationDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Donate to {lab?.name || 'this lab'}</DialogTitle>
+              <DialogDescription>Support our research with a single contribution</DialogDescription>
+            </DialogHeader>
+            <OneTimeDonation
+              labId={labId}
+              funds={funds}
+              isDonationActive={isDonationsActive}
+              onDonationSuccess={() => {
+                handleDonationSuccess();
+                setShowDonationDialog(false);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   )
 }
