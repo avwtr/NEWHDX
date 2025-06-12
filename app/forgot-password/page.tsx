@@ -19,37 +19,24 @@ export default function ForgotPasswordPage() {
     e.preventDefault()
     setIsSubmitting(true)
     try {
-      // Get the current origin (production or development)
       const origin = window.location.origin
-      console.log('Current origin:', origin)
-      
-      // Construct the redirect URL
       const redirectTo = `${origin}/reset-password`
-      console.log('Redirect URL:', redirectTo)
 
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
-      })
-      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+
       if (error) {
-        console.error('Password reset error:', error)
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        })
+        toast({ title: "Error", description: error.message, variant: "destructive" })
       } else {
         toast({
           title: "Password reset email sent",
-          description: "Check your inbox for a link to reset your password.",
+          description: "Check your inbox for the reset link.",
         })
         setTimeout(() => router.push("/login"), 2000)
       }
     } catch (err) {
-      console.error('Unexpected error:', err)
       toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
+        title: "Unexpected error",
+        description: "Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -64,7 +51,7 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleSubmit}>
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold">Forgot Password</CardTitle>
-              <CardDescription>Enter your email to receive a password reset link.</CardDescription>
+              <CardDescription>Enter your email to receive a reset link.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-0">
               <div className="space-y-2">
@@ -72,10 +59,10 @@ export default function ForgotPasswordPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="researcher@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  placeholder="researcher@example.com"
                 />
               </div>
             </CardContent>

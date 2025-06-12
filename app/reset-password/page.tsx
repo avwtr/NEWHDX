@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,82 +13,62 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [tokenChecked, setTokenChecked] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const [tokenChecked, setTokenChecked] = useState(false)
 
-  // On mount, check for access_token in URL and set it in Supabase
   useEffect(() => {
-    if (!searchParams) {
-      setTokenChecked(true)
-      return
-    }
-    // Only process tokens from the hash fragment, do not rewrite URL
-    let access_token = ""
-    let refresh_token = ""
-    let type = ""
-    if (typeof window !== "undefined") {
-      const hash = window.location.hash
-      if (hash && hash.includes("access_token")) {
-        const hashParams = new URLSearchParams(hash.substring(1))
-        access_token = hashParams.get("access_token") || ""
-        refresh_token = hashParams.get("refresh_token") || access_token
-        type = hashParams.get("type") || ""
-      } else {
-        access_token = searchParams.get("access_token") || ""
-        refresh_token = searchParams.get("refresh_token") || access_token
-        type = searchParams.get("type") || ""
-      }
-    }
-    // Debug: log tokens and type
-    console.log("access_token:", access_token, "refresh_token:", refresh_token, "type:", type)
+    if (typeof window === "undefined") return
+
+    const hash = window.location.hash
+    const params = new URLSearchParams(hash.substring(1))
+
+    const access_token = params.get("access_token")
+    const refresh_token = params.get("refresh_token") || access_token
+    const type = params.get("type")
+
+    console.log("Parsed token info:", { access_token, refresh_token, type })
+
     if (access_token && type === "recovery") {
-      supabase.auth.setSession({ access_token, refresh_token })
-        .then(async () => {
-          const { data: sessionData } = await supabase.auth.getSession()
-          console.log("Session after setSession:", sessionData)
-          setTokenChecked(true)
-        })
+      supabase.auth
+        .setSession({ access_token, refresh_token })
+        .then(() => setTokenChecked(true))
         .catch((err) => {
-          console.error("Error setting session:", err)
+          console.error("setSession error:", err)
           setTokenChecked(true)
         })
     } else {
       setTokenChecked(true)
     }
-  }, [searchParams])
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (password !== confirmPassword) {
       toast({
         title: "Passwords do not match",
-        description: "Please make sure both passwords are the same.",
+        description: "Please make sure both fields are the same.",
         variant: "destructive",
       })
       return
     }
+
     setIsSubmitting(true)
     try {
-      // Check session before updating password
       const { data: sessionData } = await supabase.auth.getSession()
       if (!sessionData?.session) {
         toast({
-          title: "Error",
-          description: "Auth session missing. Please use the link from your email again.",
+          title: "Missing session",
+          description: "Try the reset link again.",
           variant: "destructive",
         })
         setIsSubmitting(false)
         return
       }
+
       const { error } = await supabase.auth.updateUser({ password })
       if (error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        })
+        toast({ title: "Error", description: error.message, variant: "destructive" })
       } else {
         toast({
           title: "Password reset successful",
@@ -98,8 +78,8 @@ export default function ResetPasswordPage() {
       }
     } catch (err) {
       toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
+        title: "Unexpected error",
+        description: "Please try again.",
         variant: "destructive",
       })
     } finally {
