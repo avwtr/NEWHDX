@@ -64,9 +64,9 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       .select("*")
       .eq("labID", labId)
       .order("filename", { ascending: true });
-    console.log("[fetchFilesAndFolders] fileRecords:", fileRecords, "error:", dbError);
+  
     if (dbError) {
-      console.error("Error fetching file records:", dbError);
+    
       return;
     }
     // 2. Organize files into folders
@@ -281,7 +281,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   // Handle file delete
   const handleFileDelete = async (fileId: string) => {
     if (!isAdmin) return;
-    console.log("[handleFileDelete] Starting deletion for fileId:", fileId);
+   
     try {
       // Find the file
       let fileToDelete = rootFiles.find(f => f.id === fileId);
@@ -296,10 +296,10 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
         }
       }
       if (!fileToDelete) {
-        console.log("[handleFileDelete] File not found:", fileId);
+      
         return;
       }
-      console.log("[handleFileDelete] Found file to delete:", fileToDelete);
+    
 
       // Optimistically update UI
       if (sourceFolderId) {
@@ -313,7 +313,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       }
 
       // Delete from storage
-      console.log("[handleFileDelete] Deleting from storage...");
+      
       if (isFirebaseFile(fileToDelete)) {
         const firebaseFileRef = firebaseRef(firebaseStorage, fileToDelete.storageKey);
         await deleteObject(firebaseFileRef);
@@ -323,11 +323,11 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       }
 
       // Delete from database
-      console.log("[handleFileDelete] Deleting from database...");
+     
       await supabase.from("files").delete().eq("id", fileId);
 
       // Activity log with detailed information
-      console.log("[handleFileDelete] Creating activity log...");
+    
       const username = await fetchUsername(user?.id || "");
       const folderName = sourceFolderId ? sourceFolderId.toUpperCase() : "ROOT";
       const activityData = {
@@ -337,13 +337,13 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
         performed_by: user?.id,
         lab_from: labId
       };
-      console.log("[handleFileDelete] Activity data:", activityData);
+     
       
       const { error: activityError } = await supabase.from("activity").insert([activityData]);
       if (activityError) {
-        console.error("[handleFileDelete] Activity log error:", activityError);
+       
       } else {
-        console.log("[handleFileDelete] Activity log created successfully");
+        
       }
 
       toast({
@@ -351,7 +351,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
         description: `${fileToDelete.filename} has been deleted.`,
       });
     } catch (error) {
-      console.error("[handleFileDelete] Error:", error);
+     
       const err = error as Error;
       toast({
         title: "Error",
@@ -425,9 +425,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   // Create folder (database-driven, .keep row)
   const createFolder = async (folderName: string, parentFolder: string = "root") => {
     if (!isAdmin) return;
-    console.log("[createFolder] Called with:", folderName, parentFolder);
-    console.log("[createFolder] labId:", labId);
-    console.log("[createFolder] user?.id:", user?.id);
+   
 
     // Ensure unique folder name by appending timestamp if it's the default name
     const finalFolderName = folderName === "NEW_FOLDER" 
@@ -452,7 +450,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     ]);
     if (error) {
       setFolders((prev) => prev.filter((folder) => folder.id !== finalFolderName));
-      console.error("[createFolder] Supabase insert error:", error);
+      
       toast({ title: "Error", description: `Failed to create folder: ${JSON.stringify(error)} | labId: ${labId} | userId: ${user?.id}` });
       return;
     }
@@ -742,7 +740,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
         description: "Changes have been saved successfully.",
       });
     } catch (err) {
-      console.error("Error saving file:", err);
+     
       toast({
         title: "Error",
         description: "Failed to save changes. Please try again.",

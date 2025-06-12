@@ -32,43 +32,36 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case 'payment_intent.succeeded':
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        console.log('PaymentIntent succeeded:', paymentIntent.id);
         // Handle successful payment
         break;
 
       case 'payment_intent.payment_failed':
         const failedPayment = event.data.object as Stripe.PaymentIntent;
-        console.log('PaymentIntent failed:', failedPayment.id);
         // Handle failed payment
         break;
 
       case 'charge.succeeded':
         const charge = event.data.object as Stripe.Charge;
-        console.log('Charge succeeded:', charge.id);
         // Handle successful charge
         break;
 
       case 'charge.failed':
         const failedCharge = event.data.object as Stripe.Charge;
-        console.log('Charge failed:', failedCharge.id);
         // Handle failed charge
         break;
 
       case 'customer.subscription.created':
         const subscription = event.data.object as Stripe.Subscription;
-        console.log('Subscription created:', subscription.id);
         // Handle new subscription
         break;
 
       case 'customer.subscription.deleted':
         const deletedSubscription = event.data.object as Stripe.Subscription;
-        console.log('Subscription deleted:', deletedSubscription.id);
         // Handle subscription deletion
         break;
 
       case 'account.updated':
         const account = event.data.object as Stripe.Account;
-        console.log('Account updated:', account.id);
         // Handle account updates
         break;
 

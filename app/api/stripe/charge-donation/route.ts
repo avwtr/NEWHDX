@@ -48,14 +48,14 @@ export async function POST(req: NextRequest) {
     expand: ['invoice_settings.default_payment_method'],
   });
   const customer = customerObj as Stripe.Customer;
-  console.log('[charge-donation] Customer:', customer);
+
 
   let paymentMethodId = null;
   if (customer.invoice_settings?.default_payment_method &&
       typeof customer.invoice_settings.default_payment_method !== 'string' &&
       customer.invoice_settings.default_payment_method.type === 'card') {
     paymentMethodId = customer.invoice_settings.default_payment_method.id;
-    console.log('[charge-donation] Using default card payment method:', paymentMethodId);
+   
   }
 
   // fallback: get first attached card payment method
@@ -65,32 +65,25 @@ export async function POST(req: NextRequest) {
       type: 'card',
       limit: 1,
     });
-    console.log('[charge-donation] Found card payment methods:', paymentMethods);
+    
     if (paymentMethods.data.length > 0) {
       paymentMethodId = paymentMethods.data[0].id;
-      console.log('[charge-donation] Using first card payment method:', paymentMethodId);
+     
     }
   }
   if (!paymentMethodId) {
-    console.log('[charge-donation] No card payment method found');
+   
     return NextResponse.json({ error: "No card payment method found for user." }, { status: 400 });
   }
 
   // 4. Calculate fee and net
   const fee = Math.round(amount * 0.025);
   const net = amount - fee;
-  console.log('[charge-donation] Amount:', amount, 'Fee:', fee, 'Net:', net);
+ 
 
   // 5. Create PaymentIntent with destination charge
   let paymentIntent;
   try {
-    console.log('[charge-donation] Creating payment intent with:', {
-      amount,
-      customer: userProfile.payment_acc_id,
-      payment_method: paymentMethodId,
-      lab_funding_id: lab.funding_id
-    });
-    
     paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency: "usd",
@@ -110,9 +103,7 @@ export async function POST(req: NextRequest) {
       },
       payment_method_types: ['card'],
     });
-    console.log('[charge-donation] Payment intent created:', paymentIntent.id);
   } catch (err: any) {
-    console.error('[charge-donation] Error creating payment intent:', err);
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
 
@@ -128,10 +119,8 @@ export async function POST(req: NextRequest) {
     });
     
     if (insertError) {
-      console.error('[charge-donation] Error inserting into labDonors:', insertError);
       return NextResponse.json({ error: "Failed to log donation" }, { status: 500 });
     }
-    console.log('[charge-donation] Successfully logged donation');
 
     // Update the amount_contributed in funding_goals (use goalId)
     const donationAmount = amount / 100;
@@ -149,12 +138,8 @@ export async function POST(req: NextRequest) {
         .update({ amount_contributed: newAmount })
         .eq("lab_id", labId)
         .eq("id", goalId);
-      if (updateError) {
-        console.error('[charge-donation] Error updating funding_goals:', updateError);
-      }
     }
   } catch (err: any) {
-    console.error('[charge-donation] Error in labDonors insert:', err);
     return NextResponse.json({ error: "Failed to log donation" }, { status: 500 });
   }
 

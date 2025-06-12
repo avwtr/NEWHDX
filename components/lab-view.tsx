@@ -195,7 +195,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .select("membership_option, one_time_donation_option")
         .eq("labId", lab.labId)
         .single()
-      console.log("Fetched lab membership and donation options:", labData)
+      
       setLabsMembershipOption(labData?.membership_option || false)
       setIsDonationsActive(labData?.one_time_donation_option ?? false)
 
@@ -205,7 +205,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .select("*")
         .eq("labId", lab.labId)
         .single();
-      console.log("Fetched membership data:", membershipData, error);
+     
       setMembership(membershipData);
       setLoading(false)
     }
@@ -246,11 +246,11 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   useEffect(() => {
     async function checkLabAdmin() {
       if (!user?.id || !lab?.labId) {
-        console.log("Admin check: missing user or lab", { userId: user?.id, labId: lab?.labId })
+       
         setIsAdmin(false)
         return
       }
-      console.log("Admin check: checking for user", user.id, "in lab", lab.labId)
+     
       const { data, error } = await supabase
         .from("labMembers")
         .select("user, role")
@@ -258,16 +258,16 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .eq("user", user.id)
         .in("role", ["admin", "founder"])
         .limit(1)
-      console.log("Admin check result:", { data, error })
+     
       if (error || !data) {
         setIsAdmin(false)
         return
       }
       setIsAdmin(data.length > 0)
       if (data.length > 0) {
-        console.log("User IS admin for this lab.")
+        
       } else {
-        console.log("User is NOT admin for this lab.")
+        
       }
     }
     checkLabAdmin()
@@ -289,7 +289,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
-      console.log("Fetched oneTimeDonation:", { data, error })
+      
       if (!error && data) setOneTimeDonation(data)
       else setOneTimeDonation(null)
     }
@@ -299,7 +299,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
   useEffect(() => {
     async function fetchMembership() {
       if (!lab?.labId) return;
-      console.log('Fetching membership for labId:', lab.labId);
+    
       const { data, error } = await supabase
         .from("recurring_funding")
         .select("*")
@@ -307,7 +307,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
-      console.log("Fetched membership data:", data, error);
+     
       setMembership(data);
     }
     fetchMembership();

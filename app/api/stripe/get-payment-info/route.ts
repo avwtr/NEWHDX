@@ -58,7 +58,6 @@ export async function POST(req: NextRequest) {
       exp_year: paymentMethod.card?.exp_year,
     }), { status: 200 });
   } catch (err: any) {
-    console.error('Error getting payment info:', err);
     return new Response(JSON.stringify({ error: err.message }), { status: 500 });
   }
 } 
