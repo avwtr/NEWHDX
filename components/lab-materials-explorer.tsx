@@ -563,7 +563,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       } catch (err) {
         toast({
           title: "Error",
-          description: `Failed to move folder: ${err.message}`,
+          description: `Failed to move folder: ${(err instanceof Error ? err.message : String(err))}`,
           variant: "destructive",
         })
       }
@@ -579,14 +579,25 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   const handleExternalFileDrop = (files: File[], targetFolderId?: string) => {
     if (!isAdmin) return
 
-    const newFiles = files.map((file) => ({
-      id: Math.random().toString(36).substring(2, 9),
-      name: file.name.toUpperCase(),
-      type: file.name.split(".").pop() || "",
-      size: `${(file.size / 1024).toFixed(1)} KB`,
-      author: "Current User",
-      date: "Just now",
-    }))
+    const newFiles = files.map((file) => {
+      const extension = file.name.split('.').pop() || '';
+      let baseName = file.name.replace(new RegExp(`\\.${extension}$`), '').trim();
+      if (!baseName || baseName.startsWith('.')) {
+        toast({ title: "Error", description: "Please enter a valid file name (not just an extension).", variant: "destructive" });
+        return null;
+      }
+      const finalName = file.name.endsWith(`.${extension}`) ? file.name : `${file.name}.${extension}`;
+      return {
+        id: Math.random().toString(36).substring(2, 9),
+        name: finalName.toUpperCase(),
+        type: extension,
+        size: `${(file.size / 1024).toFixed(1)} KB`,
+        author: "Current User",
+        date: "Just now",
+      };
+    }).filter(Boolean);
+
+    if (newFiles.length === 0) return;
 
     if (targetFolderId) {
       // Add to specific folder

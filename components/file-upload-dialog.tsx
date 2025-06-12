@@ -106,10 +106,20 @@ export function FileUploadDialog({
 
     if (!selectedFile || !fileName) return
 
+    // Get extension from uploaded file
+    const uploadedExtension = selectedFile.name.split('.').pop()?.toLowerCase() || ""
+    // Validate fileName: must not be empty or just an extension
+    const baseName = fileName.replace(new RegExp(`\\.${uploadedExtension}$`), "").trim();
+    if (!baseName || baseName.startsWith(".")) {
+      alert("Please enter a valid file name (not just an extension).");
+      return;
+    }
+    // If fileName does not end with the extension, append it
+    const finalFileName = fileName.endsWith(`.${uploadedExtension}`) ? fileName : `${fileName}.${uploadedExtension}`
+
     // Hybrid upload logic
     if (selectedFile.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       setIsSubmitting(true);
-      const fileExtension = fileName.split(".").pop()?.toLowerCase() || "";
       const firebasePath = `BIG_FILES/${labId}/${selectedFile.name}`;
       const storageRef = firebaseRef(firebaseStorage, firebasePath);
       try {
@@ -128,8 +138,8 @@ export function FileUploadDialog({
               // Insert into Supabase DB
               const { error: dbError } = await supabase.from("files").insert([
                 {
-                  filename: fileName,
-                  fileType: fileExtension,
+                  filename: finalFileName,
+                  fileType: uploadedExtension,
                   fileSize: `${selectedFile.size} B`,
                   labID: labId,
                   folder: selectedFolder,
@@ -155,13 +165,13 @@ export function FileUploadDialog({
               handleOpenChange(false);
               if (onUploadComplete) onUploadComplete([
                 {
-                  name: fileName,
+                  name: finalFileName,
                   url: downloadURL,
                   storageProvider: "firebase",
                   storageKey: firebasePath,
                   folder: selectedFolder,
                   size: `${selectedFile.size} B`,
-                  type: fileExtension,
+                  type: uploadedExtension,
                   author: user?.email || "Current User",
                   date: "Just now",
                   description: fileDescription,
@@ -181,20 +191,19 @@ export function FileUploadDialog({
 
     try {
       // Get file type from extension
-      const fileExtension = fileName.split(".").pop()?.toLowerCase() || ""
       let fileType = "unknown"
 
-      if (["pdf"].includes(fileExtension)) fileType = "pdf"
-      else if (["jpg", "jpeg", "png", "gif"].includes(fileExtension)) fileType = "image"
-      else if (["csv", "xlsx", "xls"].includes(fileExtension)) fileType = "data"
-      else if (["txt", "md", "json"].includes(fileExtension)) fileType = "text"
-      else if (["py", "js", "ts", "r"].includes(fileExtension)) fileType = fileExtension
+      if (["pdf"].includes(uploadedExtension)) fileType = "pdf"
+      else if (["jpg", "jpeg", "png", "gif"].includes(uploadedExtension)) fileType = "image"
+      else if (["csv", "xlsx", "xls"].includes(uploadedExtension)) fileType = "data"
+      else if (["txt", "md", "json"].includes(uploadedExtension)) fileType = "text"
+      else if (["py", "js", "ts", "r"].includes(uploadedExtension)) fileType = uploadedExtension
 
       // 1. Insert into files table to get the UUID
       const { data: inserted, error: dbError } = await supabase.from("files").insert([
         {
-          fileType: fileExtension,
-          filename: fileName,
+          fileType: uploadedExtension,
+          filename: finalFileName,
           fileSize: `${selectedFile.size} B`,
           labID: labId,
           folder: selectedFolder,
@@ -212,7 +221,7 @@ export function FileUploadDialog({
       const fileId = inserted[0].id
 
       // 2. Upload to storage using the UUID as the object name
-      const storageKey = `${labId}/${fileId}${fileExtension ? '.' + fileExtension : ''}`
+      const storageKey = `${labId}/${fileId}${uploadedExtension ? '.' + uploadedExtension : ''}`
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("labmaterials")
         .upload(storageKey, selectedFile)
@@ -235,7 +244,7 @@ export function FileUploadDialog({
       await supabase.from("activity").insert([
         {
           activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          activity_name: `File Uploaded: ${fileName} to ${selectedFolder === "root" ? "ROOT" : selectedFolder.toUpperCase()}`,
+          activity_name: `File Uploaded: ${finalFileName} to ${selectedFolder === "root" ? "ROOT" : selectedFolder.toUpperCase()}`,
           activity_type: "fileupload",
           performed_by: user?.id || null,
           lab_from: labId
@@ -245,8 +254,8 @@ export function FileUploadDialog({
       // 6. Create a file object for the UI
       const fileObject = {
         id: fileId,
-        name: fileName,
-        type: fileExtension,
+        name: finalFileName,
+        type: uploadedExtension,
         size: `${selectedFile.size} B`,
         author: user?.email || "Current User",
         date: "Just now",
@@ -264,11 +273,11 @@ export function FileUploadDialog({
       }
 
       // Reset form and close dialog
-      setFileName("")
-      setFileDescription("")
-      setSelectedFile(null)
-      setSelectedFolder("root")
-      handleOpenChange(false)
+      setFileName("");
+      setFileDescription("");
+      setSelectedFile(null);
+      setSelectedFolder("root");
+      handleOpenChange(false);
     } catch (error) {
       console.error("Error uploading file:", error, JSON.stringify(error))
       if (error instanceof Error) {

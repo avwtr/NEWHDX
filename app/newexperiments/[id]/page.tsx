@@ -613,61 +613,103 @@ export default function ExperimentViewPage() {
       const filesToAdd = labMaterials.filter(f => selectedLabFiles.includes(f.id));
       const newExperimentFiles: any[] = [];
       let failedFiles: string[] = [];
-      for (const file of filesToAdd) {
-        // 1. Copy file in storage
-        const sourcePath = file.folder && file.folder !== "root"
-          ? `${experiment.lab_id}/${file.folder}/${file.filename}`
-          : `${experiment.lab_id}/${file.filename}`;
-        console.log('Trying to download from:', sourcePath, file);
-        const { data: fileData, error: downloadError } = await supabase.storage.from("labmaterials").download(sourcePath);
-        if (downloadError || !fileData) {
-          toast({ title: 'Error', description: `Failed to download ${file.filename} from lab materials.`, variant: 'destructive' });
+      
+      // Process all files in parallel
+      await Promise.all(filesToAdd.map(async (file) => {
+        try {
+          // Use the storageKey from the files table for the source path
+          const sourcePath = file.storageKey;
+          if (!sourcePath) {
+            console.error(`No storageKey for file ${file.filename}`);
+            failedFiles.push(file.filename);
+            return;
+          }
+          console.log('[LabMaterial] Downloading from:', sourcePath, file);
+          const { data: fileData, error: downloadError } = await supabase.storage
+            .from("labmaterials")
+            .download(sourcePath);
+          if (downloadError || !fileData) {
+            console.error(`Failed to download ${file.filename}:`, downloadError);
+            failedFiles.push(file.filename);
+            return;
+          }
+
+          // Upload to experiment-files
+          const destPath = `${experiment.id}/${file.filename}`;
+          const { error: uploadError } = await supabase.storage
+            .from("experiment-files")
+            .upload(destPath, fileData, { upsert: true });
+            
+          if (uploadError) {
+            console.error(`Failed to upload ${file.filename}:`, uploadError);
+            failedFiles.push(file.filename);
+            return;
+          }
+
+          // 2. Insert into experiment_files table
+          const insertObj = {
+            file: file.filename,
+            file_size: file.fileSize || file.size || "",
+            how_added: "ADDED FROM LAB",
+            added_by: user.id,
+            experiment_id: experiment.id,
+            storageKey: destPath,
+          };
+
+          const { data: inserted, error: insertError } = await supabase
+            .from("experiment_files")
+            .insert([insertObj])
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error(`Failed to insert DB row for ${file.filename}:`, insertError);
+            failedFiles.push(file.filename);
+            return;
+          }
+
+          newExperimentFiles.push(inserted);
+          
+          // Log activity for each file added from lab
+          await logExperimentActivity({
+            activity_name: `File Added from Lab: ${file.filename}`,
+            activity_type: "file_added_from_lab",
+            performed_by: user.id,
+            experiment_id: experiment.id,
+          });
+        } catch (err) {
+          console.error(`Error processing ${file.filename}:`, err);
           failedFiles.push(file.filename);
-          continue; // Skip this file, try the rest
         }
-        // Upload to experiment-files
-        const destPath = `${experiment.id}/${file.filename}`;
-        const { error: uploadError } = await supabase.storage.from("experiment-files").upload(destPath, fileData, { upsert: true });
-        if (uploadError) {
-          toast({ title: 'Error', description: `Failed to upload ${file.filename} to experiment files.`, variant: 'destructive' });
-          failedFiles.push(file.filename);
-          continue;
-        }
-        // 2. Insert into experiment_files table
-        const insertObj = {
-          file: file.filename,
-          file_size: file.fileSize || file.size || "",
-          how_added: "ADDED FROM LAB",
-          added_by: user.id,
-          experiment_id: experiment.id,
-          storageKey: destPath,
-        };
-        const { data: inserted, error: insertError } = await supabase.from("experiment_files").insert([insertObj]).select().single();
-        if (insertError) {
-          toast({ title: 'Error', description: `Failed to insert DB row for ${file.filename}.`, variant: 'destructive' });
-          failedFiles.push(file.filename);
-          continue;
-        }
-        newExperimentFiles.push(inserted);
-        // Log activity for each file added from lab
-        await logExperimentActivity({
-          activity_name: `File Added from Lab: ${file.filename}`,
-          activity_type: "file_added_from_lab",
-          performed_by: user.id,
-          experiment_id: experiment.id,
-        });
-      }
+      }));
+
       // Update experimentFiles state so UI updates immediately
       if (newExperimentFiles.length > 0) {
         setExperimentFiles(prev => [...newExperimentFiles, ...prev]);
       }
+
       setAddFromLabDialogOpen(false);
       setSelectedLabFiles([]);
+
       if (failedFiles.length > 0) {
-        toast({ title: 'Some files could not be added', description: failedFiles.join(', '), variant: 'destructive' });
+        toast({ 
+          title: 'Some files could not be added', 
+          description: failedFiles.join(', '), 
+          variant: 'destructive' 
+        });
+      } else {
+        toast({ 
+          title: 'Success', 
+          description: 'All files added successfully' 
+        });
       }
     } catch (err: any) {
-      alert(err.message || "Failed to add files from lab materials.");
+      console.error('Error in handleAddFromLab:', err);
+      toast({ 
+        title: 'Error', 
+        description: err.message || "Failed to add files from lab materials.", 
+        variant: 'destructive' 
+      });
     } finally {
       setIsAddingFromLab(false);
     }

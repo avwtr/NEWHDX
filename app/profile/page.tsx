@@ -9,15 +9,12 @@ import { LoadingAnimation } from "@/components/loading-animation"
 export default function ProfileRedirect() {
   const router = useRouter()
   const { user } = useAuth()
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const isNavigating = sessionStorage.getItem("isNavigatingToProfile") === "true";
     if (isNavigating) {
-      setIsLoading(true);
       sessionStorage.removeItem("isNavigatingToProfile");
-      const timer = setTimeout(() => setIsLoading(false), 1000);
-      return () => clearTimeout(timer);
     }
 
     if (!user) {
@@ -26,12 +23,14 @@ export default function ProfileRedirect() {
     }
 
     // Fetch the user's username from profiles table
-    supabase
-      .from("profiles")
-      .select("username")
-      .eq("user_id", user.id)
-      .single()
-      .then(({ data, error }) => {
+    const fetchProfile = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("user_id", user.id)
+          .single()
+
         if (error || !data?.username) {
           // If no username found, redirect to settings to set one
           router.push("/profile?tab=settings")
@@ -39,7 +38,15 @@ export default function ProfileRedirect() {
           // Redirect to the username-based profile route
           router.push(`/profile/${data.username}`)
         }
-      })
+      } catch (error) {
+        console.error("Error fetching profile:", error)
+      } finally {
+        // Set loading to false after the fetch and redirect attempt
+        setIsLoading(false)
+      }
+    }
+
+    fetchProfile()
   }, [user, router])
 
   return (

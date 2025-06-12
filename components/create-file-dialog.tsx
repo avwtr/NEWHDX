@@ -140,6 +140,13 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
         extension = documentFormat === "markdown" ? "md" : documentFormat === "html" ? "html" : "txt"
         fileType = extension
       }
+      // Validate fileName: must not be empty or just an extension
+      const baseName = fileName.replace(new RegExp(`\\.${extension}$`), "").trim();
+      if (!baseName || baseName.startsWith(".")) {
+        alert("Please enter a valid file name (not just an extension).");
+        setIsSaving(false);
+        return;
+      }
       const fullFileName = fileName.endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`
       // Always use Blob to get the correct file size
       const encoder = new TextEncoder();
