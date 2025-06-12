@@ -65,12 +65,6 @@ export function LabFundingTab({
   lab,
   refetchLab,
 }: LabFundingTabProps) {
-  console.log("LabFundingTab props:", {
-    membership,
-    labsMembershipOption,
-    isMembershipSetUp: !!membership,
-    isMembershipActive: !!membership && labsMembershipOption
-  })
   const [showDonationDialog, setShowDonationDialog] = useState(false)
   const [donationName, setDonationName] = useState("")
   const [donationDescription, setDonationDescription] = useState("")
@@ -142,7 +136,6 @@ export function LabFundingTab({
         .order("created_at", { ascending: false });
       
       if (error) {
-        console.error("Error fetching funds:", error);
         setFunds([]);
         return;
       }
@@ -165,7 +158,6 @@ export function LabFundingTab({
 
       setFunds(mappedFunds);
     } catch (err) {
-      console.error("Error in refetchFunds:", err);
       setFunds([]);
     }
   };
@@ -416,7 +408,6 @@ export function LabFundingTab({
         console.error("Failed to log poke activity:", activityError);
       }
     } catch (err) {
-      console.error("Error in handlePoke:", err);
       // Revert optimistic update on error
       setPokeFeed(pokeFeed.filter(p => p.id !== tempId));
       toast({
@@ -471,7 +462,6 @@ export function LabFundingTab({
         description: "Thank you for your support!",
       })
     } catch (error) {
-      console.error('Error handling donation success:', error)
       toast({
         title: "Error",
         description: "There was an error processing your donation. Please try again.",
@@ -841,29 +831,42 @@ export function LabFundingTab({
               <CardFooter>
                 {isAdmin ? (
                   isDonationSetUp ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 border-accent text-accent hover:bg-secondary"
-                      onClick={async () => {
-                        setEditDonationLoading(true);
-                        const { data, error } = await supabase
-                          .from("donation_funding")
-                          .select("*")
-                          .eq("id", oneTimeDonation.id)
-                          .single();
-                        if (!error && data) {
-                          setEditDonationName(data.donation_setup_name || "One-Time Donation");
-                          setEditDonationDescription(data.donation_description || "");
-                          setEditDonationAmounts(data.suggested_amounts || []);
-                        }
-                        setEditDonationLoading(false);
-                        setShowEditDonationDialog(true);
-                      }}
-                    >
-                      <Edit2 className="h-4 w-4 mr-2" />
-                      EDIT
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 border-accent text-accent hover:bg-secondary"
+                        onClick={async () => {
+                          setEditDonationLoading(true);
+                          const { data, error } = await supabase
+                            .from("donation_funding")
+                            .select("*")
+                            .eq("id", oneTimeDonation.id)
+                            .single();
+                          if (!error && data) {
+                            setEditDonationName(data.donation_setup_name || "One-Time Donation");
+                            setEditDonationDescription(data.donation_description || "");
+                            setEditDonationAmounts(data.suggested_amounts || []);
+                            setEditDonationActive(data.is_active ?? true);
+                          }
+                          setEditDonationLoading(false);
+                          setShowEditDonationDialog(true);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        EDIT
+                      </Button>
+                      <EditDonationDialog
+                        isOpen={showEditDonationDialog}
+                        onOpenChange={setShowEditDonationDialog}
+                        initialName={editDonationName}
+                        initialDescription={editDonationDescription}
+                        initialSuggestedAmounts={editDonationAmounts}
+                        initialIsActive={editDonationActive}
+                        onSave={handleEditDonation}
+                        initialBenefits={[]}
+                      />
+                    </>
                   ) : (
                     <Button 
                       className="w-full bg-accent text-primary-foreground hover:bg-accent/90" 

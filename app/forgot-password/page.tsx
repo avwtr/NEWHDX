@@ -19,10 +19,20 @@ export default function ForgotPasswordPage() {
     e.preventDefault()
     setIsSubmitting(true)
     try {
+      // Get the current origin (production or development)
+      const origin = window.location.origin
+      console.log('Current origin:', origin)
+      
+      // Construct the redirect URL
+      const redirectTo = `${origin}/reset-password`
+      console.log('Redirect URL:', redirectTo)
+
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo,
       })
+      
       if (error) {
+        console.error('Password reset error:', error)
         toast({
           title: "Error",
           description: error.message,
@@ -36,6 +46,7 @@ export default function ForgotPasswordPage() {
         setTimeout(() => router.push("/login"), 2000)
       }
     } catch (err) {
+      console.error('Unexpected error:', err)
       toast({
         title: "Error",
         description: "Something went wrong. Please try again.",

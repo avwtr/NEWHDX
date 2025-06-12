@@ -106,16 +106,6 @@ export function UserActivityLogs({ userId, userName, userProfilePic }: UserActiv
     <div>
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-medium">Recent Activity</h3>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Calendar className="mr-2 h-4 w-4" />
-            Date Range
-          </Button>
-          <Button variant="outline" size="sm">
-            <Filter className="mr-2 h-4 w-4" />
-            Filter
-          </Button>
-        </div>
       </div>
 
       <Card>

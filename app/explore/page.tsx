@@ -483,7 +483,7 @@ export default function ExplorePage() {
         }
 
         // After mapping mappedLabs:
-        const labInfoMap = {};
+        const labInfoMap: Record<string, any> = {};
         mappedLabs.forEach(lab => {
           labInfoMap[lab.id] = {
             name: lab.name,
@@ -838,7 +838,6 @@ export default function ExplorePage() {
   const currentData = getCurrentData()
   const filteredData = sortData(filterData(currentData))
   const uniqueCategories = getUniqueCategories()
-  console.log('[Categories] Final unique categories:', uniqueCategories)
 
   // Get badge class for a category
   const getBadgeClass = (category: string) => {
@@ -1245,7 +1244,6 @@ export default function ExplorePage() {
                     const grantUrl = isCreator ? `/grants/review/${grant.id}` : `/grants/${grant.id}`;
                     // Only consider closure_status === 'AWARDED' as awarded
                     const isAwarded = grant.closure_status === 'AWARDED';
-                    console.log('Grant:', grant.name, 'closure_status:', grant.closure_status, 'isAwarded:', isAwarded);
                     return (
                       <Card key={grant.id} className={`overflow-hidden relative transition-all duration-200 ${isAwarded ? 'opacity-70 grayscale hover:opacity-90 hover:grayscale-0 cursor-pointer' : ''}`}>
                         <CardContent className="p-0 flex flex-col justify-between">

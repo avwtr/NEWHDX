@@ -740,7 +740,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
               </div>
 
               {/* Activity Explorer */}
-              <ActivityExplorer labId={lab.labId} />
+              <ActivityExplorer labId={lab.labId} isAdmin={isAdmin} />
             </div>
 
             {/* Main content area */}
