@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
@@ -27,10 +26,8 @@ export default function LoginPage() {
   const [pendingResetEmail, setPendingResetEmail] = useState("")
   const [resetting, setResetting] = useState(false)
 
-  // Get redirect URL from query params
   const redirectTo = searchParams?.get("redirectTo") || "/explore"
 
-  // Redirect if already logged in
   useEffect(() => {
     if (!isLoading && user) {
       router.push(redirectTo)
@@ -46,29 +43,28 @@ export default function LoginPage() {
       .from('email')
       .select('id')
       .eq('email', email)
-      .single();
-    console.log('Email view result:', emailData, emailError);
+      .single()
+    console.log('Email view result:', emailData, emailError)
+
     if (!emailError && emailData && emailData.id) {
-      const user_id = emailData.id;
+      const user_id = emailData.id
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('migrated')
         .eq('user_id', user_id)
-        .single();
-      console.log('Profiles result:', profile, profileError);
-      if (!profileError && profile && profile.migrated === true) {
-        setPendingResetEmail(email);
-        setShowMigrateModal(true);
-        setIsSubmitting(false);
-        return;
+        .single()
+      console.log('Profiles result:', profile, profileError)
+
+      if (!profileError && profile?.migrated === true) {
+        setPendingResetEmail(email)
+        setShowMigrateModal(true)
+        setIsSubmitting(false)
+        return
       }
     }
 
     try {
-      const { user, session, error } = await login({
-        email,
-        password,
-      })
+      const { user, session, error } = await login({ email, password })
 
       if (error) {
         toast({
@@ -97,27 +93,34 @@ export default function LoginPage() {
     }
   }
 
-  // Handle password reset for migrated users
+  // ✅ Updated magic link flow for migrated users
   const handleMigrateReset = async () => {
     setResetting(true)
-    const { error } = await supabase.auth.resetPasswordForEmail(pendingResetEmail)
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: pendingResetEmail,
+      options: {
+        redirectTo: "https://www.heterodoxlabs.com/first-login"
+      }
+    })
+
     setResetting(false)
     setShowMigrateModal(false)
+
     if (error) {
       toast({
         title: "Error",
-        description: error.message || "Failed to send password reset email.",
+        description: error.message || "Failed to send login link.",
         variant: "destructive",
       })
     } else {
       toast({
         title: "Check your email",
-        description: "A password reset link has been sent to your email address.",
+        description: "We sent you a link to log in and set a new password.",
       })
     }
   }
 
-  // Show loading state while checking auth
   if (isLoading) {
     return (
       <div className="min-h-screen w-full bg-background flex items-center justify-center p-4">
@@ -126,24 +129,20 @@ export default function LoginPage() {
     )
   }
 
-  // Don't render the login form if already logged in
-  if (user) {
-    return null
-  }
+  if (user) return null
 
   return (
     <div className="min-h-screen w-full bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <Card>
           <div className="p-4 text-sm text-yellow-700 bg-yellow-100 rounded-t-md border-b border-yellow-200">
-            If you already had created an account on our previous version, you will be prompted to update your password.
+            If you already had an account in our previous system, you'll be prompted to update your password.
           </div>
           <form onSubmit={handleSubmit}>
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold">Login</CardTitle>
-              <CardDescription>Enter your credentials to access your account</CardDescription>
+              <CardDescription>Enter your credentials to access your account.</CardDescription>
             </CardHeader>
-
             <CardContent className="space-y-4 pt-0">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -156,7 +155,6 @@ export default function LoginPage() {
                   required
                 />
               </div>
-
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
@@ -173,7 +171,6 @@ export default function LoginPage() {
                 />
               </div>
             </CardContent>
-
             <CardFooter className="flex flex-col space-y-4">
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isSubmitting ? "Logging in..." : "Login"}
@@ -195,12 +192,12 @@ export default function LoginPage() {
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
             <h2 className="text-lg font-bold mb-2">Password Reset Required</h2>
             <p className="mb-4 text-sm text-gray-700">
-              This account was migrated from our previous system. You must reset your password before logging in.
+              This account was migrated from our previous system. We’ll send you a secure login link to set your new password.
             </p>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setShowMigrateModal(false)} disabled={resetting}>Cancel</Button>
               <Button onClick={handleMigrateReset} disabled={resetting} className="bg-accent text-primary-foreground hover:bg-accent/90">
-                {resetting ? "Sending..." : "Send Reset Email"}
+                {resetting ? "Sending..." : "Send Link" }
               </Button>
             </div>
           </div>
