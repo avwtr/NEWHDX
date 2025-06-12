@@ -20,29 +20,27 @@ export default function ResetPasswordPage() {
 
   // On mount, check for access_token in URL and set it in Supabase
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      // Move hash params to query string if needed
-      const params = new URLSearchParams(window.location.search)
-      const hash = window.location.hash
-      if (!params.get("access_token") && hash && hash.includes("access_token")) {
-        const hashParams = new URLSearchParams(hash.substring(1))
-        const access_token = hashParams.get("access_token") || ""
-        const refresh_token = hashParams.get("refresh_token") || access_token
-        const type = hashParams.get("type") || ""
-        if (access_token && type) {
-          const newUrl = `${window.location.pathname}?access_token=${encodeURIComponent(access_token)}&refresh_token=${encodeURIComponent(refresh_token)}&type=${encodeURIComponent(type)}`
-          window.location.replace(newUrl)
-          return
-        }
-      }
-    }
     if (!searchParams) {
       setTokenChecked(true)
       return
     }
-    const access_token = searchParams.get("access_token") || ""
-    const refresh_token = searchParams.get("refresh_token") || access_token
-    const type = searchParams.get("type") || ""
+    // Only process tokens from the hash fragment, do not rewrite URL
+    let access_token = ""
+    let refresh_token = ""
+    let type = ""
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash
+      if (hash && hash.includes("access_token")) {
+        const hashParams = new URLSearchParams(hash.substring(1))
+        access_token = hashParams.get("access_token") || ""
+        refresh_token = hashParams.get("refresh_token") || access_token
+        type = hashParams.get("type") || ""
+      } else {
+        access_token = searchParams.get("access_token") || ""
+        refresh_token = searchParams.get("refresh_token") || access_token
+        type = searchParams.get("type") || ""
+      }
+    }
     // Debug: log tokens and type
     console.log("access_token:", access_token, "refresh_token:", refresh_token, "type:", type)
     if (access_token && type === "recovery") {
