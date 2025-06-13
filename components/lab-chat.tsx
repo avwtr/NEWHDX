@@ -20,6 +20,10 @@ export function LabChat({ labId }: { labId: string }) {
   const [userMap, setUserMap] = useState<Record<string, { username: string; profilePic: string }>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [unreadMessages, setUnreadMessages] = useState(0)
+  const [lastSeen, setLastSeen] = useState<number>(() => {
+    const stored = sessionStorage.getItem(`labchat-lastseen-${labId}`);
+    return stored ? parseInt(stored, 10) : Date.now();
+  })
   const [isLoadingUsers, setIsLoadingUsers] = useState(true)
 
   // Fetch messages for this lab
@@ -95,6 +99,11 @@ export function LabChat({ labId }: { labId: string }) {
     setIsOpen(!isOpen)
     if (!isOpen) {
       setIsExpanded(false)
+      // Mark all as read
+      const now = Date.now();
+      setLastSeen(now);
+      sessionStorage.setItem(`labchat-lastseen-${labId}`, now.toString());
+      setUnreadMessages(0);
     }
   }
 
@@ -113,6 +122,19 @@ export function LabChat({ labId }: { labId: string }) {
     }).select()
     if (data) {
       setMessages(prev => [...prev, data[0]])
+      // Immediately add current user to userMap if not present
+      setUserMap(prev => {
+        if (!prev[user.id]) {
+          return {
+            ...prev,
+            [user.id]: {
+              username: user.user_metadata?.username || user.email || "You",
+              profilePic: user.user_metadata?.avatar_url || ""
+            }
+          }
+        }
+        return prev
+      })
     }
     setMessage("")
   }
@@ -125,11 +147,16 @@ export function LabChat({ labId }: { labId: string }) {
     }
   }
 
+  // Update unread messages count when messages change and chat is closed
   useEffect(() => {
-    if (isOpen) {
-      setUnreadMessages(0)
+    if (!user) return;
+    if (!isOpen && messages.length > 0) {
+      const unread = messages.filter(
+        (msg) => new Date(msg.created_at).getTime() > lastSeen && msg.from !== user.id
+      ).length;
+      setUnreadMessages(unread);
     }
-  }, [isOpen])
+  }, [messages, isOpen, lastSeen, user]);
 
   if (!user) return null
 
