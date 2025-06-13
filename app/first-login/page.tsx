@@ -14,6 +14,7 @@ export default function FirstLogin() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [sessionReady, setSessionReady] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const [isMigrated, setIsMigrated] = useState(false)
 
   useEffect(() => {
     const checkSession = async () => {
@@ -30,7 +31,22 @@ export default function FirstLogin() {
       }
 
       const { data: user } = await supabase.auth.getUser()
-      setUserId(user?.user?.id ?? null)
+      const userId = user?.user?.id
+      setUserId(userId ?? null)
+
+      if (userId) {
+        // Check if user is migrated
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("migrated")
+          .eq("user_id", userId)
+          .single()
+
+        if (!profileError && profile?.migrated === true) {
+          setIsMigrated(true)
+        }
+      }
+
       setSessionReady(true)
     }
 
@@ -41,25 +57,43 @@ export default function FirstLogin() {
     e.preventDefault()
     setIsSubmitting(true)
 
-    const { error } = await supabase.auth.updateUser({ password })
+    try {
+      const { error } = await supabase.auth.updateUser({ password })
 
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" })
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" })
+        setIsSubmitting(false)
+        return
+      }
+
+      if (userId) {
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({ migrated: false })
+          .eq("user_id", userId)
+
+        if (updateError) {
+          console.error("Failed to update 'migrated' flag:", updateError)
+          toast({
+            title: "Warning",
+            description: "Password updated but failed to update account status. Please contact support.",
+            variant: "destructive",
+          })
+        } else {
+          toast({ title: "Password set", description: "You're good to go!" })
+          router.push("/dashboard")
+        }
+      }
+    } catch (error) {
+      console.error("Error updating password:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
       setIsSubmitting(false)
-      return
     }
-
-    if (userId) {
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ migrated: false })
-        .eq("user_id", userId)
-
-      if (updateError) console.error("Failed to update 'migrated' flag:", updateError)
-    }
-
-    toast({ title: "Password set", description: "You're good to go!" })
-    router.push("/dashboard")
   }
 
   if (!sessionReady) {
@@ -68,6 +102,12 @@ export default function FirstLogin() {
         <p>Loading...</p>
       </div>
     )
+  }
+
+  // If not migrated, redirect to dashboard
+  if (!isMigrated) {
+    router.push("/dashboard")
+    return null
   }
 
   return (

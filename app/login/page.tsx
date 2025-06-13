@@ -100,7 +100,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email: pendingResetEmail,
       options: {
-        redirectTo: "https://www.heterodoxlabs.com/first-login"
+        emailRedirectTo: `${window.location.origin}/first-login`
       }
     })
 
@@ -192,7 +192,7 @@ export default function LoginPage() {
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
             <h2 className="text-lg font-bold mb-2">Password Reset Required</h2>
             <p className="mb-4 text-sm text-gray-700">
-              This account was migrated from our previous system. We’ll send you a secure login link to set your new password.
+              This account was migrated from our previous system. We'll send you a secure login link to set your new password.
             </p>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setShowMigrateModal(false)} disabled={resetting}>Cancel</Button>
