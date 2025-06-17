@@ -13,7 +13,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { FileSpreadsheetIcon, FileCodeIcon, FileTextIcon, Save, Download, Tag } from "lucide-react"
+import { FileSpreadsheetIcon, FileCodeIcon, FileTextIcon, Save, Download, Tag, Link as LinkIcon } from "lucide-react"
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { DocumentEditor } from "@/components/editors/document-editor"
 import { TabularDataEditor } from "@/components/editors/tabular-data-editor"
@@ -31,7 +31,6 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
   const [step, setStep] = useState<"select" | "edit">("select")
   const [selectedFileType, setSelectedFileType] = useState<string | null>(null)
   const [fileName, setFileName] = useState("")
-  const [fileDescription, setFileDescription] = useState("")
   const [folder, setFolder] = useState("root")
   const [documentTag, setDocumentTag] = useState("")
 
@@ -55,6 +54,9 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
   const [folders, setFolders] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const { user } = useAuth()
+
+  const [linkUrl, setLinkUrl] = useState("")
+  const [linkCaption, setLinkCaption] = useState("")
 
   useEffect(() => {
     async function fetchFolders() {
@@ -102,6 +104,14 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
       formats: ["Markdown", "Plain Text", "HTML"],
       needsTag: true,
     },
+    {
+      id: "link",
+      name: "Link",
+      description: "Save a URL or reference to an external resource",
+      icon: LinkIcon,
+      formats: ["URL"],
+      tag: "LINK",
+    },
   ]
 
   const handleClose = () => {
@@ -127,27 +137,58 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
       let fileContent = ""
       let extension = "txt"
       let fileType = "text"
+      let fullFileName = fileName
       if (selectedFileType === "tabular") {
         fileContent = tabularToCSV(tabularData)
         extension = "csv"
         fileType = "csv"
+        // Validate fileName: must not be empty or just an extension
+        const baseName = fileName.replace(new RegExp(`\\.${extension}$`), "").trim();
+        if (!baseName || baseName.startsWith(".")) {
+          alert("Please enter a valid file name (not just an extension).");
+          setIsSaving(false);
+          return;
+        }
+        fullFileName = fileName.endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`
       } else if (selectedFileType === "code") {
         fileContent = codeContent
         extension = codeLanguage === "python" ? "py" : codeLanguage === "javascript" ? "js" : codeLanguage === "r" ? "r" : "txt"
         fileType = extension
+        const baseName = fileName.replace(new RegExp(`\\.${extension}$`), "").trim();
+        if (!baseName || baseName.startsWith(".")) {
+          alert("Please enter a valid file name (not just an extension).");
+          setIsSaving(false);
+          return;
+        }
+        fullFileName = fileName.endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`
       } else if (selectedFileType === "document") {
         fileContent = documentContent
         extension = documentFormat === "markdown" ? "md" : documentFormat === "html" ? "html" : "txt"
         fileType = extension
+        const baseName = fileName.replace(new RegExp(`\\.${extension}$`), "").trim();
+        if (!baseName || baseName.startsWith(".")) {
+          alert("Please enter a valid file name (not just an extension).");
+          setIsSaving(false);
+          return;
+        }
+        fullFileName = fileName.endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`
+      } else if (selectedFileType === "link") {
+        fileContent = linkUrl
+        extension = "url"
+        fileType = "link"
+        // Validate linkUrl
+        if (!linkUrl || !/^https?:\/\//.test(linkUrl)) {
+          alert("Please enter a valid URL (must start with http:// or https://)");
+          setIsSaving(false);
+          return;
+        }
+        if (!linkCaption.trim()) {
+          alert("Please enter a caption for the link.");
+          setIsSaving(false);
+          return;
+        }
+        fullFileName = linkCaption.trim();
       }
-      // Validate fileName: must not be empty or just an extension
-      const baseName = fileName.replace(new RegExp(`\\.${extension}$`), "").trim();
-      if (!baseName || baseName.startsWith(".")) {
-        alert("Please enter a valid file name (not just an extension).");
-        setIsSaving(false);
-        return;
-      }
-      const fullFileName = fileName.endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`
       // Always use Blob to get the correct file size
       const encoder = new TextEncoder();
       const fileUint8 = encoder.encode(fileContent);
@@ -165,23 +206,25 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
           lastUpdatedBy: user?.id || null,
           lastUpdated: new Date().toISOString(),
           fileTag: documentTag || selectedFileType,
-          storageKey: null,
+          storageKey: selectedFileType === "link" ? linkUrl : null,
         },
       ]).select()
       if (dbError || !inserted || !inserted[0]?.id) throw dbError || new Error("Failed to insert file record")
       const fileId = inserted[0].id
-      // 2. Upload to storage
-      const storageKey = folder && folder !== "root"
-        ? `${labId}/${folder}/${fullFileName}`
-        : `${labId}/${fullFileName}`;
-      const { error: uploadError } = await supabase.storage.from("labmaterials").upload(storageKey, blob)
-      if (uploadError) {
-        await supabase.from("files").delete().eq("id", fileId)
-        throw uploadError
+      // 2. Upload to storage (skip for link)
+      let storageKey = null;
+      if (selectedFileType !== "link") {
+        storageKey = folder && folder !== "root"
+          ? `${labId}/${folder}/${fullFileName}`
+          : `${labId}/${fullFileName}`;
+        const { error: uploadError } = await supabase.storage.from("labmaterials").upload(storageKey, blob)
+        if (uploadError) {
+          await supabase.from("files").delete().eq("id", fileId)
+          throw uploadError
+        }
+        // 3. Update DB row with storageKey
+        await supabase.from("files").update({ storageKey }).eq("id", fileId)
       }
-      // 3. Update DB row with storageKey
-      await supabase.from("files").update({ storageKey }).eq("id", fileId)
-
       // Add activity log
       await supabase.from("activity").insert([
         {
@@ -192,7 +235,6 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
           lab_from: labId
         }
       ]);
-
       if (onFileCreated) onFileCreated();
       alert("File created and saved to HDX!")
       handleClose()
@@ -250,7 +292,9 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
                     ? "Create Tabular Data"
                     : selectedFileType === "code"
                       ? "Create Code File"
-                      : "Create Document"}
+                      : selectedFileType === "link"
+                        ? "Create Link"
+                        : "Create Document"}
                 </DialogTitle>
                 <Button variant="outline" size="sm" onClick={() => setStep("select")} className="text-xs">
                   Change Type
@@ -261,43 +305,99 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
                   ? "Create and edit tabular data with rows and columns"
                   : selectedFileType === "code"
                     ? "Write code with syntax highlighting"
-                    : "Create and format text documents"}
+                    : selectedFileType === "link"
+                      ? "Enter a URL or reference"
+                      : "Create and format text documents"}
               </DialogDescription>
             </DialogHeader>
 
             <div className="grid grid-cols-1 gap-4">
-              <div className="grid grid-cols-2 gap-4">
+              {/* File Name and Description fields - only show if not link */}
+              {selectedFileType !== "link" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="filename">File Name</Label>
+                    <Input
+                      id="filename"
+                      value={fileName}
+                      onChange={(e) => setFileName(e.target.value)}
+                      placeholder={
+                        selectedFileType === "tabular"
+                          ? "data_collection.csv"
+                          : selectedFileType === "code"
+                            ? "analysis_script.py"
+                            : "protocol.md"
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="folder">Save to Folder</Label>
+                    <Select value={folder} onValueChange={setFolder}>
+                      <SelectTrigger id="folder">
+                        <SelectValue placeholder="Select folder" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="root">Root (Lab Repository)</SelectItem>
+                        {folders.map((folder) => (
+                          <SelectItem key={folder} value={folder}>{folder.toUpperCase()}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              {/* Description field - only show if not link */}
+              {selectedFileType !== "link" && (
                 <div className="space-y-2">
-                  <Label htmlFor="filename">File Name</Label>
+                  <Label htmlFor="description">Description</Label>
                   <Input
-                    id="filename"
+                    id="description"
                     value={fileName}
                     onChange={(e) => setFileName(e.target.value)}
-                    placeholder={
-                      selectedFileType === "tabular"
-                        ? "data_collection.csv"
-                        : selectedFileType === "code"
-                          ? "analysis_script.py"
-                          : "protocol.md"
-                    }
+                    placeholder="Brief description of this file"
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="folder">Save to Folder</Label>
-                  <Select value={folder} onValueChange={setFolder}>
-                    <SelectTrigger id="folder">
-                      <SelectValue placeholder="Select folder" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="root">Root (Lab Repository)</SelectItem>
-                      {folders.map((folder) => (
-                        <SelectItem key={folder} value={folder}>{folder.toUpperCase()}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              )}
+              {/* For link: only show URL and caption, and folder selector */}
+              {selectedFileType === "link" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="link-caption">Caption</Label>
+                      <Input
+                        id="link-caption"
+                        value={linkCaption}
+                        onChange={(e) => setLinkCaption(e.target.value)}
+                        placeholder="e.g. Research Paper on Quantum Physics"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="folder">Save to Folder</Label>
+                      <Select value={folder} onValueChange={setFolder}>
+                        <SelectTrigger id="folder">
+                          <SelectValue placeholder="Select folder" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="root">Root (Lab Repository)</SelectItem>
+                          {folders.map((folder) => (
+                            <SelectItem key={folder} value={folder}>{folder.toUpperCase()}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2 p-4">
+                    <Label htmlFor="link-url">Link URL</Label>
+                    <Input
+                      id="link-url"
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      placeholder="https://example.com/resource"
+                      type="url"
+                    />
+                  </div>
+                </>
+              )}
 
               {showTagSelector && (
                 <div className="space-y-2">
@@ -322,16 +422,6 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
                   <p className="text-xs text-muted-foreground">Select a tag to categorize this document</p>
                 </div>
               )}
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  value={fileDescription}
-                  onChange={(e) => setFileDescription(e.target.value)}
-                  placeholder="Brief description of this file"
-                />
-              </div>
 
               {/* File Type Specific Editors */}
               <div className="border rounded-md overflow-hidden">

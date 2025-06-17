@@ -108,6 +108,11 @@ function useUsername(userId: string | undefined) {
   return username;
 }
 
+// Helper to get display name for a file
+function getFileDisplayName(file: any, fallback: string) {
+  return file?.fileType === 'link' ? file?.storageKey : (file?.filename || fallback);
+}
+
 export function DraggableFileItem({
   id,
   name,
@@ -207,7 +212,7 @@ export function DraggableFileItem({
   const startRenaming = () => {
     if (!isAdmin) return
     setIsRenaming(true)
-    setTempName(name)
+    setTempName(file?.fileType === 'link' ? (file?.storageKey || "") : (name || ""))
   }
 
   const saveRename = () => {
@@ -304,7 +309,7 @@ export function DraggableFileItem({
         { user_id: user.id, file_id: id, labId: labId }
       ]);
       if (error) throw error;
-      toast({ title: "File saved", description: `${name} has been saved to your profile.` });
+      toast({ title: "File saved", description: `${getFileDisplayName(file, name)} has been saved to your profile.` });
     } catch (err: any) {
       toast({ title: "Error saving file", description: err.message || String(err), variant: "destructive" });
     }
@@ -319,7 +324,7 @@ export function DraggableFileItem({
     // In a real app, this would call an API to save the file content
     toast({
       title: "File Saved",
-      description: `Changes to ${name} have been saved.`,
+      description: `Changes to ${getFileDisplayName(file, name)} have been saved.`,
     })
   }
 
@@ -375,7 +380,11 @@ export function DraggableFileItem({
             </div>
           ) : (
             <div className="flex items-center">
-              <h3 className="text-sm font-medium">{name}</h3>
+              {file?.fileType === 'link' ? (
+                <a href={file?.storageKey} target="_blank" rel="noopener noreferrer" className="underline break-all text-sm font-medium">{getFileDisplayName(file, name)}</a>
+              ) : (
+                <h3 className="text-sm font-medium">{getFileDisplayName(file, name)}</h3>
+              )}
               {isAdmin && (
                 <Button
                   variant="ghost"
@@ -452,7 +461,7 @@ export function DraggableFileItem({
           <div className="flex items-center gap-3 p-3 bg-secondary/30 rounded-md">
             {getFileIcon(type)}
             <div>
-              <h3 className="font-medium">{name}</h3>
+              <h3 className="font-medium">{getFileDisplayName(file, name)}</h3>
               {fileTag && (
                 <div className="flex items-center gap-1 mt-1">
                   <Tag className="h-3 w-3 text-muted-foreground" />
@@ -481,7 +490,7 @@ export function DraggableFileItem({
           <DialogHeader>
             <DialogTitle>Delete File</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{name}"? This action cannot be undone.
+              Are you sure you want to delete "{getFileDisplayName(file, name)}"? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex sm:justify-between mt-4">
@@ -500,7 +509,7 @@ export function DraggableFileItem({
         <FileViewerDialog
           file={{
             id,
-            name,
+            name: getFileDisplayName(file, name),
             type: (file && file.filename && file.filename.includes('.') ? file.filename.split('.').pop()?.toLowerCase() : type) || type,
             size,
             author,

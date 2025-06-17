@@ -142,6 +142,11 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     return data?.username || userId;
   };
 
+  // Helper to get display name for a file
+  function getFileDisplayName(file: any) {
+    return file.fileType === 'link' ? file.storageKey : file.filename;
+  }
+
   // Move file between folders or to/from root (DB only)
   const moveFile = async (file: any, newFolder: string) => {
     // Remove the file from all folders and root
@@ -180,7 +185,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       await supabase.from("activity").insert([
         {
           activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          activity_name: `File Moved: ${file.filename || file.name} from ${oldFolder.toUpperCase()} to ${newFolderName}`,
+          activity_name: `File Moved: ${getFileDisplayName(file)} from ${oldFolder.toUpperCase()} to ${newFolderName}`,
           activity_type: "filemoved",
           performed_by: user?.id,
           lab_from: labId
@@ -221,60 +226,91 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     }
     if (!fileToRename) return;
 
-    // Get extension and build new filename
-    const extension = fileToRename.filename.includes('.')
-      ? fileToRename.filename.split('.').pop()
-      : '';
-    let newFileName = newName;
-    if (extension && !newName.endsWith(`.${extension}`)) {
-      newFileName = `${newName}.${extension}`;
-    }
-
-    // Optimistically update UI
-    if (sourceFolderId && sourceFolderId !== "root") {
-      setFolders((prev) => prev.map((folder) => folder.id === sourceFolderId ? { ...folder, files: folder.files.map((file: any) => file.id === fileId ? { ...file, filename: newFileName } : file) } : folder));
-    } else {
-      setRootFiles((prev) => prev.map((file: any) => file.id === fileId ? { ...file, filename: newFileName } : file));
-    }
-
-    try {
-      // Optionally: rename in storage
-      if (isFirebaseFile(fileToRename)) {
-        // Firebase: copy to new name, delete old
-        const oldRef = firebaseRef(firebaseStorage, fileToRename.storageKey);
-        const newStorageKey = `BIG_FILES/${labId}/${newFileName}`;
-        const newRef = firebaseRef(firebaseStorage, newStorageKey);
-        // Download old file
-        const url = await getDownloadURL(oldRef);
-        const response = await fetch(url);
-        const blob = await response.blob();
-        // Upload to new location
-        await uploadBytes(newRef, blob);
-        // Delete old file
-        await deleteObject(oldRef);
-        // Update DB
-        await supabase.from("files").update({ filename: newFileName, storageKey: newStorageKey, url: await getDownloadURL(newRef) }).eq("id", fileToRename.id);
+    if (fileToRename.fileType === 'link') {
+      // Optimistically update UI
+      if (sourceFolderId && sourceFolderId !== "root") {
+        setFolders((prev) => prev.map((folder) =>
+          folder.id === sourceFolderId
+            ? { ...folder, files: folder.files.map((file: any) => file.id === fileId ? { ...file, storageKey: newName } : file) }
+            : folder
+        ));
       } else {
-        // Supabase: just update DB (optionally, implement move in storage)
-        await supabase.from("files").update({ filename: newFileName }).eq("id", fileToRename.id);
+        setRootFiles((prev) => prev.map((file: any) => file.id === fileId ? { ...file, storageKey: newName } : file));
       }
-      await fetchFilesAndFolders();
-      // Activity log
-      await supabase.from("activity").insert([
-        {
-          activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-          activity_name: `File Renamed: ${fileToRename.filename} to ${newFileName}`,
-          activity_type: "filerenamed",
-          performed_by: user?.id,
-          lab_from: labId
+      try {
+        await supabase.from("files").update({ storageKey: newName }).eq("id", fileToRename.id);
+        await fetchFilesAndFolders();
+        // Activity log and toast as before, but use storageKey for display
+        await supabase.from("activity").insert([
+          {
+            activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+            activity_name: `Link Renamed: ${fileToRename.storageKey} to ${newName}`,
+            activity_type: "linkrenamed",
+            performed_by: user?.id,
+            lab_from: labId
+          }
+        ]);
+        toast({ title: "Link Renamed", description: `${fileToRename.storageKey} renamed to ${newName}.` });
+      } catch (err: any) {
+        setFolders(prevFolders);
+        setRootFiles(prevRootFiles);
+        toast({ title: "Error", description: `Failed to rename link: ${err.message}` });
+        return;
+      }
+    } else {
+      // Get extension and build new filename
+      const extension = fileToRename.filename.includes('.')
+        ? fileToRename.filename.split('.').pop()
+        : '';
+      let newFileName = newName;
+      if (extension && !newName.endsWith(`.${extension}`)) {
+        newFileName = `${newName}.${extension}`;
+      }
+      // Optimistically update UI
+      if (sourceFolderId && sourceFolderId !== "root") {
+        setFolders((prev) => prev.map((folder) => folder.id === sourceFolderId ? { ...folder, files: folder.files.map((file: any) => file.id === fileId ? { ...file, filename: newFileName } : file) } : folder));
+      } else {
+        setRootFiles((prev) => prev.map((file: any) => file.id === fileId ? { ...file, filename: newFileName } : file));
+      }
+      try {
+        // Optionally: rename in storage
+        if (isFirebaseFile(fileToRename)) {
+          // Firebase: copy to new name, delete old
+          const oldRef = firebaseRef(firebaseStorage, fileToRename.storageKey);
+          const newStorageKey = `BIG_FILES/${labId}/${newFileName}`;
+          const newRef = firebaseRef(firebaseStorage, newStorageKey);
+          // Download old file
+          const url = await getDownloadURL(oldRef);
+          const response = await fetch(url);
+          const blob = await response.blob();
+          // Upload to new location
+          await uploadBytes(newRef, blob);
+          // Delete old file
+          await deleteObject(oldRef);
+          // Update DB
+          await supabase.from("files").update({ filename: newFileName, storageKey: newStorageKey, url: await getDownloadURL(newRef) }).eq("id", fileToRename.id);
+        } else {
+          // Supabase: just update DB (optionally, implement move in storage)
+          await supabase.from("files").update({ filename: newFileName }).eq("id", fileToRename.id);
         }
-      ]);
-      toast({ title: "File Renamed", description: `${fileToRename.filename} renamed to ${newFileName}.` });
-    } catch (err: any) {
-      setFolders(prevFolders);
-      setRootFiles(prevRootFiles);
-      toast({ title: "Error", description: `Failed to rename file: ${err.message}` });
-      return;
+        await fetchFilesAndFolders();
+        // Activity log
+        await supabase.from("activity").insert([
+          {
+            activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+            activity_name: `File Renamed: ${getFileDisplayName(fileToRename)} to ${getFileDisplayName({ ...fileToRename, filename: newFileName })}`,
+            activity_type: "filerenamed",
+            performed_by: user?.id,
+            lab_from: labId
+          }
+        ]);
+        toast({ title: "File Renamed", description: `${getFileDisplayName(fileToRename)} renamed to ${getFileDisplayName({ ...fileToRename, filename: newFileName })}.` });
+      } catch (err: any) {
+        setFolders(prevFolders);
+        setRootFiles(prevRootFiles);
+        toast({ title: "Error", description: `Failed to rename file: ${err.message}` });
+        return;
+      }
     }
   };
 
@@ -332,7 +368,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
       const folderName = sourceFolderId ? sourceFolderId.toUpperCase() : "ROOT";
       const activityData = {
         activity_id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-        activity_name: `File Deleted: ${fileToDelete.filename} from ${folderName}`,
+        activity_name: `File Deleted: ${getFileDisplayName(fileToDelete)} from ${folderName}`,
         activity_type: "filedelete",
         performed_by: user?.id,
         lab_from: labId
@@ -348,7 +384,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
 
       toast({
         title: "File Deleted",
-        description: `${fileToDelete.filename} has been deleted.`,
+        description: `${getFileDisplayName(fileToDelete)} has been deleted.`,
       });
     } catch (error) {
      
@@ -797,19 +833,30 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   };
 
   // Pass these handlers to the file viewer components
-  const renderFileItem = (file: any) => (
-    <DraggableFileItemDnd
-      key={file.id || `root-${file.filename}`}
-      id={file.id}
-      file={file}
-      onRename={handleRenameFile}
-      onDelete={handleFileDelete}
-      onDownload={handleFileDownload}
-      userRole={isLoggedInAndAdmin ? "admin" : "user"}
-      labId={labId}
-      showSaveToProfile={Boolean(user)}
-    />
-  );
+  const renderFileItem = (file: any) => {
+    if (file.fileType === 'link') {
+      return (
+        <div key={file.id} className="flex items-center gap-2 p-2 border rounded bg-orange-50">
+          <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-200 text-orange-800">LINK</span>
+          <a href={file.storageKey} target="_blank" rel="noopener noreferrer" className="text-orange-700 underline break-all">{file.storageKey}</a>
+          {/* Add rename, delete, move, etc. actions as for other files */}
+        </div>
+      );
+    }
+    return (
+      <DraggableFileItemDnd
+        key={file.id || `root-${file.filename}`}
+        id={file.id}
+        file={file}
+        onRename={handleRenameFile}
+        onDelete={handleFileDelete}
+        onDownload={handleFileDownload}
+        userRole={isLoggedInAndAdmin ? "admin" : "user"}
+        labId={labId}
+        showSaveToProfile={Boolean(user)}
+      />
+    );
+  };
 
   // Utility to format file sizes
   function formatFileSize(size: string | number): string {
