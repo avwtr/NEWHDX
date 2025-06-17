@@ -356,7 +356,7 @@ const RichTextEditor = ({
   return (
     <div
       ref={editorRef}
-      className="min-h-[400px] p-4 border rounded-md font-mono bg-[#0F1642] text-white focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
+      className="min-h-[400px] p-4 border rounded-md font-mono bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
       contentEditable
       onInput={handleInput}
       onKeyDown={handleKeyDown}

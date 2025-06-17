@@ -217,7 +217,7 @@ export function DocumentEditor({
             id="document-editor"
             value={content}
             onChange={(e) => onContentChange(e.target.value)}
-            className="w-full h-[350px] p-4 font-mono text-sm resize-none focus:outline-none"
+            className="w-full h-[350px] p-4 font-mono text-sm resize-none focus:outline-none bg-background text-foreground"
             placeholder={
               format === "markdown"
                 ? "# Start writing in Markdown"

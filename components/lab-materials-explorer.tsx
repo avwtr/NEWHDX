@@ -834,15 +834,6 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
 
   // Pass these handlers to the file viewer components
   const renderFileItem = (file: any) => {
-    if (file.fileType === 'link') {
-      return (
-        <div key={file.id} className="flex items-center gap-2 p-2 border rounded bg-orange-50">
-          <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-200 text-orange-800">LINK</span>
-          <a href={file.storageKey} target="_blank" rel="noopener noreferrer" className="text-orange-700 underline break-all">{file.storageKey}</a>
-          {/* Add rename, delete, move, etc. actions as for other files */}
-        </div>
-      );
-    }
     return (
       <DraggableFileItemDnd
         key={file.id || `root-${file.filename}`}

@@ -56,7 +56,6 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
   const { user } = useAuth()
 
   const [linkUrl, setLinkUrl] = useState("")
-  const [linkCaption, setLinkCaption] = useState("")
 
   useEffect(() => {
     async function fetchFolders() {
@@ -182,12 +181,7 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
           setIsSaving(false);
           return;
         }
-        if (!linkCaption.trim()) {
-          alert("Please enter a caption for the link.");
-          setIsSaving(false);
-          return;
-        }
-        fullFileName = linkCaption.trim();
+        fullFileName = linkUrl; // Use URL as filename or fallback
       }
       // Always use Blob to get the correct file size
       const encoder = new TextEncoder();
@@ -306,7 +300,7 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
                   : selectedFileType === "code"
                     ? "Write code with syntax highlighting"
                     : selectedFileType === "link"
-                      ? "Enter a URL or reference"
+                      ? "Enter a URL"
                       : "Create and format text documents"}
               </DialogDescription>
             </DialogHeader>
@@ -346,31 +340,10 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
                   </div>
                 </div>
               )}
-              {/* Description field - only show if not link */}
-              {selectedFileType !== "link" && (
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Input
-                    id="description"
-                    value={fileName}
-                    onChange={(e) => setFileName(e.target.value)}
-                    placeholder="Brief description of this file"
-                  />
-                </div>
-              )}
-              {/* For link: only show URL and caption, and folder selector */}
+              {/* For link: only show URL and folder selector */}
               {selectedFileType === "link" && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="link-caption">Caption</Label>
-                      <Input
-                        id="link-caption"
-                        value={linkCaption}
-                        onChange={(e) => setLinkCaption(e.target.value)}
-                        placeholder="e.g. Research Paper on Quantum Physics"
-                      />
-                    </div>
+                  <div className="grid grid-cols-1 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="folder">Save to Folder</Label>
                       <Select value={folder} onValueChange={setFolder}>

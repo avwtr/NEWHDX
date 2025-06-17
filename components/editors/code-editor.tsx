@@ -81,12 +81,12 @@ export function CodeEditor({
           <textarea
             value={content}
             onChange={(e) => onContentChange(e.target.value)}
-            className="w-full h-[350px] p-4 font-mono text-sm bg-[#1e1e1e] text-white resize-none focus:outline-none"
+            className="w-full h-[350px] p-4 font-mono text-sm bg-background text-foreground resize-none focus:outline-none"
             placeholder={`// Write your ${language} code here`}
             readOnly={readOnly}
           />
         ) : (
-          <div className="w-full h-[350px] p-4 font-mono text-sm bg-[#1e1e1e] text-white overflow-auto">
+          <div className="w-full h-[350px] p-4 font-mono text-sm bg-background text-foreground overflow-auto">
             <pre className="m-0">
               <code className={getPrismLanguage(language)}>{content}</code>
             </pre>
