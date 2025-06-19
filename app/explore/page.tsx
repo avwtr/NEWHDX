@@ -297,6 +297,55 @@ function getElapsedString(date: string | Date) {
   return parts.join(" ") + " ago";
 }
 
+// Add this before ExplorePage component
+function MobileWarningDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+
+  if (!mounted) return null
+
+  return createPortal(
+    <div
+      className={`fixed inset-0 z-[9999] ${
+        open ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
+      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+    >
+      <div 
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm" 
+        onClick={onClose}
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+      <div 
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-sm"
+        style={{ position: 'fixed' }}
+      >
+        <div className="relative w-full rounded-lg bg-background p-6 shadow-lg animate-in zoom-in-95 duration-200">
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Mobile View Notice</h3>
+            <p className="text-sm text-muted-foreground">
+              The platform is currently only optimized for desktop view and may be difficult to use on mobile. We will be pushing a mobile optimized version soon.
+            </p>
+            <div className="flex justify-end">
+              <Button 
+                onClick={onClose}
+                className="bg-accent text-primary-foreground hover:bg-accent/90 w-full sm:w-auto"
+              >
+                Got it
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 export default function ExplorePage() {
   const [activeTab, setActiveTab] = useState("labs")
   const [searchQuery, setSearchQuery] = useState("")
@@ -325,6 +374,36 @@ export default function ExplorePage() {
   const [experimentsError, setExperimentsError] = useState<any>(null);
 
   const [isNavigating, setIsNavigating] = useState(false)
+
+  // Add these state variables at the top of the component
+  const [showMobileWarning, setShowMobileWarning] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    // Check if we're on mobile
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    // Initial check
+    checkMobile()
+    
+    // Add resize listener
+    window.addEventListener('resize', checkMobile)
+    
+    // Check if we should show the warning
+    const hasSeenWarning = sessionStorage.getItem('hasSeenMobileWarning')
+    if (!hasSeenWarning && window.innerWidth < 768) {
+      setShowMobileWarning(true)
+      sessionStorage.setItem('hasSeenMobileWarning', 'true')
+    }
+    
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  const handleCloseWarning = () => {
+    setShowMobileWarning(false)
+  }
 
   // Fetch all data on initial load
   useEffect(() => {
@@ -876,312 +955,423 @@ export default function ExplorePage() {
   }
 
   return (
-    <div className="container mx-auto pt-4 pb-8 relative">
-      {isLoading && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
-          <LoadingAnimation />
-        </div>
-      )}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h1 className="text-2xl font-bold uppercase tracking-wide">Explore</h1>
-
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <div className="relative flex-1 md:w-[300px]">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search..."
-              className="pl-8 bg-secondary border-secondary text-foreground"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+    <>
+      <MobileWarningDialog 
+        open={showMobileWarning} 
+        onClose={handleCloseWarning} 
+      />
+      <div className="container mx-auto pt-4 pb-8 relative">
+        {isLoading && (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+            <LoadingAnimation />
           </div>
+        )}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <h1 className="text-2xl font-bold uppercase tracking-wide">Explore</h1>
 
-          <Button
-            variant="outline"
-            className="border-accent text-accent hover:bg-secondary md:hidden"
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            <SlidersHorizontal className="h-4 w-4 mr-2" />
-            Filters
-          </Button>
-        </div>
-      </div>
-
-      <Tabs defaultValue="labs" value={activeTab} onValueChange={setActiveTab} className="w-full mt-8">
-        <TabsList className="grid grid-cols-3 w-full bg-secondary">
-          <TabsTrigger
-            value="labs"
-            className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
-          >
-            <Building2 className="h-4 w-4 mr-2" />
-            LABS
-          </TabsTrigger>
-          <TabsTrigger
-            value="grants"
-            className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            OPEN GRANTS
-          </TabsTrigger>
-          <TabsTrigger
-            value="experiments"
-            className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
-          >
-            <Flask className="h-4 w-4 mr-2" />
-            EXPERIMENTS
-          </TabsTrigger>
-        </TabsList>
-
-        <div className="flex mt-6 gap-6">
-          {/* Filters Sidebar */}
-          <div className={`w-full md:w-64 shrink-0 space-y-4 ${showFilters ? "block" : "hidden md:block"}`}>
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wide">Filters</h2>
-              {selectedCategories.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="h-8 text-xs text-accent hover:bg-secondary"
-                >
-                  Clear all
-                </Button>
-              )}
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="relative flex-1 md:w-[300px]">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search..."
+                className="pl-8 bg-secondary border-secondary text-foreground"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
 
-            <div className="space-y-4">
-              <Collapsible open={isCategoriesOpen} onOpenChange={setIsCategoriesOpen}>
-                <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-xs font-medium uppercase tracking-wide">
-                  Categories
-                  <ChevronDown className={`h-4 w-4 transition-transform ${isCategoriesOpen ? 'rotate-180' : ''}`} />
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <ScrollArea className="h-[300px] pr-4">
-                    <div className="space-y-2 pt-2">
-                      {getUniqueCategories().map((category) => (
-                        <div key={category} className="flex items-center space--x-2">
-                          <Checkbox
-                            id={`category-${category}`}
-                            checked={selectedCategories.includes(category)}
-                            onCheckedChange={() => toggleCategory(category)}
-                            className="border-accent data-[state=checked]:bg-accent data-[state=checked]:text-primary-foreground"
-                          />
-                          <label
-                            htmlFor={`category-${category}`}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
-                          >
-                            {getCategoryLabel(category)}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
+            <Button
+              variant="outline"
+              className="border-accent text-accent hover:bg-secondary md:hidden"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <SlidersHorizontal className="h-4 w-4 mr-2" />
+              Filters
+            </Button>
           </div>
+        </div>
 
-          {/* Content Area */}
-          <div className="flex-1">
-            {/* Selected Filters */}
-            {selectedCategories.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-4">
-                {selectedCategories.map((category) => (
-                  <Badge key={category} className={`${getBadgeClass(category)} pl-2 pr-1 py-1 flex items-center gap-1`}>
-                    {getCategoryLabel(category)}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-4 w-4 rounded-full hover:bg-black/20"
-                      onClick={() => toggleCategory(category)}
-                    >
-                      <X className="h-3 w-3" />
-                      <span className="sr-only">Remove</span>
-                    </Button>
-                  </Badge>
-                ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="h-6 text-xs text-accent hover:bg-secondary"
-                >
-                  Clear all
-                </Button>
+        <Tabs defaultValue="labs" value={activeTab} onValueChange={setActiveTab} className="w-full mt-8">
+          <TabsList className="grid grid-cols-3 w-full bg-secondary">
+            <TabsTrigger
+              value="labs"
+              className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
+            >
+              <Building2 className="h-4 w-4 mr-2" />
+              LABS
+            </TabsTrigger>
+            <TabsTrigger
+              value="grants"
+              className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              OPEN GRANTS
+            </TabsTrigger>
+            <TabsTrigger
+              value="experiments"
+              className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
+            >
+              <Flask className="h-4 w-4 mr-2" />
+              EXPERIMENTS
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="flex mt-6 gap-6">
+            {/* Filters Sidebar */}
+            <div className={`w-full md:w-64 shrink-0 space-y-4 ${showFilters ? "block" : "hidden md:block"}`}>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide">Filters</h2>
+                {selectedCategories.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-8 text-xs text-accent hover:bg-secondary"
+                  >
+                    Clear all
+                  </Button>
+                )}
               </div>
-            )}
 
-            {/* Results Count */}
-            <div className="text-sm text-muted-foreground mb-4">Showing {filteredData.length} results</div>
+              <div className="space-y-4">
+                <Collapsible open={isCategoriesOpen} onOpenChange={setIsCategoriesOpen}>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-xs font-medium uppercase tracking-wide">
+                    Categories
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isCategoriesOpen ? 'rotate-180' : ''}`} />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ScrollArea className="h-[300px] pr-4">
+                      <div className="space-y-2 pt-2">
+                        {getUniqueCategories().map((category) => (
+                          <div key={category} className="flex items-center space--x-2">
+                            <Checkbox
+                              id={`category-${category}`}
+                              checked={selectedCategories.includes(category)}
+                              onCheckedChange={() => toggleCategory(category)}
+                              className="border-accent data-[state=checked]:bg-accent data-[state=checked]:text-primary-foreground"
+                            />
+                            <label
+                              htmlFor={`category-${category}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
+                            >
+                              {getCategoryLabel(category)}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            </div>
 
-            {/* Results Grid */}
-            <TabsContent value="experiments" className="mt-0">
-              {experimentsLoading ? (
-                <div className="text-center py-8">Loading experiments…</div>
-              ) : (
-                <>
-                  {experimentsError && (
-                    <div className="text-red-500 text-sm mb-4">Error fetching experiments: {experimentsError.message || String(experimentsError)}</div>
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredData.map((experiment: any) => {
-                      const isClosed = experiment.closed_status === "CLOSED";
-                      return (
-                        <Card key={experiment.id} className="overflow-hidden">
-                          <CardContent className="p-0">
-                            <Link href={isClosed ? `/experiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`} className="block p-4 hover:bg-secondary/50">
-                              <div className="flex justify-between items-center mb-2">
-                                <div className="flex items-center gap-2">
-                                  {isClosed ? (
-                                    <><Circle className="h-3 w-3 text-red-500 fill-red-500" /><span className="text-xs text-red-500 font-bold">CONCLUDED</span></>
-                                  ) : (
-                                    <><div className="h-2 w-2 rounded-full bg-green-500 animate-[pulse_2s_ease-in-out_infinite]" /><span className="text-xs text-green-500 font-medium">LIVE</span></>
+            {/* Content Area */}
+            <div className="flex-1">
+              {/* Selected Filters */}
+              {selectedCategories.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {selectedCategories.map((category) => (
+                    <Badge key={category} className={`${getBadgeClass(category)} pl-2 pr-1 py-1 flex items-center gap-1`}>
+                      {getCategoryLabel(category)}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-4 w-4 rounded-full hover:bg-black/20"
+                        onClick={() => toggleCategory(category)}
+                      >
+                        <X className="h-3 w-3" />
+                        <span className="sr-only">Remove</span>
+                      </Button>
+                    </Badge>
+                  ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-6 text-xs text-accent hover:bg-secondary"
+                  >
+                    Clear all
+                  </Button>
+                </div>
+              )}
+
+              {/* Results Count */}
+              <div className="text-sm text-muted-foreground mb-4">Showing {filteredData.length} results</div>
+
+              {/* Results Grid */}
+              <TabsContent value="experiments" className="mt-0">
+                {experimentsLoading ? (
+                  <div className="text-center py-8">Loading experiments…</div>
+                ) : (
+                  <>
+                    {experimentsError && (
+                      <div className="text-red-500 text-sm mb-4">Error fetching experiments: {experimentsError.message || String(experimentsError)}</div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredData.map((experiment: any) => {
+                        const isClosed = experiment.closed_status === "CLOSED";
+                        return (
+                          <Card key={experiment.id} className="overflow-hidden">
+                            <CardContent className="p-0">
+                              <Link href={isClosed ? `/experiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`} className="block p-4 hover:bg-secondary/50">
+                                <div className="flex justify-between items-center mb-2">
+                                  <div className="flex items-center gap-2">
+                                    {isClosed ? (
+                                      <><Circle className="h-3 w-3 text-red-500 fill-red-500" /><span className="text-xs text-red-500 font-bold">CONCLUDED</span></>
+                                    ) : (
+                                      <><div className="h-2 w-2 rounded-full bg-green-500 animate-[pulse_2s_ease-in-out_infinite]" /><span className="text-xs text-green-500 font-medium">LIVE</span></>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground text-right">
+                                    {isClosed ? (
+                                      <span>Concluded {experiment.end_date ? getElapsedString(experiment.end_date) : "-"}</span>
+                                    ) : (
+                                      <span>Ongoing</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <h3 className="font-semibold text-accent text-lg mb-1">{experiment.name}</h3>
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {(expandedExperimentIds.includes(experiment.id) ? experiment.categories : experiment.categories.slice(0, 3)).map((category: string) => {
+                                    const color = getCategoryBadgeColors(category);
+                                    return (
+                                      <Badge key={category} variant={category as any} className="mr-2 mb-2 text-xs">
+                                        {getCategoryLabel(category)}
+                                      </Badge>
+                                    );
+                                  })}
+                                  {experiment.categories.length > 3 && !expandedExperimentIds.includes(experiment.id) && (
+                                    <button
+                                      type="button"
+                                      className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
+                                      onClick={e => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setExpandedExperimentIds(ids => [...ids, experiment.id]);
+                                      }}
+                                      title="View all categories"
+                                    >
+                                      ...
+                                    </button>
                                   )}
                                 </div>
-                                <div className="text-xs text-muted-foreground text-right">
-                                  {isClosed ? (
-                                    <span>Concluded {experiment.end_date ? getElapsedString(experiment.end_date) : "-"}</span>
-                                  ) : (
-                                    <span>Ongoing</span>
-                                  )}
+                                {experiment.objective && <p className="text-sm text-muted-foreground mb-2">{experiment.objective}</p>}
+                                {/* Contributors */}
+                                {Array.isArray(experiment.contributors) && experiment.contributors.length > 0 && (
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xs text-muted-foreground">Contributors:</span>
+                                    {experiment.contributors.map((c: any) => (
+                                      <Link key={c.user_id} href={`/profile/${c.user_id}`} target="_blank" rel="noopener noreferrer">
+                                        <Avatar className="h-6 w-6 border">
+                                          <AvatarImage src={c.profile?.avatar_url || "/placeholder.svg"} alt={c.profile?.username || c.user_id} />
+                                          <AvatarFallback>{c.profile?.username?.[0] || "U"}</AvatarFallback>
+                                        </Avatar>
+                                      </Link>
+                                    ))}
+                                  </div>
+                                )}
+                                {/* Files */}
+                                {Array.isArray(experiment.files) && experiment.files.length > 0 && (
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <FileText className="h-4 w-4 text-muted-foreground" />
+                                    {experiment.files.map((file: any) => (
+                                      <a
+                                        key={file.id}
+                                        href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/experiment-files/${file.file_path}`}
+                                        download
+                                        className="text-xs underline text-accent"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        {file.name}
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                                  <span className="flex items-center gap-2">
+                                    <img src={experiment.labProfilePic} alt={experiment.labName} className="h-5 w-5 rounded-full object-cover border" />
+                                    {experiment.labName}
+                                  </span>
+                                  <span>{experiment.lastUpdated}</span>
+                                </div>
+                              </Link>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </TabsContent>
+
+              <TabsContent value="labs" className="mt-0">
+                {labsLoading ? (
+                  <div className="text-center py-8">Loading labs…</div>
+                ) : (
+                  <>
+                    {labsError && (
+                      <div className="text-red-500 text-sm mb-4">Error fetching labs: {labsError.message || String(labsError)}</div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredData.map((lab: any) => (
+                        <Card key={lab.id} className="overflow-hidden relative">
+                          <CardContent className="p-0">
+                            {/* Org info in top-right corner, outside the Link to avoid nested <a> */}
+                            {lab.institution && lab.org_slug && (
+                              <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
+                                {lab.orgProfilePic && (
+                                  <img src={lab.orgProfilePic} alt={lab.institution} className="h-5 w-5 rounded-full object-cover border" />
+                                )}
+                                <a
+                                  href={`/orgs/${lab.org_slug}`}
+                                  className="text-xs font-medium text-primary hover:underline truncate max-w-[100px]"
+                                  onClick={e => e.stopPropagation()}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {lab.institution}
+                                </a>
+                              </div>
+                            )}
+                            <Link 
+                              href={`/lab/${lab.id}`} 
+                              className="block p-4 hover:bg-secondary/50"
+                              onClick={() => setIsNavigating(true)}
+                            >
+                              <div className="flex items-start gap-3">
+                                <Avatar className="h-12 w-12">
+                                  <AvatarImage src={lab.image || "/placeholder.svg"} alt={lab.name} />
+                                  <AvatarFallback>{lab.name.substring(0, 2)}</AvatarFallback>
+                                </Avatar>
+                                <div className="space-y-1 flex-1">
+                                  <h3 className="font-medium text-accent">{lab.name}</h3>
+                                  {/* Science categories as colored badges, up to 3, with ellipsis if more */}
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {(expandedLabIds.includes(lab.id) ? lab.categories : lab.categories.slice(0, 3)).map((category: string) => (
+                                      <Badge
+                                        key={category}
+                                        variant={category as any}
+                                        className="mr-2 mb-2 text-xs"
+                                      >
+                                        {getCategoryLabel(category)}
+                                      </Badge>
+                                    ))}
+                                    {lab.categories.length > 3 && !expandedLabIds.includes(lab.id) && (
+                                      <button
+                                        type="button"
+                                        className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
+                                        style={{ minWidth: 24 }}
+                                        onClick={e => {
+                                          e.stopPropagation();
+                                          setExpandedLabIds(ids => [...ids, lab.id]);
+                                        }}
+                                        title="View all categories"
+                                      >
+                                        ...
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                              <h3 className="font-semibold text-accent text-lg mb-1">{experiment.name}</h3>
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                {(expandedExperimentIds.includes(experiment.id) ? experiment.categories : experiment.categories.slice(0, 3)).map((category: string) => {
-                                  const color = getCategoryBadgeColors(category);
-                                  return (
-                                    <Badge key={category} variant={category as any} className="mr-2 mb-2 text-xs">
-                                      {getCategoryLabel(category)}
-                                    </Badge>
-                                  );
-                                })}
-                                {experiment.categories.length > 3 && !expandedExperimentIds.includes(experiment.id) && (
-                                  <button
-                                    type="button"
-                                    className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
-                                    onClick={e => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setExpandedExperimentIds(ids => [...ids, experiment.id]);
-                                    }}
-                                    title="View all categories"
-                                  >
-                                    ...
-                                  </button>
+                              {/* Compact metrics row */}
+                              <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1">
+                                  <FileText className="h-4 w-4" />
+                                  <span>{lab.files}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Flask className="h-4 w-4" />
+                                  <span>{lab.projects}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Users className="h-4 w-4" />
+                                  <span>{lab.members}</span>
+                                </div>
+                                {lab.fundingGoal > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    <DollarSign className="h-4 w-4" />
+                                    <span>${typeof lab.fundingCurrent === "number" ? lab.fundingCurrent.toLocaleString() : "0"}</span>
+                                  </div>
                                 )}
                               </div>
-                              {experiment.objective && <p className="text-sm text-muted-foreground mb-2">{experiment.objective}</p>}
-                              {/* Contributors */}
-                              {Array.isArray(experiment.contributors) && experiment.contributors.length > 0 && (
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-xs text-muted-foreground">Contributors:</span>
-                                  {experiment.contributors.map((c: any) => (
-                                    <Link key={c.user_id} href={`/profile/${c.user_id}`} target="_blank" rel="noopener noreferrer">
-                                      <Avatar className="h-6 w-6 border">
-                                        <AvatarImage src={c.profile?.avatar_url || "/placeholder.svg"} alt={c.profile?.username || c.user_id} />
-                                        <AvatarFallback>{c.profile?.username?.[0] || "U"}</AvatarFallback>
-                                      </Avatar>
-                                    </Link>
-                                  ))}
+                              {/* Funding progress bar */}
+                              {lab.fundingGoal > 0 && (
+                                <div className="mt-2">
+                                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                                    <span>Goal: ${typeof lab.fundingGoal === "number" ? lab.fundingGoal.toLocaleString() : "0"}</span>
+                                    <span>{Math.round((lab.fundingCurrent / lab.fundingGoal) * 100)}%</span>
+                                  </div>
+                                  <Progress value={(lab.fundingCurrent / lab.fundingGoal) * 100} className="h-2" />
                                 </div>
                               )}
-                              {/* Files */}
-                              {Array.isArray(experiment.files) && experiment.files.length > 0 && (
-                                <div className="flex items-center gap-2 mb-2">
-                                  <FileText className="h-4 w-4 text-muted-foreground" />
-                                  {experiment.files.map((file: any) => (
-                                    <a
-                                      key={file.id}
-                                      href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/experiment-files/${file.file_path}`}
-                                      download
-                                      className="text-xs underline text-accent"
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                    >
-                                      {file.name}
-                                    </a>
-                                  ))}
-                                </div>
-                              )}
-                              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                                <span className="flex items-center gap-2">
-                                  <img src={experiment.labProfilePic} alt={experiment.labName} className="h-5 w-5 rounded-full object-cover border" />
-                                  {experiment.labName}
-                                </span>
-                                <span>{experiment.lastUpdated}</span>
-                              </div>
+                              {/* Last updated */}
+                              <div className="mt-2 text-xs text-muted-foreground">{lab.lastUpdated}</div>
                             </Link>
                           </CardContent>
                         </Card>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </TabsContent>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </TabsContent>
 
-            <TabsContent value="labs" className="mt-0">
-              {labsLoading ? (
-                <div className="text-center py-8">Loading labs…</div>
-              ) : (
-                <>
-                  {labsError && (
-                    <div className="text-red-500 text-sm mb-4">Error fetching labs: {labsError.message || String(labsError)}</div>
-                  )}
+              <TabsContent value="grants" className="mt-0">
+                {grantsLoading ? (
+                  <div className="text-center py-8">Loading grants…</div>
+                ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredData.map((lab: any) => (
-                      <Card key={lab.id} className="overflow-hidden relative">
-                        <CardContent className="p-0">
-                          {/* Org info in top-right corner, outside the Link to avoid nested <a> */}
-                          {lab.institution && lab.org_slug && (
-                            <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
-                              {lab.orgProfilePic && (
-                                <img src={lab.orgProfilePic} alt={lab.institution} className="h-5 w-5 rounded-full object-cover border" />
-                              )}
-                              <a
-                                href={`/orgs/${lab.org_slug}`}
-                                className="text-xs font-medium text-primary hover:underline truncate max-w-[100px]"
-                                onClick={e => e.stopPropagation()}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {lab.institution}
-                              </a>
-                            </div>
-                          )}
-                          <Link 
-                            href={`/lab/${lab.id}`} 
-                            className="block p-4 hover:bg-secondary/50"
-                            onClick={() => setIsNavigating(true)}
-                          >
-                            <div className="flex items-start gap-3">
-                              <Avatar className="h-12 w-12">
-                                <AvatarImage src={lab.image || "/placeholder.svg"} alt={lab.name} />
-                                <AvatarFallback>{lab.name.substring(0, 2)}</AvatarFallback>
-                              </Avatar>
-                              <div className="space-y-1 flex-1">
-                                <h3 className="font-medium text-accent">{lab.name}</h3>
+                    {filteredData.map((grant: any) => {
+                      // Route to review page if user is creator
+                      const isCreator = user && grant.created_by && user.id === grant.created_by;
+                      const grantUrl = isCreator ? `/grants/review/${grant.id}` : `/grants/${grant.id}`;
+                      // Only consider closure_status === 'AWARDED' as awarded
+                      const isAwarded = grant.closure_status === 'AWARDED';
+                      return (
+                        <Card key={grant.id} className={`overflow-hidden relative transition-all duration-200 ${isAwarded ? 'opacity-70 grayscale hover:opacity-90 hover:grayscale-0 cursor-pointer' : ''}`}>
+                          <CardContent className="p-0 flex flex-col justify-between">
+                            <Link href={grantUrl} className="block p-4 hover:bg-secondary/50 relative h-full">
+                              <div className="space-y-1 flex flex-col mt-2 mb-2">
+                                <h3 className="font-medium text-accent break-words whitespace-normal overflow-hidden text-ellipsis max-h-[3.2em] leading-tight" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>{grant.name}</h3>
+                                {/* Org and user info row, below the name */}
+                                <div className="flex items-center gap-2 mt-1 mb-1 min-h-[1.5em]">
+                                  {grant.orgName && (
+                                    <div className="flex items-center gap-1 max-w-[60%] truncate">
+                                      <img
+                                        src={grant.orgProfilePic || "/placeholder.svg"}
+                                        alt={grant.orgName}
+                                        className="h-5 w-5 rounded-full object-cover border"
+                                      />
+                                      <span className="text-xs font-medium text-muted-foreground truncate">{grant.orgName}</span>
+                                    </div>
+                                  )}
+                                  {grant.creatorUsername && (
+                                    <span className="text-xs text-muted-foreground font-normal truncate max-w-[40%]">@{grant.creatorUsername}</span>
+                                  )}
+                                </div>
                                 {/* Science categories as colored badges, up to 3, with ellipsis if more */}
                                 <div className="flex flex-wrap gap-1 mt-2">
-                                  {(expandedLabIds.includes(lab.id) ? lab.categories : lab.categories.slice(0, 3)).map((category: string) => (
-                                    <Badge
-                                      key={category}
-                                      variant={category as any}
-                                      className="mr-2 mb-2 text-xs"
-                                    >
-                                      {getCategoryLabel(category)}
-                                    </Badge>
-                                  ))}
-                                  {lab.categories.length > 3 && !expandedLabIds.includes(lab.id) && (
+                                  {(expandedGrantIds.includes(grant.id) ? grant.categories : grant.categories.slice(0, 3)).map((category: string) => {
+                                    const color = getCategoryBadgeColors(category)
+                                    return (
+                                      <Badge
+                                        key={category}
+                                        variant={category as any}
+                                        className="mr-2 mb-2 text-xs"
+                                      >
+                                        {getCategoryLabel(category)}
+                                      </Badge>
+                                    )
+                                  })}
+                                  {grant.categories.length > 3 && !expandedGrantIds.includes(grant.id) && (
                                     <button
                                       type="button"
                                       className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
                                       style={{ minWidth: 24 }}
                                       onClick={e => {
                                         e.stopPropagation();
-                                        setExpandedLabIds(ids => [...ids, lab.id]);
+                                        setExpandedGrantIds(ids => [...ids, grant.id]);
                                       }}
                                       title="View all categories"
                                     >
@@ -1190,137 +1380,32 @@ export default function ExplorePage() {
                                   )}
                                 </div>
                               </div>
-                            </div>
-                            {/* Compact metrics row */}
-                            <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <FileText className="h-4 w-4" />
-                                <span>{lab.files}</span>
+                              <div className="mt-3 flex items-center justify-between">
+                                <span
+                                  className={`text-xs font-semibold px-2 py-1 rounded ${isAwarded ? 'bg-green-600 text-white border-none filter-none !filter-none relative z-10' : 'bg-secondary text-foreground border border-border'}`}
+                                  style={isAwarded ? { filter: 'none' } : {}}
+                                >
+                                  {grant.amount} {isAwarded && <span className="ml-2">AWARDED</span>}
+                                </span>
+                                <span className="text-xs text-muted-foreground">Deadline: {formatDate(grant.deadline)}</span>
                               </div>
-                              <div className="flex items-center gap-1">
-                                <Flask className="h-4 w-4" />
-                                <span>{lab.projects}</span>
+                              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                                <span>{grant.funder}</span>
+                                <span>{grant.lastUpdated}</span>
                               </div>
-                              <div className="flex items-center gap-1">
-                                <Users className="h-4 w-4" />
-                                <span>{lab.members}</span>
-                              </div>
-                              {lab.fundingGoal > 0 && (
-                                <div className="flex items-center gap-1">
-                                  <DollarSign className="h-4 w-4" />
-                                  <span>${typeof lab.fundingCurrent === "number" ? lab.fundingCurrent.toLocaleString() : "0"}</span>
-                                </div>
-                              )}
-                            </div>
-                            {/* Funding progress bar */}
-                            {lab.fundingGoal > 0 && (
-                              <div className="mt-2">
-                                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                                  <span>Goal: ${typeof lab.fundingGoal === "number" ? lab.fundingGoal.toLocaleString() : "0"}</span>
-                                  <span>{Math.round((lab.fundingCurrent / lab.fundingGoal) * 100)}%</span>
-                                </div>
-                                <Progress value={(lab.fundingCurrent / lab.fundingGoal) * 100} className="h-2" />
-                              </div>
-                            )}
-                            {/* Last updated */}
-                            <div className="mt-2 text-xs text-muted-foreground">{lab.lastUpdated}</div>
-                          </Link>
-                        </CardContent>
-                      </Card>
-                    ))}
+                            </Link>
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
                   </div>
-                </>
-              )}
-            </TabsContent>
-
-            <TabsContent value="grants" className="mt-0">
-              {grantsLoading ? (
-                <div className="text-center py-8">Loading grants…</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredData.map((grant: any) => {
-                    // Route to review page if user is creator
-                    const isCreator = user && grant.created_by && user.id === grant.created_by;
-                    const grantUrl = isCreator ? `/grants/review/${grant.id}` : `/grants/${grant.id}`;
-                    // Only consider closure_status === 'AWARDED' as awarded
-                    const isAwarded = grant.closure_status === 'AWARDED';
-                    return (
-                      <Card key={grant.id} className={`overflow-hidden relative transition-all duration-200 ${isAwarded ? 'opacity-70 grayscale hover:opacity-90 hover:grayscale-0 cursor-pointer' : ''}`}>
-                        <CardContent className="p-0 flex flex-col justify-between">
-                          <Link href={grantUrl} className="block p-4 hover:bg-secondary/50 relative h-full">
-                            <div className="space-y-1 flex flex-col mt-2 mb-2">
-                              <h3 className="font-medium text-accent break-words whitespace-normal overflow-hidden text-ellipsis max-h-[3.2em] leading-tight" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>{grant.name}</h3>
-                              {/* Org and user info row, below the name */}
-                              <div className="flex items-center gap-2 mt-1 mb-1 min-h-[1.5em]">
-                                {grant.orgName && (
-                                  <div className="flex items-center gap-1 max-w-[60%] truncate">
-                                    <img
-                                      src={grant.orgProfilePic || "/placeholder.svg"}
-                                      alt={grant.orgName}
-                                      className="h-5 w-5 rounded-full object-cover border"
-                                    />
-                                    <span className="text-xs font-medium text-muted-foreground truncate">{grant.orgName}</span>
-                                  </div>
-                                )}
-                                {grant.creatorUsername && (
-                                  <span className="text-xs text-muted-foreground font-normal truncate max-w-[40%]">@{grant.creatorUsername}</span>
-                                )}
-                              </div>
-                              {/* Science categories as colored badges, up to 3, with ellipsis if more */}
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {(expandedGrantIds.includes(grant.id) ? grant.categories : grant.categories.slice(0, 3)).map((category: string) => {
-                                  const color = getCategoryBadgeColors(category)
-                                  return (
-                                    <Badge
-                                      key={category}
-                                      variant={category as any}
-                                      className="mr-2 mb-2 text-xs"
-                                    >
-                                      {getCategoryLabel(category)}
-                                    </Badge>
-                                  )
-                                })}
-                                {grant.categories.length > 3 && !expandedGrantIds.includes(grant.id) && (
-                                  <button
-                                    type="button"
-                                    className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
-                                    style={{ minWidth: 24 }}
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      setExpandedGrantIds(ids => [...ids, grant.id]);
-                                    }}
-                                    title="View all categories"
-                                  >
-                                    ...
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <div className="mt-3 flex items-center justify-between">
-                              <span
-                                className={`text-xs font-semibold px-2 py-1 rounded ${isAwarded ? 'bg-green-600 text-white border-none filter-none !filter-none relative z-10' : 'bg-secondary text-foreground border border-border'}`}
-                                style={isAwarded ? { filter: 'none' } : {}}
-                              >
-                                {grant.amount} {isAwarded && <span className="ml-2">AWARDED</span>}
-                              </span>
-                              <span className="text-xs text-muted-foreground">Deadline: {formatDate(grant.deadline)}</span>
-                            </div>
-                            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                              <span>{grant.funder}</span>
-                              <span>{grant.lastUpdated}</span>
-                            </div>
-                          </Link>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-              )}
-            </TabsContent>
+                )}
+              </TabsContent>
+            </div>
           </div>
-        </div>
-      </Tabs>
-    </div>
+        </Tabs>
+      </div>
+    </>
   )
 }
 
