@@ -1,5 +1,5 @@
 import type React from "react"
-import { JetBrains_Mono } from "next/font/google"
+import { JetBrains_Mono, IM_Fell_DW_Pica } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/components/auth-provider"
 import { RoleProvider } from "@/contexts/role-context"
@@ -17,13 +17,22 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
 })
 
+// Initialize the IM Fell DW Pica font for headings  
+const imFellDWPica = IM_Fell_DW_Pica({
+  subsets: ["latin"],
+  weight: ["400"],
+  style: ["normal", "italic"],
+  variable: "--font-fell",
+  display: "swap",
+})
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={jetbrainsMono.variable}>
+    <html lang="en" suppressHydrationWarning className={`${jetbrainsMono.variable} ${imFellDWPica.variable}`}>
       <head>
         <script
           dangerouslySetInnerHTML={{

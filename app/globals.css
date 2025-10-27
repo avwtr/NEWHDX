@@ -95,6 +95,20 @@
     font-family: var(--font-jetbrains-mono), monospace;
   }
 
+  /* IM Fell DW Pica font styles - use the CSS variable from Next.js font loader */
+  .font-fell,
+  .font-fell * {
+    font-family: var(--font-fell) !important;
+  }
+  
+  .font-fell.italic,
+  .font-fell.italic *,
+  .font-fell.italic span,
+  .font-fell.italic button {
+    font-family: var(--font-fell) !important;
+    font-style: italic !important;
+  }
+
   /* Apply uppercase to headings and labels */
   h1,
   h2,

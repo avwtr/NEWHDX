@@ -24,7 +24,8 @@ const config: Config = {
     "bg-science-geology",
     "bg-science-default",
     "text-white",
-    "text-black"
+    "text-black",
+    "font-fell"
   ],
   theme: {
     container: {
@@ -38,12 +39,16 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-jetbrains-mono), monospace"],
         mono: ["var(--font-jetbrains-mono), monospace"],
+        serif: ["var(--font-fell), serif"],
+        fell: ["var(--font-fell), serif"],
       },
       colors: {
-        // Main theme colors
-        background: "#070D2C",
+        // Main theme colors - matching new design system
+        background: "#010415",
         foreground: "#FFFFFF",
         accent: "#A0FFDD",
+        secondaryAccent: "#8AFFD4",
+        cardBg: "#0a0f1f",
 
         // Science domain colors
         science: {
@@ -62,17 +67,17 @@ const config: Config = {
           default: "#6C757D",
         },
 
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
+        border: "#070D2C",
+        input: "#0a0f1f",
         ring: "hsl(var(--ring))",
 
         primary: {
           DEFAULT: "#A0FFDD",
-          foreground: "#070D2C",
+          foreground: "#010415",
         },
 
         secondary: {
-          DEFAULT: "#1A2252",
+          DEFAULT: "#070D2C",
           foreground: "#FFFFFF",
         },
 
@@ -82,17 +87,17 @@ const config: Config = {
         },
 
         muted: {
-          DEFAULT: "#1A2252",
+          DEFAULT: "#0a0f1f",
           foreground: "#A6ADCF",
         },
 
         card: {
-          DEFAULT: "#0F1642",
+          DEFAULT: "#0a0f1f",
           foreground: "#FFFFFF",
         },
 
         popover: {
-          DEFAULT: "#0F1642",
+          DEFAULT: "#0a0f1f",
           foreground: "#FFFFFF",
         },
       },

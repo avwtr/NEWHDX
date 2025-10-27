@@ -356,17 +356,12 @@ export default function ExplorePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [allCategories, setAllCategories] = useState<string[]>([])
 
-  // Move grants state and fetching logic here
-  const [grantsData, setGrantsData] = useState<any[]>([])
-  const [grantsLoading, setGrantsLoading] = useState(false)
-
   // --- Move labs state and fetching logic here ---
   const [labsData, setLabsData] = useState<any[]>([]);
   const [labsLoading, setLabsLoading] = useState(false);
   const [labsError, setLabsError] = useState<any>(null);
   const [expandedLabIds, setExpandedLabIds] = useState<string[]>([]);
   const [expandedExperimentIds, setExpandedExperimentIds] = useState<string[]>([]);
-  const [expandedGrantIds, setExpandedGrantIds] = useState<string[]>([]);
 
   // Add experiments state and loading state
   const [experimentsData, setExperimentsData] = useState<any[]>([]);
@@ -598,59 +593,6 @@ export default function ExplorePage() {
           };
         });
 
-        // Fetch grants
-        const { data: grants, error: grantsError } = await supabase
-          .from("grants")
-          .select("grant_id, grant_name, grant_description, grant_categories, grant_amount, deadline, created_at, created_by, org_id, closure_status")
-          .order("created_at", { ascending: false });
-
-        if (grantsError) throw grantsError;
-
-        // Fetch profiles for grant creators
-        const userIds = [...new Set(grants.map(g => g.created_by).filter(Boolean))];
-        let profileMap: Record<string, any> = {};
-        if (userIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from("profiles")
-            .select("user_id, username")
-            .in("user_id", userIds);
-          if (profiles) {
-            profiles.forEach(p => { profileMap[p.user_id] = p });
-          }
-        }
-
-        // Fetch organizations for grants
-        const grantOrgIds = [...new Set(grants.map(g => g.org_id).filter(Boolean))];
-        let grantOrgMap: Record<string, any> = {};
-        if (grantOrgIds.length > 0) {
-          const { data: orgs } = await supabase
-            .from("organizations")
-            .select("org_id, org_name, profilePic")
-            .in("org_id", grantOrgIds);
-          if (orgs) {
-            orgs.forEach(o => { grantOrgMap[o.org_id] = o });
-          }
-        }
-
-        // Map grants data
-        const mappedGrants = grants.map((g: any) => ({
-          id: g.grant_id || `temp-${g.created_at}`,
-          name: g.grant_name,
-          description: g.grant_description,
-          categories: g.grant_categories || [],
-          funder: "",
-          amount: g.grant_amount ? `$${g.grant_amount.toLocaleString()}` : "",
-          deadline: g.deadline,
-          eligibility: "",
-          applicationProcess: "",
-          lastUpdated: g.created_at ? `${Math.round((Date.now() - new Date(g.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
-          creatorUsername: profileMap[g.created_by]?.username || "",
-          orgName: grantOrgMap[g.org_id]?.org_name || "",
-          orgProfilePic: grantOrgMap[g.org_id]?.profilePic || "",
-          created_by: g.created_by,
-          closure_status: g.closure_status,
-        }));
-
         // After fetching all data, collect unique categories
         const uniqueCategories = new Set<string>();
         
@@ -668,20 +610,12 @@ export default function ExplorePage() {
           }
         });
 
-        // Add grant categories
-        mappedGrants.forEach(grant => {
-          if (Array.isArray(grant.categories)) {
-            grant.categories.forEach(cat => uniqueCategories.add(cat));
-          }
-        });
-
         // Set all unique categories
         setAllCategories(Array.from(uniqueCategories).sort());
 
         // Set the data
         setLabsData(mappedLabs);
         setExperimentsData(mappedExperiments);
-        setGrantsData(mappedGrants);
 
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -810,10 +744,8 @@ export default function ExplorePage() {
         return experimentsData;
       case "labs":
         return labsData;
-      case "grants":
-        return grantsData;
       default:
-        return experimentsData;
+        return labsData;
     }
   }
 
@@ -967,7 +899,7 @@ export default function ExplorePage() {
           </div>
         )}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <h1 className="text-2xl font-bold uppercase tracking-wide">Explore</h1>
+          <h1 className="text-2xl font-bold uppercase tracking-wide font-fell italic">Explore</h1>
 
           <div className="flex items-center gap-2 w-full md:w-auto">
             <div className="relative flex-1 md:w-[300px]">
@@ -993,24 +925,17 @@ export default function ExplorePage() {
         </div>
 
         <Tabs defaultValue="labs" value={activeTab} onValueChange={setActiveTab} className="w-full mt-8">
-          <TabsList className="grid grid-cols-3 w-full bg-secondary">
+          <TabsList className="grid grid-cols-2 w-full bg-secondary">
             <TabsTrigger
               value="labs"
-              className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
+              className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs font-fell italic"
             >
               <Building2 className="h-4 w-4 mr-2" />
               LABS
             </TabsTrigger>
             <TabsTrigger
-              value="grants"
-              className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              OPEN GRANTS
-            </TabsTrigger>
-            <TabsTrigger
               value="experiments"
-              className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs"
+              className="data-[state=active]:bg-accent data-[state=active]:text-primary-foreground text-xs font-fell italic"
             >
               <Flask className="h-4 w-4 mr-2" />
               EXPERIMENTS
@@ -1021,7 +946,7 @@ export default function ExplorePage() {
             {/* Filters Sidebar */}
             <div className={`w-full md:w-64 shrink-0 space-y-4 ${showFilters ? "block" : "hidden md:block"}`}>
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wide">Filters</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide font-fell italic">Filters</h2>
                 {selectedCategories.length > 0 && (
                   <Button
                     variant="ghost"
@@ -1036,7 +961,7 @@ export default function ExplorePage() {
 
               <div className="space-y-4">
                 <Collapsible open={isCategoriesOpen} onOpenChange={setIsCategoriesOpen}>
-                  <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-xs font-medium uppercase tracking-wide">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-xs font-medium uppercase tracking-wide font-fell italic">
                     Categories
                     <ChevronDown className={`h-4 w-4 transition-transform ${isCategoriesOpen ? 'rotate-180' : ''}`} />
                   </CollapsibleTrigger>
@@ -1072,7 +997,7 @@ export default function ExplorePage() {
               {selectedCategories.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {selectedCategories.map((category) => (
-                    <Badge key={category} className={`${getBadgeClass(category)} pl-2 pr-1 py-1 flex items-center gap-1`}>
+                    <Badge key={category} className={`${getBadgeClass(category)} pl-2 pr-1 py-1 flex items-center gap-1 normal-case`}>
                       {getCategoryLabel(category)}
                       <Button
                         variant="ghost"
@@ -1097,7 +1022,7 @@ export default function ExplorePage() {
               )}
 
               {/* Results Count */}
-              <div className="text-sm text-muted-foreground mb-4">Showing {filteredData.length} results</div>
+              <div className="text-sm text-muted-foreground mb-4 font-fell italic">Showing {filteredData.length} results</div>
 
               {/* Results Grid */}
               <TabsContent value="experiments" className="mt-0">
@@ -1131,12 +1056,12 @@ export default function ExplorePage() {
                                     )}
                                   </div>
                                 </div>
-                                <h3 className="font-semibold text-accent text-lg mb-1">{experiment.name}</h3>
+                                <h3 className="font-semibold text-accent text-lg mb-1 font-fell italic normal-case">{experiment.name}</h3>
                                 <div className="flex flex-wrap gap-1 mb-2">
                                   {(expandedExperimentIds.includes(experiment.id) ? experiment.categories : experiment.categories.slice(0, 3)).map((category: string) => {
                                     const color = getCategoryBadgeColors(category);
                                     return (
-                                      <Badge key={category} variant={category as any} className="mr-2 mb-2 text-xs">
+                                      <Badge key={category} variant={category as any} className="mr-2 mb-2 text-xs normal-case">
                                         {getCategoryLabel(category)}
                                       </Badge>
                                     );
@@ -1246,14 +1171,14 @@ export default function ExplorePage() {
                                   <AvatarFallback>{lab.name.substring(0, 2)}</AvatarFallback>
                                 </Avatar>
                                 <div className="space-y-1 flex-1">
-                                  <h3 className="font-medium text-accent">{lab.name}</h3>
+                                  <h3 className="font-medium text-accent font-fell italic normal-case">{lab.name}</h3>
                                   {/* Science categories as colored badges, up to 3, with ellipsis if more */}
                                   <div className="flex flex-wrap gap-1 mt-2">
                                     {(expandedLabIds.includes(lab.id) ? lab.categories : lab.categories.slice(0, 3)).map((category: string) => (
                                       <Badge
                                         key={category}
                                         variant={category as any}
-                                        className="mr-2 mb-2 text-xs"
+                                        className="mr-2 mb-2 text-xs normal-case"
                                       >
                                         {getCategoryLabel(category)}
                                       </Badge>
@@ -1289,23 +1214,7 @@ export default function ExplorePage() {
                                   <Users className="h-4 w-4" />
                                   <span>{lab.members}</span>
                                 </div>
-                                {lab.fundingGoal > 0 && (
-                                  <div className="flex items-center gap-1">
-                                    <DollarSign className="h-4 w-4" />
-                                    <span>${typeof lab.fundingCurrent === "number" ? lab.fundingCurrent.toLocaleString() : "0"}</span>
-                                  </div>
-                                )}
                               </div>
-                              {/* Funding progress bar */}
-                              {lab.fundingGoal > 0 && (
-                                <div className="mt-2">
-                                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                                    <span>Goal: ${typeof lab.fundingGoal === "number" ? lab.fundingGoal.toLocaleString() : "0"}</span>
-                                    <span>{Math.round((lab.fundingCurrent / lab.fundingGoal) * 100)}%</span>
-                                  </div>
-                                  <Progress value={(lab.fundingCurrent / lab.fundingGoal) * 100} className="h-2" />
-                                </div>
-                              )}
                               {/* Last updated */}
                               <div className="mt-2 text-xs text-muted-foreground">{lab.lastUpdated}</div>
                             </Link>
@@ -1317,90 +1226,6 @@ export default function ExplorePage() {
                 )}
               </TabsContent>
 
-              <TabsContent value="grants" className="mt-0">
-                {grantsLoading ? (
-                  <div className="text-center py-8">Loading grants…</div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredData.map((grant: any) => {
-                      // Route to review page if user is creator
-                      const isCreator = user && grant.created_by && user.id === grant.created_by;
-                      const grantUrl = isCreator ? `/grants/review/${grant.id}` : `/grants/${grant.id}`;
-                      // Only consider closure_status === 'AWARDED' as awarded
-                      const isAwarded = grant.closure_status === 'AWARDED';
-                      return (
-                        <Card key={grant.id} className={`overflow-hidden relative transition-all duration-200 ${isAwarded ? 'opacity-70 grayscale hover:opacity-90 hover:grayscale-0 cursor-pointer' : ''}`}>
-                          <CardContent className="p-0 flex flex-col justify-between">
-                            <Link href={grantUrl} className="block p-4 hover:bg-secondary/50 relative h-full">
-                              <div className="space-y-1 flex flex-col mt-2 mb-2">
-                                <h3 className="font-medium text-accent break-words whitespace-normal overflow-hidden text-ellipsis max-h-[3.2em] leading-tight" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>{grant.name}</h3>
-                                {/* Org and user info row, below the name */}
-                                <div className="flex items-center gap-2 mt-1 mb-1 min-h-[1.5em]">
-                                  {grant.orgName && (
-                                    <div className="flex items-center gap-1 max-w-[60%] truncate">
-                                      <img
-                                        src={grant.orgProfilePic || "/placeholder.svg"}
-                                        alt={grant.orgName}
-                                        className="h-5 w-5 rounded-full object-cover border"
-                                      />
-                                      <span className="text-xs font-medium text-muted-foreground truncate">{grant.orgName}</span>
-                                    </div>
-                                  )}
-                                  {grant.creatorUsername && (
-                                    <span className="text-xs text-muted-foreground font-normal truncate max-w-[40%]">@{grant.creatorUsername}</span>
-                                  )}
-                                </div>
-                                {/* Science categories as colored badges, up to 3, with ellipsis if more */}
-                                <div className="flex flex-wrap gap-1 mt-2">
-                                  {(expandedGrantIds.includes(grant.id) ? grant.categories : grant.categories.slice(0, 3)).map((category: string) => {
-                                    const color = getCategoryBadgeColors(category)
-                                    return (
-                                      <Badge
-                                        key={category}
-                                        variant={category as any}
-                                        className="mr-2 mb-2 text-xs"
-                                      >
-                                        {getCategoryLabel(category)}
-                                      </Badge>
-                                    )
-                                  })}
-                                  {grant.categories.length > 3 && !expandedGrantIds.includes(grant.id) && (
-                                    <button
-                                      type="button"
-                                      className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
-                                      style={{ minWidth: 24 }}
-                                      onClick={e => {
-                                        e.stopPropagation();
-                                        setExpandedGrantIds(ids => [...ids, grant.id]);
-                                      }}
-                                      title="View all categories"
-                                    >
-                                      ...
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="mt-3 flex items-center justify-between">
-                                <span
-                                  className={`text-xs font-semibold px-2 py-1 rounded ${isAwarded ? 'bg-green-600 text-white border-none filter-none !filter-none relative z-10' : 'bg-secondary text-foreground border border-border'}`}
-                                  style={isAwarded ? { filter: 'none' } : {}}
-                                >
-                                  {grant.amount} {isAwarded && <span className="ml-2">AWARDED</span>}
-                                </span>
-                                <span className="text-xs text-muted-foreground">Deadline: {formatDate(grant.deadline)}</span>
-                              </div>
-                              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                                <span>{grant.funder}</span>
-                                <span>{grant.lastUpdated}</span>
-                              </div>
-                            </Link>
-                          </CardContent>
-                        </Card>
-                      )
-                    })}
-                  </div>
-                )}
-              </TabsContent>
             </div>
           </div>
         </Tabs>
