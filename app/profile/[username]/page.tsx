@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { UserLabsSection } from "@/components/profile/user-labs-section"
+import { UserExperimentsSection } from "@/components/profile/user-experiments-section"
 import { UserActivityLogs } from "@/components/profile/user-activity-logs"
 import { UserCollections } from "@/components/profile/user-collections"
 import { UserPublications } from "@/components/profile/user-publications"
@@ -370,14 +371,18 @@ export default function ProfilePage() {
         {/* Main Content Area */}
         <div className="md:col-span-2">
           <Tabs defaultValue="labs" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="labs">My Labs</TabsTrigger>
+              <TabsTrigger value="experiments">My Experiments</TabsTrigger>
               <TabsTrigger value="activity">Activity</TabsTrigger>
               <TabsTrigger value="collections">Saved Stuff</TabsTrigger>
             </TabsList>
 
             <TabsContent value="labs" className="mt-6">
               {userData && <UserLabsSection userId={userData.id} onLabsCountChange={setLabsCount} />}
+            </TabsContent>
+            <TabsContent value="experiments" className="mt-6">
+              {userData && <UserExperimentsSection userId={userData.id} />}
             </TabsContent>
             <TabsContent value="activity" className="mt-6">
               <UserActivityLogs userId={userData.id} userName={userData.username} userProfilePic={userData.avatar} />

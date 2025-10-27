@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
 import { supabase } from "@/lib/supabase"
 
-export default function LoginPage() {
+export default function ExperimentLoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
