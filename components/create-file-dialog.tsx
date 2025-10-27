@@ -250,7 +250,7 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
         {step === "select" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Create New File</DialogTitle>
+              <DialogTitle className="font-fell italic">Create New File</DialogTitle>
               <DialogDescription>Choose a file type to create</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4">
@@ -281,7 +281,7 @@ export function CreateFileDialog({ labId, onClose, onFileCreated }: CreateFileDi
           <>
             <DialogHeader>
               <div className="flex items-center justify-between">
-                <DialogTitle>
+                <DialogTitle className="font-fell italic">
                   {selectedFileType === "tabular"
                     ? "Create Tabular Data"
                     : selectedFileType === "code"

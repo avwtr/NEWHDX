@@ -179,7 +179,7 @@ export const ExperimentCard: React.FC<{ experiment: any }> = ({ experiment }) =>
         </div>
         <CardHeader className="pb-2 flex flex-row items-center justify-between">
           <div>
-            <h3 className="text-accent font-semibold text-lg hover:underline">
+            <h3 className="text-accent font-semibold text-lg hover:underline font-fell italic">
               {experiment.name}
             </h3>
             <div className="flex flex-wrap gap-2 mt-2">

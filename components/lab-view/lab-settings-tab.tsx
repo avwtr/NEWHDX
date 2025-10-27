@@ -145,7 +145,7 @@ export function LabSettingsTab({
       {/* --- Founders & Admins Section --- */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>FOUNDERS & ADMINS</CardTitle>
+          <CardTitle className="font-fell italic">FOUNDERS & ADMINS</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-4">
@@ -182,12 +182,12 @@ export function LabSettingsTab({
       {/* --- End Founders & Admins Section --- */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle>SETTINGS</CardTitle>
+          <CardTitle className="font-fell italic">SETTINGS</CardTitle>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setActiveTab("overview")}
-            className="text-accent hover:bg-secondary"
+            className="text-accent hover:bg-secondary font-fell italic"
           >
             <X className="h-4 w-4 mr-1" />
             CLOSE
@@ -196,8 +196,8 @@ export function LabSettingsTab({
         <CardContent>
           <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab} className="w-full">
             <TabsList className="grid grid-cols-2 w-full mb-4">
-              <TabsTrigger value="general">General</TabsTrigger>
-              <TabsTrigger value="contributions" className="relative">
+              <TabsTrigger value="general" className="font-fell italic">General</TabsTrigger>
+              <TabsTrigger value="contributions" className="relative font-fell italic">
                 Contributions
                 {pendingCount > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">

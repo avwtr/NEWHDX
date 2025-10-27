@@ -960,7 +960,7 @@ export default function ExperimentViewPage() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <FlaskConical className="h-7 w-7 text-accent" />
-              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2 font-fell italic">
                 {experiment.name}
                 {experiment.closed_status == null && (
                   <span className="flex items-center ml-2">

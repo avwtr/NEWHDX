@@ -700,7 +700,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                     }`}
                   >
                     <Home className="h-5 w-5" />
-                    <span className="font-medium">OVERVIEW</span>
+                    <span className="font-medium font-fell">OVERVIEW</span>
                   </button>
 
                   <button
@@ -710,7 +710,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                     }`}
                   >
                     <FileText className="h-5 w-5" />
-                    <span className="font-medium">LAB MATERIALS</span>
+                    <span className="font-medium font-fell">LAB MATERIALS</span>
                   </button>
 
                   <button
@@ -720,17 +720,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                     }`}
                   >
                     <FlaskConical className="h-5 w-5" />
-                    <span className="font-medium">EXPERIMENTS</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleTabChange("funding")}
-                    className={`flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                      localActiveTab === "funding" ? "bg-accent text-background" : "hover:bg-muted"
-                    }`}
-                  >
-                    <DollarSign className="h-5 w-5" />
-                    <span className="font-medium">FUNDING</span>
+                    <span className="font-medium font-fell">EXPERIMENTS</span>
                   </button>
 
                   {isAdmin && (
@@ -744,7 +734,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                       }`}
                     >
                       <Users className="h-5 w-5" />
-                      <span className="font-medium">SETTINGS</span>
+                      <span className="font-medium font-fell">SETTINGS</span>
                       {pendingCount > 0 && (
                         <span className="ml-auto bg-destructive text-destructive-foreground text-xs rounded-full px-2 py-0.5">
                           {pendingCount}
@@ -782,12 +772,12 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
               {localActiveTab === "experiments" && (
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle>EXPERIMENTS</CardTitle>
+                    <CardTitle className="font-fell italic">EXPERIMENTS</CardTitle>
                     <div className="flex items-center gap-2">
                       {/* New experiment button only for admins */}
                       {isAdmin && (
                         <Button
-                          className="bg-accent text-primary-foreground hover:bg-accent/90"
+                          className="bg-accent text-primary-foreground hover:bg-accent/90 font-fell italic"
                           onClick={() => setCreateExperimentDialogOpen(true)}
                         >
                           <FlaskConical className="h-4 w-4 mr-2" />
@@ -812,28 +802,6 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                     <ExperimentsList labId={lab.labId} experiments={experiments} />
                   </CardContent>
                 </Card>
-              )}
-
-              {localActiveTab === "funding" && (
-                <LabFundingTab
-                  isAdmin={isAdmin}
-                  isGuest={isGuest}
-                  expandedTab={expandedTab}
-                  toggleExpand={toggleExpand}
-                  funds={funds}
-                  setFunds={setFunds}
-                  membership={membership}
-                  oneTimeDonation={oneTimeDonation}
-                  isDonationsActive={isDonationsActive}
-                  toggleDonations={toggleDonations}
-                  handleGuestAction={localHandleGuestAction}
-                  labId={lab.labId}
-                  labsMembershipOption={labsMembershipOption}
-                  refetchMembership={refetchMembership}
-                  refetchOneTimeDonation={refetchOneTimeDonation}
-                  lab={labState}
-                  refetchLab={refetchLab}
-                />
               )}
 
               {localActiveTab === "settings" && isAdmin && (

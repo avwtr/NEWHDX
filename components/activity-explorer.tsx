@@ -1469,7 +1469,7 @@ export default function ActivityExplorer({ labId, isAdmin = false }: ActivityExp
       <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto">
         <div className="container mx-auto py-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold uppercase tracking-wide">LAB ACTIVITY</h2>
+            <h2 className="text-xl font-bold uppercase tracking-wide font-fell italic">LAB ACTIVITY</h2>
             <Button
               variant="outline"
               onClick={() => setIsExpanded(false)}
@@ -1538,11 +1538,11 @@ export default function ActivityExplorer({ labId, isAdmin = false }: ActivityExp
     <Card className="w-full">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-1">
+          <CardTitle className="text-base flex items-center gap-1 font-fell italic">
             <GitCommitIcon className="h-4 w-4 text-accent" />
             LAB ACTIVITY
           </CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setIsExpanded(true)} className="h-8 gap-1">
+          <Button variant="ghost" size="sm" onClick={() => setIsExpanded(true)} className="h-8 gap-1 font-fell italic">
             <ChevronDown className="h-4 w-4" />
             <span className="text-xs">EXPAND</span>
           </Button>

@@ -409,7 +409,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
 
           <TabsContent value="profile" className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="lab-name">Lab Name</Label>
+              <Label htmlFor="lab-name" className="font-fell italic">Lab Name</Label>
               <Input
                 id="lab-name"
                 value={labName}
@@ -419,7 +419,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description" className="font-fell italic">Description</Label>
               <Textarea
                 id="description"
                 value={description}
@@ -430,7 +430,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Lab Logo</Label>
+              <Label className="font-fell italic">Lab Logo</Label>
               <div className="flex items-center gap-4">
                 <Avatar className="h-20 w-20">
                   <AvatarImage src={profilePic || "/placeholder.svg?height=80&width=80"} alt="Lab logo" />
@@ -453,7 +453,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
 
           <TabsContent value="admins" className="space-y-6">
             <div className="space-y-4">
-              <Label>Lab Administrators</Label>
+              <Label className="font-fell italic">Lab Administrators</Label>
               {adminsLoading ? (
                 <div>Loading admins...</div>
               ) : adminError ? (
@@ -500,7 +500,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
               )}
 
               <div className="pt-4">
-                <Label>Add Administrator</Label>
+                <Label className="font-fell italic">Add Administrator</Label>
                 <Input
                   placeholder="Search for users..."
                   value={searchQuery}
@@ -535,7 +535,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
 
           <TabsContent value="tags" className="space-y-6">
             <div className="space-y-2">
-              <Label>Category Tags</Label>
+              <Label className="font-fell italic">Category Tags</Label>
               <div className="flex flex-wrap gap-2 p-3 border border-secondary rounded-md min-h-[100px]">
                 {categoriesLoading ? (
                   <span>Loading...</span>
@@ -568,7 +568,7 @@ export function SettingsDialog({ lab, onLabUpdated }: SettingsDialogProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="add-tag">Add Category</Label>
+              <Label htmlFor="add-tag" className="font-fell italic">Add Category</Label>
               <div className="flex gap-2">
                 <Select onValueChange={handleAddCategory}>
                   <SelectTrigger id="add-tag" className="flex-1">

@@ -327,7 +327,7 @@ export function LabOverviewTab({
       {/* Lab Bulletin Board */}
       <Card className="border-accent/20 mb-6">
         <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-xl">LAB BULLETIN</CardTitle>
+          <CardTitle className="text-xl font-fell italic">LAB BULLETIN</CardTitle>
           <div className="flex items-center gap-2">
             {isAdmin && !isAddingBulletin && (
               <Button
@@ -465,7 +465,7 @@ export function LabOverviewTab({
       {liveExperimentsData.filter((experiment) => experiment.closed_status !== "CLOSED").length > 0 && (
         <Card className="border-accent/20">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xl">LIVE EXPERIMENTS</CardTitle>
+            <CardTitle className="text-xl font-fell italic">LIVE EXPERIMENTS</CardTitle>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" onClick={() => toggleExpand("experiments")} className="h-8 w-8">
                 {expandedTab === "experiments" ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -482,51 +482,6 @@ export function LabOverviewTab({
         </Card>
       )}
 
-      {/* Enhanced Funding Goals Section (only if there are any) */}
-      {recentFunds && recentFunds.length > 0 && (
-        <Card className="border-accent/20">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xl">FUNDING GOALS</CardTitle>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={() => toggleExpand("funding")} className="h-8 w-8">
-                {expandedTab === "funding" ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {recentFunds.map((fund) => {
-                const percentFunded = fund.goal_amount ? Math.round((fund.amount_contributed || 0) / fund.goal_amount * 100) : 0;
-                const daysRemaining = fund.deadline ? Math.max(0, Math.ceil((new Date(fund.deadline).getTime() - Date.now()) / (1000*60*60*24))) : undefined;
-                return (
-                  <Card key={fund.id} className="bg-secondary/50 border-secondary">
-                    <CardContent className="p-4">
-                      <div className="flex flex-col gap-2">
-                        <div className="flex justify-between items-center">
-                          <h3 className="font-medium text-accent">{fund.goalName}</h3>
-                          <span className="text-sm font-medium">
-                            ${Number(fund.amount_contributed ?? 0).toLocaleString()} / ${Number(fund.goal_amount ?? 0).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{fund.goal_description}</p>
-                        <div className="mt-2">
-                          <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                            <div className="h-full bg-accent" style={{ width: `${percentFunded}%` }} />
-                          </div>
-                          <div className="flex justify-between mt-1">
-                            <p className="text-xs text-muted-foreground">{percentFunded}% funded</p>
-                            <p className="text-xs text-muted-foreground">{daysRemaining !== undefined ? `${daysRemaining} days remaining` : 'No deadline'}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </>
   )
 }

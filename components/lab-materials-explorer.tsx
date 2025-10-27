@@ -889,7 +889,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
     <DndContext sensors={sensors} onDragEnd={handleDndDrop} onDragStart={handleDndDragStart}>
     <Card className={isExpanded ? "fixed inset-4 z-50 overflow-auto" : ""}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle>LAB MATERIALS</CardTitle>
+        <CardTitle className="font-fell italic">LAB MATERIALS</CardTitle>
         <div className="flex gap-2 items-center">
           <Button variant="ghost" size="icon" onClick={() => setIsExpanded(!isExpanded)} className="h-8 w-8">
             {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -905,15 +905,15 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
         <div className="flex justify-center mb-4">
           {isLoggedInAndAdmin && (
             <div className="flex gap-2">
-              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsUploadDialogOpen(true)}>
+              <Button className="bg-accent text-primary-foreground hover:bg-accent/90 font-fell italic" onClick={() => setIsUploadDialogOpen(true)}>
                 <Upload className="h-4 w-4 mr-2" />
                 UPLOAD FILE
               </Button>
-              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFileDialogOpen(true)}>
+              <Button className="bg-accent text-primary-foreground hover:bg-accent/90 font-fell italic" onClick={() => setIsCreateFileDialogOpen(true)}>
                 <FileIcon className="h-4 w-4 mr-2" />
                 CREATE FILE
               </Button>
-              <Button className="bg-accent text-primary-foreground hover:bg-accent/90" onClick={() => setIsCreateFolderDialogOpen(true)}>
+              <Button className="bg-accent text-primary-foreground hover:bg-accent/90 font-fell italic" onClick={() => setIsCreateFolderDialogOpen(true)}>
                 <FolderPlus className="h-4 w-4 mr-2" />
                 NEW FOLDER
               </Button>

@@ -188,7 +188,7 @@ export default function LabProfile({
               />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">{lab.labName}</h2>
+              <h2 className="text-2xl font-bold font-fell italic normal-case">{lab.labName}</h2>
               {/* Organization display */}
               {orgInfo && (
                 <div className="flex items-center gap-2 mt-1">
@@ -200,7 +200,7 @@ export default function LabProfile({
                       className="object-cover"
                     />
                   </div>
-                  <span className="text-xs text-muted-foreground font-medium truncate max-w-[120px]">{orgInfo.org_name}</span>
+                  <span className="text-xs text-muted-foreground font-medium truncate max-w-[120px] font-fell italic">{orgInfo.org_name}</span>
                 </div>
               )}
               <div className="flex flex-wrap gap-2 mt-1">
@@ -249,7 +249,7 @@ export default function LabProfile({
                   <Button
                     variant="default"
                     size="lg"
-                    className="font-bold px-6 py-2 text-base"
+                    className="font-bold px-6 py-2 text-base font-fell italic"
                     onClick={onOpenContributeDialog}
                     data-testid="contribute-button"
                     disabled={!user}
@@ -261,11 +261,11 @@ export default function LabProfile({
                 <Button
                   variant={isFollowing ? "default" : "outline"}
                   size="sm"
-                  className={
+                  className={`font-fell italic ${
                     isFollowing
                       ? "bg-background text-foreground hover:bg-background/90"
                       : "bg-accent text-background hover:bg-accent/90"
-                  }
+                  }`}
                   onClick={isGuest ? handleGuestAction : setIsFollowing}
                   disabled={!user}
                   title={!user ? 'Login to follow labs' : undefined}
@@ -280,7 +280,7 @@ export default function LabProfile({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-accent text-accent hover:bg-accent hover:text-accent-foreground"
+                  className="border-accent text-accent hover:bg-accent hover:text-accent-foreground font-fell italic"
                   onClick={() => setActiveTab("settings")}
                 >
                   EDIT LAB
@@ -301,14 +301,14 @@ export default function LabProfile({
         <div className="grid grid-cols-4 gap-4 w-full">
           <div className="flex items-center gap-2 text-sm">
             <FileText className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{filesCount}</span>
+            <span className="font-medium font-fell text-base">{filesCount}</span>
             <span className="text-muted-foreground">Files</span>
           </div>
 
           <div className="flex flex-col gap-1 text-sm">
             <div className="flex items-center gap-2">
               <FlaskConical className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{experimentsCount}</span>
+              <span className="font-medium font-fell text-base">{experimentsCount}</span>
               <span className="text-muted-foreground">Experiments</span>
             </div>
             {/* Live Experiments List */}
@@ -329,7 +329,7 @@ export default function LabProfile({
           <div className="flex flex-col gap-0.5 text-sm min-w-[120px]">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{membersCount}</span>
+              <span className="font-medium font-fell italic">{Math.max(membersCount, 1)}</span>
               <span className="text-muted-foreground">Members</span>
             </div>
             {membersBreakdown && (

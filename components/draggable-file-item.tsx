@@ -381,9 +381,9 @@ export function DraggableFileItem({
           ) : (
             <div className="flex items-center">
               {file?.fileType === 'link' ? (
-                <a href={file?.storageKey} target="_blank" rel="noopener noreferrer" className="underline break-all text-sm font-medium">{getFileDisplayName(file, name)}</a>
+                <a href={file?.storageKey} target="_blank" rel="noopener noreferrer" className="underline break-all text-sm font-medium font-fell">{getFileDisplayName(file, name)}</a>
               ) : (
-                <h3 className="text-sm font-medium">{getFileDisplayName(file, name)}</h3>
+                <h3 className="text-sm font-medium font-fell">{getFileDisplayName(file, name)}</h3>
               )}
               {isAdmin && (
                 <Button

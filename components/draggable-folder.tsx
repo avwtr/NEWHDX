@@ -46,7 +46,7 @@ interface DraggableFolderProps {
 }
 
 // Utility function to robustly download a file from Supabase or Firebase (for folder zipping)
-async function fetchFileBlob(file) {
+async function fetchFileBlob(file: any) {
   if (file.url) {
     const resp = await fetch(file.url)
     return await resp.blob()
@@ -198,8 +198,9 @@ export function DraggableFolder({
           const blob = await fetchFileBlob(file)
           zip.file(file.filename || file.name, blob)
           added++;
-        } catch (err) {
-          console.warn(`Skipping file ${file.filename || file.name}: ${err.message}`)
+        } catch (err: unknown) {
+          const error = err as Error
+          console.warn(`Skipping file ${file.filename || file.name}: ${error.message}`)
         }
       }
       if (added === 0) {
@@ -268,7 +269,7 @@ export function DraggableFolder({
                 </div>
               ) : (
                 <div className="flex items-center">
-                  <h3 className="text-sm font-medium">{name}</h3>
+                  <h3 className="text-sm font-medium font-fell">{name}</h3>
                   {isAdmin && (
                     <Button
                       variant="ghost"

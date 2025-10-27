@@ -1,19 +1,22 @@
 import { supabase } from "@/lib/supabase"
 import LabView from "@/components/lab-view"
 
-export default async function LabPage({ params }: { params: { labId: string } }) {
+export default async function LabPage({ params }: { params: Promise<{ labId: string }> }) {
+  // Await params before using
+  const { labId } = await params;
+  
   // Fetch lab data
   const { data: lab, error } = await supabase
     .from("labs")
     .select("*")
-    .eq("labId", params.labId)
+    .eq("labId", labId)
     .single();
 
   // Fetch categories
   const { data: categories } = await supabase
     .from("labCategories")
     .select("category")
-    .eq("lab_id", params.labId);
+    .eq("lab_id", labId);
 
   if (error || !lab) {
     // Show a 404 if not found
