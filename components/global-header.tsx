@@ -370,7 +370,7 @@ export function GlobalHeader() {
 
             {/* Launch Experiment Engine Button */}
             <Button
-              onClick={() => router.push('/my-experiments')}
+              onClick={() => router.push('/experiments')}
               variant="ghost"
               size="sm"
               className="flex items-center space-x-2 text-gray-300 hover:text-white hover:bg-[#0a0f1f]/50 transition-all duration-200 font-fell italic text-sm px-4 py-2 normal-case"

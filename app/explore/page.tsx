@@ -400,16 +400,17 @@ export default function ExplorePage() {
     setShowMobileWarning(false)
   }
 
-  // Fetch all data on initial load
+  // Fetch all data on initial load with concurrent requests
   useEffect(() => {
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        // Fetch labs
+        // Fetch labs with limited fields for faster query
         const { data: labs, error: labsError } = await supabase
           .from("labs")
           .select("labId, labName, description, profilePic, org_id, createdBy, created_at")
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(50); // Limit initial load
 
         if (labsError) throw labsError;
 
@@ -441,61 +442,48 @@ export default function ExplorePage() {
           }
         }
 
-        // Fetch members count
+        // Fetch members count, funding, experiments, and files in parallel for performance
+        const [membersData, fundingData, experimentsCountData, filesData] = await Promise.all([
+          labIds.length > 0 ? supabase.from("labMembers").select("lab_id").in("lab_id", labIds) : Promise.resolve({ data: [], error: null }),
+          labIds.length > 0 ? supabase.from("funding_goals").select("lab_id, amount_contributed, goal_amount") : Promise.resolve({ data: [], error: null }),
+          labIds.length > 0 ? supabase.from("experiments").select("lab_id") : Promise.resolve({ data: [], error: null }),
+          labIds.length > 0 ? supabase.from("files").select("labID, fileTag") : Promise.resolve({ data: [], error: null })
+        ]);
+
+        // Process members
         let membersMap: Record<string, number> = {};
-        if (labIds.length > 0) {
-          const { data: members } = await supabase
-            .from("labMembers")
-            .select("lab_id")
-            .in("lab_id", labIds);
-          if (members) {
-            members.forEach(m => {
-              membersMap[m.lab_id] = (membersMap[m.lab_id] || 0) + 1;
-            });
-          }
+        if (membersData.data) {
+          membersData.data.forEach((m: any) => {
+            membersMap[m.lab_id] = (membersMap[m.lab_id] || 0) + 1;
+          });
         }
 
-        // Fetch funding info
+        // Process funding
         let fundingMap: Record<string, { goal: number, raised: number }> = {};
-        if (labIds.length > 0) {
-          const { data: fundingGoals } = await supabase
-            .from("funding_goals")
-            .select("lab_id, amount_contributed, goal_amount");
-          if (fundingGoals) {
-            fundingGoals.forEach(fg => {
-              if (!fundingMap[fg.lab_id]) fundingMap[fg.lab_id] = { goal: 0, raised: 0 };
-              fundingMap[fg.lab_id].goal += fg.goal_amount || 0;
-              fundingMap[fg.lab_id].raised += fg.amount_contributed || 0;
-            });
-          }
+        if (fundingData.data) {
+          fundingData.data.forEach((fg: any) => {
+            if (!fundingMap[fg.lab_id]) fundingMap[fg.lab_id] = { goal: 0, raised: 0 };
+            fundingMap[fg.lab_id].goal += fg.goal_amount || 0;
+            fundingMap[fg.lab_id].raised += fg.amount_contributed || 0;
+          });
         }
 
-        // Fetch experiments count
+        // Process experiments count
         let experimentsMap: Record<string, number> = {};
-        if (labIds.length > 0) {
-          const { data: experiments } = await supabase
-            .from("experiments")
-            .select("lab_id");
-          if (experiments) {
-            experiments.forEach(e => {
-              experimentsMap[e.lab_id] = (experimentsMap[e.lab_id] || 0) + 1;
-            });
-          }
+        if (experimentsCountData.data) {
+          experimentsCountData.data.forEach((e: any) => {
+            experimentsMap[e.lab_id] = (experimentsMap[e.lab_id] || 0) + 1;
+          });
         }
 
-        // Fetch lab files count
+        // Process lab files count
         let labFilesMap: Record<string, number> = {};
-        if (labIds.length > 0) {
-          const { data: files } = await supabase
-            .from("files")
-            .select("labID, fileTag");
-          if (files) {
-            files.forEach(f => {
-              if (f.fileTag !== 'folder') {
-                labFilesMap[f.labID] = (labFilesMap[f.labID] || 0) + 1;
-              }
-            });
-          }
+        if (filesData.data) {
+          filesData.data.forEach((f: any) => {
+            if (f.fileTag !== 'folder') {
+              labFilesMap[f.labID] = (labFilesMap[f.labID] || 0) + 1;
+            }
+          });
         }
 
         // Map labs data
@@ -520,11 +508,12 @@ export default function ExplorePage() {
           image: lab.profilePic || '/placeholder.svg?height=80&width=80',
         }));
 
-        // Fetch experiments
+        // Fetch experiments with limits for performance
         const { data: experiments, error: experimentsError } = await supabase
           .from("experiments")
           .select("*")
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(50); // Limit initial load
 
         if (experimentsError) throw experimentsError;
 
@@ -1139,9 +1128,9 @@ export default function ExplorePage() {
                     {labsError && (
                       <div className="text-red-500 text-sm mb-4">Error fetching labs: {labsError.message || String(labsError)}</div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                       {filteredData.map((lab: any) => (
-                        <Card key={lab.id} className="overflow-hidden relative">
+                        <Card key={lab.id} className="overflow-hidden relative min-h-[200px]">
                           <CardContent className="p-0">
                             {/* Org info in top-right corner, outside the Link to avoid nested <a> */}
                             {lab.institution && lab.org_slug && (
@@ -1151,7 +1140,7 @@ export default function ExplorePage() {
                                 )}
                                 <a
                                   href={`/orgs/${lab.org_slug}`}
-                                  className="text-xs font-medium text-primary hover:underline truncate max-w-[100px]"
+                                  className="text-xs font-medium text-primary hover:underline truncate max-w-[80px] font-fell italic"
                                   onClick={e => e.stopPropagation()}
                                   target="_blank"
                                   rel="noopener noreferrer"
@@ -1162,7 +1151,7 @@ export default function ExplorePage() {
                             )}
                             <Link 
                               href={`/lab/${lab.id}`} 
-                              className="block p-4 hover:bg-secondary/50"
+                              className="block p-6 hover:bg-secondary/50"
                               onClick={() => setIsNavigating(true)}
                             >
                               <div className="flex items-start gap-3">
@@ -1170,8 +1159,8 @@ export default function ExplorePage() {
                                   <AvatarImage src={lab.image || "/placeholder.svg"} alt={lab.name} />
                                   <AvatarFallback>{lab.name.substring(0, 2)}</AvatarFallback>
                                 </Avatar>
-                                <div className="space-y-1 flex-1">
-                                  <h3 className="font-medium text-accent font-fell italic normal-case">{lab.name}</h3>
+                                <div className="space-y-1 flex-1 pr-24">
+                                  <h3 className="font-medium text-accent font-fell italic normal-case break-words">{lab.name}</h3>
                                   {/* Science categories as colored badges, up to 3, with ellipsis if more */}
                                   <div className="flex flex-wrap gap-1 mt-2">
                                     {(expandedLabIds.includes(lab.id) ? lab.categories : lab.categories.slice(0, 3)).map((category: string) => (

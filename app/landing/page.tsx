@@ -32,8 +32,8 @@ import { LoadingAnimation } from "@/components/loading-animation"
 // Custom color
 const CUSTOM_GREEN = "#A0FFDD"
 
-// Force dynamic rendering
-export const dynamic = "force-dynamic"
+// Optimize page performance
+export const dynamic = "auto"
 
 // Activity log animation component
 function AnimatedActivityLogs() {
