@@ -799,7 +799,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <ExperimentsList labId={lab.labId} experiments={experiments} />
+                    <ExperimentsList labId={lab.labId} />
                   </CardContent>
                 </Card>
               )}

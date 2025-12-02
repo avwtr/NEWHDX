@@ -1228,8 +1228,12 @@ const ActivityTimeline = ({ activities, userProfiles }: { activities: any[], use
     <div className="space-y-6 overflow-y-auto max-h-[600px] pr-2">
       {sortedActivities.map((activity, idx) => {
         const userInfo = userProfiles[activity.performed_by] || { username: "Unknown", initials: "U", profilePic: undefined }
+        const isExperimentEngine = activity.is_experiment_engine || activity.activity_type === "experiment_engine_created"
         return (
-          <div key={activity.id || activity.activity_id || activity.created_at || idx} className="flex gap-3 pb-6 border-b border-secondary last:border-0">
+          <div 
+            key={activity.id || activity.activity_id || activity.created_at || idx} 
+            className="flex gap-3 pb-6 border-b border-secondary last:border-0"
+          >
             <Avatar className="h-8 w-8 mt-0.5 flex-shrink-0">
               <AvatarImage src={userInfo.profilePic || "/placeholder.svg"} alt={userInfo.username} />
               <AvatarFallback>{userInfo.initials}</AvatarFallback>
@@ -1237,6 +1241,7 @@ const ActivityTimeline = ({ activities, userProfiles }: { activities: any[], use
             <div className="space-y-2 min-w-0 flex-1 pr-3">
               <p className="text-sm break-words">
                 <span className="font-medium">{userInfo.username}</span>{" "}
+                {isExperimentEngine && "created an experiment"}
                 {activity.activity_type === "fileupload" && "uploaded a file"}
                 {activity.activity_type === "filecreated" && "created a file"}
                 {activity.activity_type === "filedelete" && "deleted a file"}
@@ -1246,8 +1251,14 @@ const ActivityTimeline = ({ activities, userProfiles }: { activities: any[], use
                 {activity.activity_type === "bulletinedited" && "edited a bulletin"}
                 {activity.activity_type === "bulletindeleted" && "deleted a bulletin"}
               </p>
-              <div className="flex items-center text-xs text-muted-foreground flex-wrap">
+              <div className="flex items-center text-xs text-muted-foreground flex-wrap gap-1">
+                {isExperimentEngine && (
+                  <span className="px-1.5 py-0.5 bg-accent/20 text-accent rounded text-[10px] font-medium">EXPERIMENT ENGINE</span>
+                )}
                 <span className="ml-1 break-all">{activity.activity_name}</span>
+                {isExperimentEngine && activity.experiment_status && (
+                  <span className="text-muted-foreground">• {activity.experiment_status.replace(/_/g, ' ').toUpperCase()}</span>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">{activity.created_at ? new Date(activity.created_at).toLocaleString() : ""}</p>
             </div>
@@ -1406,19 +1417,60 @@ export default function ActivityExplorer({ labId, isAdmin = false }: ActivityExp
   useEffect(() => {
     async function fetchActivities() {
       if (!labId) return;
+      
+      // Fetch regular activities
       const { data, error } = await supabase
         .from("activity")
         .select("*")
         .eq("lab_from", labId)
         .order("created_at", { ascending: false })
+      
       if (error) {
         console.error("Error fetching activity logs:", error)
-        setActivities([])
-        return
       }
-      setActivities(data || [])
+      
+      const regularActivities = data || []
+      
+      // Fetch Experiment Engine experiments via API route (bypasses RLS)
+      let experimentEngineActivities: any[] = []
+      try {
+        const response = await fetch(`/api/experiment-engine/experiments?labId=${labId}`)
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          console.error("Error fetching Experiment Engine experiments:", errorData)
+        } else {
+          const { data: experiments } = await response.json()
+          console.log(`Found ${experiments?.length || 0} Experiment Engine experiments for lab ${labId}`)
+          
+          // Transform experiments into activity format
+          if (experiments && experiments.length > 0) {
+            experimentEngineActivities = experiments.map((exp: any) => ({
+              id: `exp_engine_${exp.experiment_id}`,
+              activity_id: `exp_engine_${exp.experiment_id}`,
+              activity_type: "experiment_engine_created",
+              activity_name: exp.experiment_name,
+              performed_by: exp.created_by_user_id,
+              lab_from: labId,
+              created_at: exp.created_at,
+              experiment_id: exp.experiment_id,
+              experiment_status: exp.experiment_status,
+              is_experiment_engine: true
+            }));
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching Experiment Engine experiments:", err)
+      }
+      
+      // Merge activities and sort by created_at
+      const allActivities = [...regularActivities, ...experimentEngineActivities].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      
+      setActivities(allActivities)
+      
       // Fetch user profiles for all unique performed_by values
-      const uniqueUserIds = Array.from(new Set((data || []).map((a: any) => a.performed_by).filter(Boolean)))
+      const uniqueUserIds = Array.from(new Set(allActivities.map((a: any) => a.performed_by).filter(Boolean)))
       if (uniqueUserIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
@@ -1554,6 +1606,7 @@ export default function ActivityExplorer({ labId, isAdmin = false }: ActivityExp
           {activities.slice(0, 4).map((activity, index) => {
             const userInfo = userProfiles[activity.performed_by] || { username: "Unknown", initials: "U", profilePic: undefined }
             const key = activity.id || activity.activity_id || activity.created_at || index;
+            const isExperimentEngine = activity.is_experiment_engine || activity.activity_type === "experiment_engine_created"
             return (
               <div key={key} className="flex gap-3 pb-4 border-b border-secondary last:border-b-0">
                 <Avatar className="h-8 w-8 flex-shrink-0">
@@ -1563,6 +1616,7 @@ export default function ActivityExplorer({ labId, isAdmin = false }: ActivityExp
                 <div className="space-y-2 min-w-0 flex-1 pr-2">
                   <p className="text-sm break-words">
                     <span className="font-medium">{userInfo.username}</span>{" "}
+                    {isExperimentEngine && "created an experiment"}
                     {activity.activity_type === "fileupload" && "uploaded a file"}
                     {activity.activity_type === "filecreated" && "created a file"}
                     {activity.activity_type === "filedelete" && "deleted a file"}
@@ -1572,8 +1626,14 @@ export default function ActivityExplorer({ labId, isAdmin = false }: ActivityExp
                     {activity.activity_type === "bulletinedited" && "edited a bulletin"}
                     {activity.activity_type === "bulletindeleted" && "deleted a bulletin"}
                   </p>
-                  <div className="flex items-center text-xs text-muted-foreground flex-wrap">
+                  <div className="flex items-center text-xs text-muted-foreground flex-wrap gap-1">
+                    {isExperimentEngine && (
+                      <span className="px-1.5 py-0.5 bg-accent/20 text-accent rounded text-[10px] font-medium">EXPERIMENT ENGINE</span>
+                    )}
                     <span className="ml-1 break-all">{activity.activity_name}</span>
+                    {isExperimentEngine && activity.experiment_status && (
+                      <span className="text-muted-foreground">• {activity.experiment_status.replace(/_/g, ' ').toUpperCase()}</span>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">{activity.created_at ? new Date(activity.created_at).toLocaleString() : ""}</p>
                 </div>
