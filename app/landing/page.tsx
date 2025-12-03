@@ -172,8 +172,8 @@ function AnimatedActivityLogs() {
         >
           <div className="mt-0.5">{log.icon}</div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-white truncate">{log.event}</p>
-            <p className="text-xs text-gray-400">{log.time}</p>
+            <p className="text-sm text-white truncate font-fell">{log.event}</p>
+            <p className="text-xs text-gray-400 font-fell">{log.time}</p>
           </div>
         </div>
       ))}
@@ -291,11 +291,11 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             {user ? (
               <>
-                <span className="text-foreground mr-2">Hi, {username}</span>
+                <span className="text-foreground mr-2 font-fell">Hi, {username}</span>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-foreground hover:bg-secondary hover:text-accent"
+                  className="text-foreground hover:bg-secondary hover:text-accent font-fell italic"
                   onClick={() => router.push("/profile")}
                 >
                   Profile
@@ -303,6 +303,7 @@ export default function LandingPage() {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="font-fell italic"
                   onClick={signOut}
                 >
                   Log Out
@@ -311,13 +312,14 @@ export default function LandingPage() {
             ) : (
               <>
                 <Link href="/login">
-                  <Button variant="ghost" size="sm" className="text-foreground hover:bg-secondary hover:text-accent">
+                  <Button variant="ghost" size="sm" className="text-foreground hover:bg-secondary hover:text-accent font-fell italic">
                     <LogIn className="h-4 w-4 mr-2" />
                     Log In
                   </Button>
                 </Link>
                 <Button
                   size="sm"
+                  className="font-fell italic"
                   style={{ backgroundColor: CUSTOM_GREEN, color: "#000" }}
                   onClick={() => router.push("/signup")}
                 >
@@ -347,7 +349,7 @@ export default function LandingPage() {
             <div className="flex-1 space-y-6">
               <DynamicTagline />
 
-              <h2 className="text-lg sm:text-xl md:text-2xl font-medium text-gray-300">
+              <h2 className="text-lg sm:text-xl md:text-2xl font-medium text-gray-300 font-fell">
                 Create your own lab, contribute to an open-source community, discover fascinating research
               </h2>
 
@@ -357,7 +359,7 @@ export default function LandingPage() {
                     <div className={`flex justify-center ${BUTTON_MAX_WIDTH} w-full`}>
                       <Button
                         size="lg"
-                        className={`w-full px-8 py-5 text-2xl font-bold flex items-center justify-center gap-3 shadow-lg hover:scale-[1.03] transition-transform ${BUTTON_MAX_WIDTH}`}
+                        className={`w-full px-8 py-5 text-2xl font-bold flex items-center justify-center gap-3 shadow-lg hover:scale-[1.03] transition-transform font-fell italic ${BUTTON_MAX_WIDTH}`}
                         onClick={() => router.push("/explore")}
                         style={{ backgroundColor: "#1A2252", color: CUSTOM_GREEN }}
                       >
@@ -370,7 +372,7 @@ export default function LandingPage() {
                       <Button
                         size="lg"
                         variant="outline"
-                        className="hover:bg-green-950 w-full sm:w-auto"
+                        className="hover:bg-green-950 w-full sm:w-auto font-fell italic"
                         onClick={() => router.push("/signup")}
                         style={{ borderColor: CUSTOM_GREEN, color: CUSTOM_GREEN }}
                       >
@@ -379,7 +381,7 @@ export default function LandingPage() {
                       <Button
                         size="lg"
                         variant="ghost"
-                        className="w-full sm:w-auto flex items-center gap-2"
+                        className="w-full sm:w-auto flex items-center gap-2 font-fell italic"
                         onClick={() => router.push("/explore")}
                       >
                         <Globe className="h-5 w-5 mr-2" />
@@ -408,11 +410,11 @@ export default function LandingPage() {
                 {/* Stylized Lab Preview */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-sm sm:text-base" style={{ color: CUSTOM_GREEN }}>
+                    <h3 className="font-bold text-sm sm:text-base font-fell italic" style={{ color: CUSTOM_GREEN }}>
                       QUANTUM CONSCIOUSNESS LAB
                     </h3>
                     <Badge
-                      className="border text-xs"
+                      className="border text-xs font-fell italic"
                       style={{
                         backgroundColor: `${CUSTOM_GREEN}20`,
                         color: CUSTOM_GREEN,
@@ -466,10 +468,10 @@ export default function LandingPage() {
       {/* Call to Action */}
       <section className="py-12 sm:py-16 px-4 md:px-6 lg:px-8 bg-black text-center">
         <div className="max-w-3xl mx-auto">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4 sm:mb-6 leading-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4 sm:mb-6 leading-tight font-fell italic">
             LET'S GET TO A PROSPEROUS FUTURE OF SCIENCE.
           </h2>
-          <h3 className="text-lg sm:text-xl md:text-2xl font-medium text-gray-400 mb-6 sm:mb-8 leading-tight">
+          <h3 className="text-lg sm:text-xl md:text-2xl font-medium text-gray-400 mb-6 sm:mb-8 leading-tight font-fell">
             ONE THAT IS RADICAL, OPEN AND DECENTRALIZED.
           </h3>
           <div className="flex justify-center">
@@ -477,7 +479,7 @@ export default function LandingPage() {
               <div className={`flex justify-center ${BUTTON_MAX_WIDTH} w-full`}>
                 <Button
                   size="lg"
-                  className={`w-full px-8 py-5 text-2xl font-bold flex items-center justify-center gap-3 shadow-lg hover:scale-[1.03] transition-transform ${BUTTON_MAX_WIDTH}`}
+                  className={`w-full px-8 py-5 text-2xl font-bold flex items-center justify-center gap-3 shadow-lg hover:scale-[1.03] transition-transform font-fell italic ${BUTTON_MAX_WIDTH}`}
                   style={{ backgroundColor: "#1A2252", color: CUSTOM_GREEN }}
                   onClick={() => router.push("/explore")}
                 >
@@ -490,7 +492,7 @@ export default function LandingPage() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="hover:bg-green-950 w-full sm:w-auto mr-3"
+                  className="hover:bg-green-950 w-full sm:w-auto mr-3 font-fell italic"
                   onClick={() => router.push("/signup")}
                   style={{ borderColor: CUSTOM_GREEN, color: CUSTOM_GREEN }}
                 >
@@ -498,7 +500,7 @@ export default function LandingPage() {
                 </Button>
                 <Button
                   size="lg"
-                  className="hover:bg-opacity-90 w-full sm:w-auto flex items-center gap-2"
+                  className="hover:bg-opacity-90 w-full sm:w-auto flex items-center gap-2 font-fell italic"
                   style={{ backgroundColor: CUSTOM_GREEN, color: "#000" }}
                   onClick={() => router.push("/explore")}
                 >

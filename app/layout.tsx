@@ -88,7 +88,7 @@ export const metadata = {
   generator: 'HDX LABS',
   icons: {
     icon: [
-      { url: '/iconlogo2.png' }
+      { url: '/favi2.png' }
     ]
   }
 };

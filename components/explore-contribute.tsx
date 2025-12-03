@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { Search, Star, FileText, Database, DollarSign, Download, ThumbsUp, Eye, Upload } from "lucide-react"
+import { Search, Star, FileText, Database, Download, Eye, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
@@ -17,13 +17,11 @@ export function ExploreContribute() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [downloadProgress, setDownloadProgress] = useState(0)
   const [contributionStep, setContributionStep] = useState(0)
-  const [donationAmount, setDonationAmount] = useState(0)
-  const [showThankYou, setShowThankYou] = useState(false)
 
   // Auto-advance panes
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (activePane < 3) {
+      if (activePane < 2) {
         setActivePane(activePane + 1)
       } else {
         setActivePane(0)
@@ -69,19 +67,6 @@ export function ExploreContribute() {
     }
   }, [activePane, contributionStep])
 
-  // Donation animation
-  useEffect(() => {
-    if (activePane === 3 && donationAmount < 25) {
-      const timer = setTimeout(() => {
-        setDonationAmount((prev) => prev + 1)
-        if (donationAmount + 1 === 25) {
-          setTimeout(() => setShowThankYou(true), 1000)
-        }
-      }, 100)
-
-      return () => clearTimeout(timer)
-    }
-  }, [activePane, donationAmount])
 
   // Reset animations when pane changes
   useEffect(() => {
@@ -90,8 +75,6 @@ export function ExploreContribute() {
     setSelectedCategory(null)
     setDownloadProgress(0)
     setContributionStep(0)
-    setDonationAmount(0)
-    setShowThankYou(false)
   }, [activePane])
 
   const renderPane = () => {
@@ -357,70 +340,6 @@ export function ExploreContribute() {
           </div>
         )
 
-      case 3:
-        return (
-          <div className="space-y-4 sm:space-y-6">
-            <h3 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6">SUPPORT RESEARCH</h3>
-
-            <div className="p-4 rounded-lg border border-gray-800 bg-gray-950 mb-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h4 className="font-bold text-white">CONSCIOUSNESS RESEARCH LAB</h4>
-                  <p className="text-xs text-gray-400 mt-1">Investigating the neural basis of conscious experience</p>
-                </div>
-                <Badge className="bg-science-neuroscience">NEUROSCIENCE</Badge>
-              </div>
-
-              <div className="mb-6">
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-gray-400">Funding Goal</span>
-                  <span className="text-sm font-medium">$75,000 / $100,000</span>
-                </div>
-                <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: "75%",
-                      backgroundColor: CUSTOM_GREEN,
-                    }}
-                  ></div>
-                </div>
-              </div>
-
-              <div className="text-center mb-4">
-                <h5 className="font-medium mb-2">YOUR DONATION</h5>
-                <div className="text-4xl font-bold" style={{ color: CUSTOM_GREEN }}>
-                  ${donationAmount}
-                </div>
-              </div>
-
-              {showThankYou ? (
-                <div className="animate-fadeIn text-center">
-                  <div className="inline-block p-2 rounded-full bg-green-900/30 mb-3">
-                    <ThumbsUp className="h-6 w-6 text-green-400" />
-                  </div>
-                  <h5 className="font-medium text-green-400 mb-2">Thank You For Your Support!</h5>
-                  <p className="text-sm text-gray-300">
-                    Your donation helps advance our understanding of consciousness.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex justify-center">
-                  <Button className="w-full" style={{ backgroundColor: CUSTOM_GREEN, color: "#000" }}>
-                    <DollarSign className="h-4 w-4 mr-1" />
-                    DONATE
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            <div className="text-center text-sm text-gray-400">
-              <p>Supporters receive regular updates on research progress.</p>
-              <p className="mt-1">100% of donations go directly to equipment and researcher support.</p>
-            </div>
-          </div>
-        )
-
       default:
         return null
     }
@@ -430,7 +349,7 @@ export function ExploreContribute() {
     <div className="space-y-6 sm:space-y-8">
       {/* Pane Navigation */}
       <div className="flex justify-center gap-1.5 sm:gap-2">
-        {[0, 1, 2, 3].map((pane) => (
+        {[0, 1, 2].map((pane) => (
           <button
             key={pane}
             className={`h-1.5 sm:h-2 rounded-full transition-all ${
@@ -448,18 +367,14 @@ export function ExploreContribute() {
             ? "DISCOVER FASCINATING OPEN SCIENCE"
             : activePane === 1
               ? "ACCESS OPEN SOURCE MATERIALS"
-              : activePane === 2
-                ? "CONTRIBUTE TO LABS"
-                : "FUND SCIENCE DIRECTLY"}
+              : "CONTRIBUTE TO LABS"}
         </h2>
         <p className="text-sm sm:text-base text-gray-400 max-w-2xl mx-auto">
           {activePane === 0
-            ? "Subscribe, or donate to fascinating labs."
+            ? "Discover fascinating open science research."
             : activePane === 1
               ? "Download and use open data, protocols, docs, and code from labs on the platform."
-              : activePane === 2
-                ? "Make meaningful contributions to advance science."
-                : "Help fund important research through direct-to-lab funding."}
+              : "Make meaningful contributions to advance science."}
         </p>
       </div>
 
@@ -475,7 +390,7 @@ export function ExploreContribute() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setActivePane((activePane - 1 + 4) % 4)}
+          onClick={() => setActivePane((activePane - 1 + 3) % 3)}
           style={{ borderColor: CUSTOM_GREEN, color: CUSTOM_GREEN }}
         >
           Previous
@@ -483,7 +398,7 @@ export function ExploreContribute() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setActivePane((activePane + 1) % 4)}
+          onClick={() => setActivePane((activePane + 1) % 3)}
           style={{ borderColor: CUSTOM_GREEN, color: CUSTOM_GREEN }}
         >
           Next

@@ -370,7 +370,7 @@ export function GlobalHeader() {
 
             {/* Launch Experiment Engine Button */}
             <Button
-              onClick={() => router.push('/experiments')}
+              onClick={() => window.open('https://experimentengine.ai', '_blank')}
               variant="ghost"
               size="sm"
               className="flex items-center space-x-2 text-gray-300 hover:text-white hover:bg-[#0a0f1f]/50 transition-all duration-200 font-fell italic text-sm px-4 py-2 normal-case"
@@ -404,12 +404,6 @@ export function GlobalHeader() {
                   <Link href="/orgCreate" className="flex w-full items-center">
                     <Building2 className="h-4 w-4 mr-2" />
                     <span className="font-fell italic">Organization</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled={!user} className={!user ? "opacity-50 cursor-not-allowed" : ""}>
-                  <Link href="/grants/new" className="flex w-full items-center">
-                    <Award className="h-4 w-4 mr-2" />
-                    <span className="font-fell italic">Grant</span>
                   </Link>
                 </DropdownMenuItem>
                 {!user && (

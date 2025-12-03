@@ -1,7 +1,5 @@
 "use client"
 
-import { Calendar } from "@/components/ui/calendar"
-
 import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
@@ -11,7 +9,6 @@ import {
   Code,
   FlaskRoundIcon as Flask,
   Users,
-  DollarSign,
   Home,
   Upload,
   Folder,
@@ -21,6 +18,7 @@ import {
   Eye,
   BookOpen,
   Activity,
+  Calendar,
   Beaker,
   Microscope,
   Zap,
@@ -128,12 +126,6 @@ export function LabPreview() {
       { username: "chrono_explorer", interests: ["CHRONOBIOLOGY", "NEUROSCIENCE"], contributions: 24, actions: 38 },
       { username: "quantum_biologist", interests: ["QUANTUM BIOLOGY", "BIOPHYSICS"], contributions: 18, actions: 31 },
     ],
-    funding: {
-      total: "$125,000",
-      goal: "$150,000",
-      donors: 48,
-      members: 12,
-    },
     activity: [
       { type: "file", user: "time_hacker", action: "uploaded", target: "chrono_model.h5", time: "2 hours ago" },
       {
@@ -144,7 +136,6 @@ export function LabPreview() {
         time: "Yesterday",
       },
       { type: "member", user: "quantum_biologist", action: "joined", time: "3 days ago" },
-      { type: "funding", user: "gene_chronos", action: "received donation", target: "$500", time: "4 days ago" },
       { type: "file", user: "viral_decoder", action: "modified", target: "chronoanalysis.py", time: "5 days ago" },
       {
         type: "experiment",
@@ -188,7 +179,6 @@ export function LabPreview() {
     { id: "materials", label: "LAB MATERIALS", icon: <Folder className="h-4 w-4" /> },
     { id: "experiments", label: "EXPERIMENTS", icon: <Flask className="h-4 w-4" /> },
     { id: "members", label: "MEMBERS", icon: <Users className="h-4 w-4" /> },
-    { id: "funding", label: "FUNDING", icon: <DollarSign className="h-4 w-4" /> },
     { id: "activity", label: "ACTIVITY", icon: <Activity className="h-4 w-4" /> },
   ]
 
@@ -208,7 +198,7 @@ export function LabPreview() {
               <StatCard icon={<Folder />} label="FILES" value={labData.stats.files} />
               <StatCard icon={<Flask />} label="EXPERIMENTS" value={labData.stats.experiments} />
               <StatCard icon={<Users />} label="MEMBERS" value={labData.stats.members} />
-              <StatCard icon={<DollarSign />} label="FUNDING" value={labData.funding.total} />
+              <StatCard icon={<Activity />} label="ACTIVITIES" value={labData.activity.length} />
             </div>
 
             {/* Recent Activity */}
@@ -225,9 +215,7 @@ export function LabPreview() {
                         <Flask className="h-4 w-4" style={{ color: CUSTOM_GREEN }} />
                       ) : item.type === "member" ? (
                         <Users className="h-4 w-4" style={{ color: CUSTOM_GREEN }} />
-                      ) : (
-                        <DollarSign className="h-4 w-4" style={{ color: CUSTOM_GREEN }} />
-                      )
+                      ) : null
                     }
                     text={`${item.user} ${item.action} ${item.target || ""}`}
                     time={item.time}
@@ -415,106 +403,16 @@ export function LabPreview() {
           </div>
         )
 
-      case "funding":
-        return (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h4 className="font-bold">LAB FUNDING</h4>
-              <Button size="sm" style={{ backgroundColor: CUSTOM_GREEN, color: "#000" }}>
-                <DollarSign className="h-4 w-4 mr-1" />
-                DONATE
-              </Button>
-            </div>
-
-            <div className="p-4 rounded-md border border-gray-800 bg-gray-900 mb-6">
-              <div className="flex justify-between mb-2">
-                <span className="text-sm text-gray-400">Funding Goal</span>
-                <span className="text-sm font-medium">
-                  {labData.funding.total} / {labData.funding.goal}
-                </span>
-              </div>
-              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${(Number.parseInt(labData.funding.total.replace(/\$|,/g, "")) / Number.parseInt(labData.funding.goal.replace(/\$|,/g, ""))) * 100}%`,
-                    backgroundColor: CUSTOM_GREEN,
-                  }}
-                ></div>
-              </div>
-              <div className="flex justify-between mt-4 text-sm">
-                <div>
-                  <span className="text-gray-400">Donors:</span> {labData.funding.donors}
-                </div>
-                <div>
-                  <span className="text-gray-400">Members:</span> {labData.funding.members}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h5 className="font-medium">MEMBERSHIP TIERS</h5>
-
-              {[
-                {
-                  name: "SUPPORTER",
-                  price: "$5/month",
-                  benefits: ["Access to lab updates", "Name in acknowledgements"],
-                },
-                {
-                  name: "CONTRIBUTOR",
-                  price: "$15/month",
-                  benefits: ["All Supporter benefits", "Access to raw data", "Monthly Q&A sessions"],
-                },
-                {
-                  name: "PARTNER",
-                  price: "$50/month",
-                  benefits: [
-                    "All Contributor benefits",
-                    "Co-authorship opportunities",
-                    "Direct collaboration with researchers",
-                  ],
-                },
-              ].map((tier, index) => (
-                <div
-                  key={index}
-                  className="p-4 rounded-md border border-gray-800 bg-gray-900 hover:border-gray-700 transition-colors cursor-pointer"
-                >
-                  <div className="flex justify-between items-center">
-                    <h6 className="font-medium">{tier.name}</h6>
-                    <span className="font-bold" style={{ color: CUSTOM_GREEN }}>
-                      {tier.price}
-                    </span>
-                  </div>
-                  <ul className="mt-2 space-y-1">
-                    {tier.benefits.map((benefit, i) => (
-                      <li
-                        key={i}
-                        className="text-sm text-gray-400 flex items-start filter blur-sm hover:blur-none transition-all duration-300"
-                      >
-                        <span className="mr-2 text-xs" style={{ color: CUSTOM_GREEN }}>
-                          •
-                        </span>
-                        {benefit}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-
       case "activity":
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center mb-4">
               <h4 className="font-bold">LAB ACTIVITY</h4>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="h-9">
-                  <Calendar className="h-4 w-4 mr-1" />
+                <div className="inline-flex items-center justify-center gap-2 px-3 py-2 h-9 text-sm font-medium rounded-md border border-gray-800 bg-transparent hover:bg-gray-900">
+                  <Calendar className="h-4 w-4" />
                   LAST 7 DAYS
-                </Button>
+                </div>
               </div>
             </div>
 
@@ -642,9 +540,7 @@ export function LabPreview() {
                             <Flask className="h-3 w-3" />
                           ) : activity.type === "member" ? (
                             <Users className="h-3 w-3" />
-                          ) : (
-                            <DollarSign className="h-3 w-3" />
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     )
@@ -681,13 +577,11 @@ export function LabPreview() {
                         <Flask className="h-4 w-4" />
                       ) : item.type === "member" ? (
                         <Users className="h-4 w-4" />
-                      ) : (
-                        <DollarSign className="h-4 w-4" />
-                      )}
+                      ) : null}
                     </div>
                     <div>
                       <p className="text-sm text-white">
-                        {item.user} {item.action} {item.target}
+                        {item.user} {item.action} {item.target || ""}
                       </p>
                       <p className="text-xs text-gray-400">{item.time}</p>
                     </div>
