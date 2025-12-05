@@ -80,19 +80,50 @@ export function GlobalHeader() {
       // Query users, labs, grants, experiments, and organizations
       const [
         { data: users },
-        { data: labs, error: labsError },
+        { data: publicLabs, error: labsError },
         { data: grants },
         { data: experiments },
         { data: orgs }
       ] = await Promise.all([
         supabase.from("profiles").select("user_id, username, avatar_url, research_interests").ilike("username", `%${searchQuery}%`).limit(5),
-        supabase.from("labs").select("labId, labName, description").ilike("labName", `%${searchQuery}%`).or("public_private.is.null,public_private.eq.public").limit(5),
+        supabase.from("labs").select("labId, labName, description, public_private").ilike("labName", `%${searchQuery}%`).or("public_private.is.null,public_private.eq.public").limit(5),
         supabase.from("grants").select("id, title, description").ilike("title", `%${searchQuery}%`).limit(5),
         supabase.from("experiments").select("id, name, objective, lab_id").ilike("name", `%${searchQuery}%`).limit(5),
         supabase.from("organizations").select("org_id, org_name, description, profilePic, slug").ilike("org_name", `%${searchQuery}%`).limit(5),
       ])
       
-      // Filter out experiments from private labs
+      // If user is logged in, also fetch private labs where they are admin/founder
+      let privateLabs: any[] = [];
+      if (user?.id) {
+        const { data: privateLabMemberships } = await supabase
+          .from("labMembers")
+          .select("lab_id")
+          .eq("user", user.id)
+          .in("role", ["admin", "founder"]);
+        
+        if (privateLabMemberships && privateLabMemberships.length > 0) {
+          const privateLabIds = privateLabMemberships.map(m => m.lab_id);
+          const { data: privateLabsData } = await supabase
+            .from("labs")
+            .select("labId, labName, description, public_private")
+            .in("labId", privateLabIds)
+            .eq("public_private", "private")
+            .ilike("labName", `%${searchQuery}%`)
+            .limit(5);
+          
+          if (privateLabsData) {
+            privateLabs = privateLabsData;
+          }
+        }
+      }
+
+      // Merge public and private labs, deduplicate by labId
+      const allLabsMap = new Map();
+      (publicLabs || []).forEach((lab: any) => allLabsMap.set(lab.labId, lab));
+      privateLabs.forEach((lab: any) => allLabsMap.set(lab.labId, lab));
+      const labs = Array.from(allLabsMap.values());
+      
+      // Filter out experiments from private labs (unless user is admin/founder)
       let filteredExperiments = experiments || []
       if (experiments && experiments.length > 0) {
         const experimentLabIds = [...new Set(experiments.map((e: any) => e.lab_id).filter(Boolean))]
@@ -108,7 +139,26 @@ export function GlobalHeader() {
               .map((lab: any) => lab.labId)
           )
           
-          filteredExperiments = experiments.filter((exp: any) => !privateLabIds.has(exp.lab_id))
+          // If user is logged in, get labs where they are admin/founder
+          let accessiblePrivateLabIds = new Set<string>();
+          if (user?.id && privateLabIds.size > 0) {
+            const { data: accessibleMemberships } = await supabase
+              .from("labMembers")
+              .select("lab_id")
+              .eq("user", user.id)
+              .in("role", ["admin", "founder"])
+              .in("lab_id", Array.from(privateLabIds));
+            
+            if (accessibleMemberships) {
+              accessiblePrivateLabIds = new Set(accessibleMemberships.map(m => m.lab_id));
+            }
+          }
+          
+          // Filter experiments: show public labs and private labs where user has access
+          filteredExperiments = experiments.filter((exp: any) => {
+            if (!privateLabIds.has(exp.lab_id)) return true; // Public lab, show it
+            return accessiblePrivateLabIds.has(exp.lab_id); // Private lab, only show if user has access
+          })
         }
       }
       
@@ -140,7 +190,7 @@ export function GlobalHeader() {
       setShowDropdown(true)
     }, 350)
     return () => clearTimeout(searchTimeout.current)
-  }, [searchQuery])
+  }, [searchQuery, user?.id])
 
   // Close dropdown on click outside
   useEffect(() => {

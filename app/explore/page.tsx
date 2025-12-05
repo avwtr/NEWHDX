@@ -405,15 +405,45 @@ export default function ExplorePage() {
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        // Fetch labs with limited fields for faster query - only public labs
-        const { data: labs, error: labsError } = await supabase
+        // Fetch labs with limited fields for faster query - public labs
+        const { data: publicLabs, error: publicLabsError } = await supabase
           .from("labs")
-          .select("labId, labName, description, profilePic, org_id, createdBy, created_at")
+          .select("labId, labName, description, profilePic, org_id, createdBy, created_at, public_private")
           .or("public_private.is.null,public_private.eq.public")
           .order("created_at", { ascending: false })
           .limit(50); // Limit initial load
 
-        if (labsError) throw labsError;
+        if (publicLabsError) throw publicLabsError;
+
+        // If user is logged in, also fetch private labs where they are admin/founder
+        let privateLabs: any[] = [];
+        if (user?.id) {
+          const { data: privateLabMemberships } = await supabase
+            .from("labMembers")
+            .select("lab_id")
+            .eq("user", user.id)
+            .in("role", ["admin", "founder"]);
+          
+          if (privateLabMemberships && privateLabMemberships.length > 0) {
+            const privateLabIds = privateLabMemberships.map(m => m.lab_id);
+            const { data: privateLabsData, error: privateLabsError } = await supabase
+              .from("labs")
+              .select("labId, labName, description, profilePic, org_id, createdBy, created_at, public_private")
+              .in("labId", privateLabIds)
+              .eq("public_private", "private")
+              .order("created_at", { ascending: false });
+            
+            if (!privateLabsError && privateLabsData) {
+              privateLabs = privateLabsData;
+            }
+          }
+        }
+
+        // Merge public and private labs, deduplicate by labId
+        const allLabsMap = new Map();
+        (publicLabs || []).forEach(lab => allLabsMap.set(lab.labId, lab));
+        privateLabs.forEach(lab => allLabsMap.set(lab.labId, lab));
+        const labs = Array.from(allLabsMap.values());
 
         // Fetch lab categories
         const labIds = labs.map(l => l.labId);
@@ -518,7 +548,7 @@ export default function ExplorePage() {
 
         if (experimentsError) throw experimentsError;
 
-        // Filter out experiments from private labs
+        // Filter out experiments from private labs (unless user is admin/founder)
         if (experiments && experiments.length > 0) {
           const experimentLabIds = [...new Set(experiments.map((e: any) => e.lab_id).filter(Boolean))]
           
@@ -528,15 +558,33 @@ export default function ExplorePage() {
             .select("labId, public_private")
             .in("labId", experimentLabIds)
           
-          // Create a map of private lab IDs
+          // Get private lab IDs
           const privateLabIds = new Set(
             (experimentLabs || [])
               .filter((lab: any) => lab.public_private === 'private')
               .map((lab: any) => lab.labId)
           )
           
-          // Filter out experiments from private labs
-          experiments = experiments.filter((exp: any) => !privateLabIds.has(exp.lab_id))
+          // If user is logged in, get labs where they are admin/founder
+          let accessiblePrivateLabIds = new Set<string>();
+          if (user?.id && privateLabIds.size > 0) {
+            const { data: accessibleMemberships } = await supabase
+              .from("labMembers")
+              .select("lab_id")
+              .eq("user", user.id)
+              .in("role", ["admin", "founder"])
+              .in("lab_id", Array.from(privateLabIds));
+            
+            if (accessibleMemberships) {
+              accessiblePrivateLabIds = new Set(accessibleMemberships.map(m => m.lab_id));
+            }
+          }
+          
+          // Filter out experiments from private labs (unless user has access)
+          experiments = experiments.filter((exp: any) => {
+            if (!privateLabIds.has(exp.lab_id)) return true; // Public lab, show it
+            return accessiblePrivateLabIds.has(exp.lab_id); // Private lab, only show if user has access
+          })
         }
 
         // Fetch experiment contributors
@@ -636,7 +684,7 @@ export default function ExplorePage() {
     };
 
     fetchAllData();
-  }, []); // Empty dependency array means this runs once on mount
+  }, [user?.id]); // Re-fetch when user changes
 
   const { user } = useAuth();
 
