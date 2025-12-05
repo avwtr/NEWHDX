@@ -26,7 +26,7 @@ export default async function LabPage({ params }: { params: Promise<{ labId: str
 
   return (
     <PrivateLabAccessControl lab={lab} labId={labId}>
-      <LabView lab={lab} categories={categories || []} />
+    <LabView lab={lab} categories={categories || []} />
     </PrivateLabAccessControl>
   )
 }
