@@ -405,10 +405,11 @@ export default function ExplorePage() {
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        // Fetch labs with limited fields for faster query
+        // Fetch labs with limited fields for faster query - only public labs
         const { data: labs, error: labsError } = await supabase
           .from("labs")
           .select("labId, labName, description, profilePic, org_id, createdBy, created_at")
+          .or("public_private.is.null,public_private.eq.public")
           .order("created_at", { ascending: false })
           .limit(50); // Limit initial load
 
@@ -509,13 +510,34 @@ export default function ExplorePage() {
         }));
 
         // Fetch experiments with limits for performance
-        const { data: experiments, error: experimentsError } = await supabase
+        let { data: experiments, error: experimentsError } = await supabase
           .from("experiments")
           .select("*")
           .order("created_at", { ascending: false })
           .limit(50); // Limit initial load
 
         if (experimentsError) throw experimentsError;
+
+        // Filter out experiments from private labs
+        if (experiments && experiments.length > 0) {
+          const experimentLabIds = [...new Set(experiments.map((e: any) => e.lab_id).filter(Boolean))]
+          
+          // Fetch lab visibility for all experiment labs
+          const { data: experimentLabs } = await supabase
+            .from("labs")
+            .select("labId, public_private")
+            .in("labId", experimentLabIds)
+          
+          // Create a map of private lab IDs
+          const privateLabIds = new Set(
+            (experimentLabs || [])
+              .filter((lab: any) => lab.public_private === 'private')
+              .map((lab: any) => lab.labId)
+          )
+          
+          // Filter out experiments from private labs
+          experiments = experiments.filter((exp: any) => !privateLabIds.has(exp.lab_id))
+        }
 
         // Fetch experiment contributors
         let contributorsMap: Record<string, any[]> = {};

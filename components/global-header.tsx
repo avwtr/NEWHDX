@@ -86,11 +86,32 @@ export function GlobalHeader() {
         { data: orgs }
       ] = await Promise.all([
         supabase.from("profiles").select("user_id, username, avatar_url, research_interests").ilike("username", `%${searchQuery}%`).limit(5),
-        supabase.from("labs").select("labId, labName, description").ilike("labName", `%${searchQuery}%`).limit(5),
+        supabase.from("labs").select("labId, labName, description").ilike("labName", `%${searchQuery}%`).or("public_private.is.null,public_private.eq.public").limit(5),
         supabase.from("grants").select("id, title, description").ilike("title", `%${searchQuery}%`).limit(5),
-        supabase.from("experiments").select("id, name, objective").ilike("name", `%${searchQuery}%`).limit(5),
+        supabase.from("experiments").select("id, name, objective, lab_id").ilike("name", `%${searchQuery}%`).limit(5),
         supabase.from("organizations").select("org_id, org_name, description, profilePic, slug").ilike("org_name", `%${searchQuery}%`).limit(5),
       ])
+      
+      // Filter out experiments from private labs
+      let filteredExperiments = experiments || []
+      if (experiments && experiments.length > 0) {
+        const experimentLabIds = [...new Set(experiments.map((e: any) => e.lab_id).filter(Boolean))]
+        if (experimentLabIds.length > 0) {
+          const { data: experimentLabs } = await supabase
+            .from("labs")
+            .select("labId, public_private")
+            .in("labId", experimentLabIds)
+          
+          const privateLabIds = new Set(
+            (experimentLabs || [])
+              .filter((lab: any) => lab.public_private === 'private')
+              .map((lab: any) => lab.labId)
+          )
+          
+          filteredExperiments = experiments.filter((exp: any) => !privateLabIds.has(exp.lab_id))
+        }
+      }
+      
       let labsWithCategories = labs || []
       if (labs && labs.length > 0) {
         const labIds = labs.map((lab: any) => lab.labId)
@@ -112,7 +133,7 @@ export function GlobalHeader() {
         users: users || [],
         labs: labsWithCategories,
         grants: grants || [],
-        experiments: experiments || [],
+        experiments: filteredExperiments || [],
         orgs: orgs || [],
       })
       setSearchLoading(false)
@@ -129,9 +150,10 @@ export function GlobalHeader() {
       }
     }
     if (showDropdown) {
-      document.addEventListener("mousedown", handleClick)
+      // Use click instead of mousedown to allow link clicks to register first
+      document.addEventListener("click", handleClick, true)
+      return () => document.removeEventListener("click", handleClick, true)
     }
-    return () => document.removeEventListener("mousedown", handleClick)
   }, [showDropdown])
 
   // Handle issue submission
@@ -242,7 +264,10 @@ export function GlobalHeader() {
               />
               {/* Search Results Dropdown */}
               {showDropdown && (
-                <div className="absolute left-0 mt-2 w-full bg-background border border-secondary rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+                <div 
+                  className="absolute left-0 mt-2 w-full bg-background border border-secondary rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
+                  onClick={(e) => e.stopPropagation()} // Prevent click from bubbling up
+                >
                   {searchLoading ? (
                     <div className="p-4 text-center text-muted-foreground font-fell italic">Searching...</div>
                   ) : (
@@ -257,7 +282,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Users</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.users.map((user: any) => (
-                                <Link key={user.user_id} href={`/profile/${user.username}`} className="flex flex-col gap-1 px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={user.user_id} 
+                                  href={`/profile/${user.username}`} 
+                                  className="flex flex-col gap-1 px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <div className="flex items-center gap-3">
                                     <Avatar className="h-7 w-7">
                                       <AvatarImage src={user.avatar_url || "/placeholder.svg"} alt={user.username} />
@@ -284,7 +314,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Labs</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.labs.map((lab: any) => (
-                                <Link key={lab.labId} href={`/lab/${lab.labId}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={lab.labId} 
+                                  href={`/lab/${lab.labId}`} 
+                                  className="block px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <span className="font-medium font-fell italic">{lab.labName}</span>
                                   <span className="block text-xs text-muted-foreground">{lab.description}</span>
                                   {Array.isArray(lab.categories) && lab.categories.length > 0 && (
@@ -306,7 +341,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Grants</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.grants.map((grant: any) => (
-                                <Link key={grant.id} href={`/grants/${grant.id}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={grant.id} 
+                                  href={`/grants/${grant.id}`} 
+                                  className="block px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <span className="font-medium font-fell italic">{grant.title}</span>
                                   <span className="block text-xs text-muted-foreground">{grant.description}</span>
                                 </Link>
@@ -319,7 +359,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Organizations</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.orgs.map((org: any) => (
-                                <Link key={org.org_id} href={`/orgs/${org.slug || org.org_id}`} className="flex items-center gap-3 px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={org.org_id} 
+                                  href={`/orgs/${org.slug || org.org_id}`} 
+                                  className="flex items-center gap-3 px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <Avatar className="h-7 w-7">
                                     <AvatarImage src={org.profilePic || "/placeholder.svg"} alt={org.org_name} />
                                     <AvatarFallback>{(org.org_name || "O").charAt(0).toUpperCase()}</AvatarFallback>
@@ -338,7 +383,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Experiments</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.experiments.map((exp: any) => (
-                                <Link key={exp.id} href={`/newexperiments/${exp.id}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={exp.id} 
+                                  href={`/newexperiments/${exp.id}`} 
+                                  className="block px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <span className="font-medium font-fell italic">{exp.name}</span>
                                   <span className="block text-xs text-muted-foreground">{exp.objective}</span>
                                 </Link>
@@ -485,7 +535,10 @@ export function GlobalHeader() {
             />
             {/* Show mobile dropdown if needed */}
             {showDropdown && searchQuery && (
-              <div className="absolute left-0 mt-2 w-full bg-background border border-secondary rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+              <div 
+                className="absolute left-0 mt-2 w-full bg-background border border-secondary rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
+                onClick={(e) => e.stopPropagation()} // Prevent click from bubbling up
+              >
                 {searchLoading ? (
                   <div className="p-4 text-center text-muted-foreground font-fell italic">Searching...</div>
                 ) : (

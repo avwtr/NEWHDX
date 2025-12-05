@@ -112,7 +112,10 @@ export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionPr
       })
       // Sort by role precedence, then name
       const roleOrder = { Founder: 0, Member: 1, Contributor: 2, Follower: 3 }
-      let labsList = Object.values(all)
+      // Filter out private labs - only show public labs on user profiles
+      let labsList = Object.values(all).filter((lab: any) => 
+        !lab.public_private || lab.public_private === 'public'
+      )
       // Fetch org info for all labs
       const orgIds = [...new Set(labsList.map(l => l.org_id).filter(Boolean))]
       if (orgIds.length > 0) {
