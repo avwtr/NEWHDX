@@ -221,7 +221,7 @@ export function CreateLab() {
             AN OPEN-SOURCE HOME FOR YOUR RESEARCH
           </h3>
           <p className="text-sm sm:text-base text-gray-300">
-            However radical your interests may be: freely create your own lab, manage lab materials, receive funding,
+            However radical your interests may be: freely create your own lab, manage lab materials,
             invite outside contributors, launch experiments and start advancing science.
           </p>
         </div>

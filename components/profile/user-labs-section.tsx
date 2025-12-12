@@ -12,10 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 interface UserLabsSectionProps {
   userId: string
+  isOwnProfile?: boolean
   onLabsCountChange?: (count: number) => void
 }
 
-export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionProps) {
+export function UserLabsSection({ userId, isOwnProfile = false, onLabsCountChange }: UserLabsSectionProps) {
   const [allLabs, setAllLabs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -33,6 +34,15 @@ export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionPr
       .from('labs')
       .select('*')
       .eq('createdBy', userId)
+      .then(async (res) => {
+        if (res.error) return res
+        if (isOwnProfile) return res
+        // For other users' profiles, filter to only public labs
+        const filtered = (res.data || []).filter((lab: any) => 
+          lab.public_private === 'public' || lab.public_private === null
+        )
+        return { ...res, data: filtered }
+      })
 
     // Fetch lab memberships, then fetch labs by those IDs
     const memberPromise = supabase
@@ -49,7 +59,15 @@ export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionPr
           .from('labs')
           .select('*')
           .in('labId', labIds)
-        return labsRes
+        
+        if (labsRes.error) return labsRes
+        if (isOwnProfile) return labsRes
+        
+        // For other users' profiles, filter to only public labs
+        const filtered = (labsRes.data || []).filter((lab: any) => 
+          lab.public_private === 'public' || lab.public_private === null
+        )
+        return { ...labsRes, data: filtered }
       })
 
     // Fetch labs the user follows
@@ -67,7 +85,15 @@ export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionPr
           .from('labs')
           .select('*')
           .in('labId', labIds)
-        return labsRes
+        
+        if (labsRes.error) return labsRes
+        if (isOwnProfile) return labsRes
+        
+        // For other users' profiles, filter to only public labs
+        const filtered = (labsRes.data || []).filter((lab: any) => 
+          lab.public_private === 'public' || lab.public_private === null
+        )
+        return { ...labsRes, data: filtered }
       })
 
     // Fetch labs contributed to
@@ -85,7 +111,15 @@ export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionPr
           .from('labs')
           .select('*')
           .in('labId', labIds)
-        return labsRes
+        
+        if (labsRes.error) return labsRes
+        if (isOwnProfile) return labsRes
+        
+        // For other users' profiles, filter to only public labs
+        const filtered = (labsRes.data || []).filter((lab: any) => 
+          lab.public_private === 'public' || lab.public_private === null
+        )
+        return { ...labsRes, data: filtered }
       })
 
     Promise.all([foundedPromise, memberPromise, followerPromise, contributorPromise]).then(async ([foundedRes, memberRes, followerRes, contributorRes]) => {

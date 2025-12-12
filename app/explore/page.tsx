@@ -32,6 +32,77 @@ import { useAuth } from "@/components/auth-provider"
 import { createPortal } from "react-dom"
 import { differenceInYears, differenceInMonths, differenceInDays, differenceInHours, differenceInMinutes } from "date-fns"
 import { LoadingAnimation } from "@/components/loading-animation"
+import { Video, Loader2 } from "lucide-react"
+
+// Thumbnail generation functions for Experiment Engine
+const generateVideoThumbnail = async (videoUrl: string): Promise<string | null> => {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.muted = true;
+    
+    const timeout = setTimeout(() => {
+      resolve(null);
+    }, 10000);
+    
+    video.onloadedmetadata = () => {
+      const seekTime = Math.min(1, video.duration * 0.1);
+      video.currentTime = seekTime;
+    };
+    
+    video.onseeked = () => {
+      clearTimeout(timeout);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const thumbnail = canvas.toDataURL('image/jpeg', 0.8);
+      resolve(thumbnail);
+    };
+    
+    video.onerror = () => {
+      clearTimeout(timeout);
+      resolve(null);
+    };
+    
+    video.src = videoUrl;
+  });
+};
+
+const getFirstVideoSegment = async (experimentId: string): Promise<string | null> => {
+  try {
+    const response = await fetch(`/api/experiment-engine/video-segment?experimentId=${experimentId}`);
+    if (!response.ok) {
+      return null;
+    }
+    const result = await response.json();
+    return result.data?.videoUrl || null;
+  } catch (error) {
+    console.debug('[Thumbnail] Error getting video segment:', error);
+    return null;
+  }
+};
+
+const getConcludedVideoUrl = async (experimentId: string): Promise<string | null> => {
+  try {
+    const response = await fetch(`/api/experiment-engine/concluded-video?experimentId=${experimentId}`);
+    if (!response.ok) {
+      return null;
+    }
+    const result = await response.json();
+    return result.data?.videoUrl || null;
+  } catch (e) {
+    console.debug('[Thumbnail] Error getting concluded video:', e);
+    return null;
+  }
+};
 
 // Add this after imports, before the ExplorePage component
 const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
@@ -368,11 +439,15 @@ export default function ExplorePage() {
   const [experimentsLoading, setExperimentsLoading] = useState(false);
   const [experimentsError, setExperimentsError] = useState<any>(null);
 
+
   const [isNavigating, setIsNavigating] = useState(false)
 
   // Add these state variables at the top of the component
   const [showMobileWarning, setShowMobileWarning] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+
+  // Get user authentication - must be before useEffect that uses it
+  const { user } = useAuth();
 
   useEffect(() => {
     // Check if we're on mobile
@@ -548,6 +623,21 @@ export default function ExplorePage() {
 
         if (experimentsError) throw experimentsError;
 
+        // Fetch public Experiment Engine experiments
+        let experimentEngineExps: any[] = [];
+        try {
+          const response = await fetch('/api/experiment-engine/public-experiments');
+          if (response.ok) {
+            const { data: expEngineData } = await response.json();
+            experimentEngineExps = (expEngineData || []).map((exp: any) => ({
+              ...exp,
+              is_experiment_engine: true
+            }));
+          }
+        } catch (err) {
+          console.error('Error fetching Experiment Engine experiments:', err);
+        }
+
         // Filter out experiments from private labs (unless user is admin/founder)
         if (experiments && experiments.length > 0) {
           const experimentLabIds = [...new Set(experiments.map((e: any) => e.lab_id).filter(Boolean))]
@@ -587,30 +677,56 @@ export default function ExplorePage() {
           })
         }
 
-        // Fetch experiment contributors
+        // Fetch experiment contributors - fetch separately to avoid foreign key join issues
         let contributorsMap: Record<string, any[]> = {};
-        if (experiments.length > 0) {
+        if (experiments && experiments.length > 0) {
           const { data: contributors } = await supabase
             .from("experiment_contributors")
-            .select("experiment_id, user_id, profile:profiles(username, avatar_url)");
-          if (contributors) {
-            contributors.forEach(c => {
+            .select("experiment_id, user_id");
+          if (contributors && contributors.length > 0) {
+            const userIds = [...new Set(contributors.map((c: any) => c.user_id).filter(Boolean))];
+            let profileMap: Record<string, any> = {};
+            if (userIds.length > 0) {
+              const { data: profiles } = await supabase
+                .from("profiles")
+                .select("user_id, username, profilePic")
+                .in("user_id", userIds);
+              if (profiles) {
+                profiles.forEach((p: any) => {
+                  profileMap[p.user_id] = p;
+                });
+              }
+            }
+            contributors.forEach((c: any) => {
               if (!contributorsMap[c.experiment_id]) contributorsMap[c.experiment_id] = [];
-              contributorsMap[c.experiment_id].push(c);
+              contributorsMap[c.experiment_id].push({
+                ...c,
+                profile: profileMap[c.user_id] || null,
+              });
             });
           }
         }
 
-        // Fetch experiment files
+        // Fetch experiment files from experiment_files table
         let experimentFilesMap: Record<string, any[]> = {};
-        if (experiments.length > 0) {
-          const { data: files } = await supabase
-            .from("files")
-            .select("id, name, file_path, experiment_id, uploaded_by, created_at");
-          if (files) {
+        if (experiments && experiments.length > 0) {
+          const experimentIds = experiments.map((e: any) => e.id);
+          const { data: files, error: filesError } = await supabase
+            .from("experiment_files")
+            .select("id, file, file_name, storageKey, experiment_id, created_at")
+            .in("experiment_id", experimentIds);
+          if (filesError) {
+            // Silently handle error - table might not exist or have RLS issues
+            console.debug('Error fetching experiment files (non-critical):', filesError);
+          } else if (files) {
             files.forEach(f => {
               if (!experimentFilesMap[f.experiment_id]) experimentFilesMap[f.experiment_id] = [];
-              experimentFilesMap[f.experiment_id].push(f);
+              experimentFilesMap[f.experiment_id].push({
+                id: f.id,
+                name: f.file_name || f.file,
+                file_path: f.storageKey,
+                created_at: f.created_at,
+              });
             });
           }
         }
@@ -624,31 +740,41 @@ export default function ExplorePage() {
           };
         });
 
-        // Map experiments data
-        const mappedExperiments = experiments.map(exp => {
-          const labInfo = labInfoMap[exp.lab_id] || {};
+        // Merge regular experiments with Experiment Engine experiments
+        const allExperiments = [...(experiments || []), ...experimentEngineExps];
+
+        // Map experiments data - handle both regular and Experiment Engine experiments
+        const mappedExperiments = allExperiments.map((exp: any) => {
+          // For Experiment Engine experiments, use the lab info from the API response
+          const labInfo = exp.is_experiment_engine 
+            ? { name: exp.labName || "", image: exp.labProfilePic || "/placeholder.svg" }
+            : (labInfoMap[exp.lab_id] || {});
+          
           return {
-            id: exp.id,
-            name: exp.name,
-            description: exp.description,
-            objective: exp.objective,
+            id: exp.id || exp.experiment_id,
+            experiment_id: exp.experiment_id,
+            name: exp.name || exp.experiment_name,
+            description: exp.description || "",
+            objective: exp.objective || exp.experiment_objective || "",
             categories: Array.isArray(exp.categories) ? exp.categories : [],
             lab: exp.lab_id,
             labId: exp.lab_id,
-            labName: labInfo.name || "",
-            labProfilePic: labInfo.image || "/placeholder.svg",
+            labName: labInfo.name || exp.labName || "",
+            labProfilePic: labInfo.image || exp.labProfilePic || "/placeholder.svg",
             participantsNeeded: exp.participants_needed || 0,
             participantsCurrent: exp.participants_current || 0,
             deadline: exp.deadline,
             compensation: exp.compensation || "No compensation",
             timeCommitment: exp.time_commitment || "Not specified",
             lastUpdated: exp.created_at ? `${Math.round((Date.now() - new Date(exp.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
-            status: exp.status || "DRAFT",
-            closed_status: exp.closed_status,
+            status: exp.status || exp.experiment_status || "DRAFT",
+            closed_status: exp.closed_status || (exp.experiment_status === 'concluded' ? 'CLOSED' : null),
             end_date: exp.end_date,
             created_at: exp.created_at,
             contributors: contributorsMap[exp.id] || [],
             files: experimentFilesMap[exp.id] || [],
+            is_experiment_engine: exp.is_experiment_engine || false,
+            experiment_status: exp.experiment_status,
           };
         });
 
@@ -685,8 +811,6 @@ export default function ExplorePage() {
 
     fetchAllData();
   }, [user?.id]); // Re-fetch when user changes
-
-  const { user } = useAuth();
 
   // Science categories with their corresponding badge classes
   const scienceCategories = {
@@ -812,21 +936,23 @@ export default function ExplorePage() {
   const filterData = useCallback(
     (data: any[]) => {
       return data.filter((item) => {
-        // Search filter
+        // Search filter - handle different item types
         const matchesSearch =
           searchQuery === "" ||
           (item.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (item.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+          (item.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (item.username || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (item.bio || "").toLowerCase().includes(searchQuery.toLowerCase())
 
-        // Category filter (show labs with no categories if no filter is selected)
+        // Category filter
         const matchesCategory =
           selectedCategories.length === 0 ||
-          (item.categories && item.categories.length > 0 && item.categories.some((cat: string) => selectedCategories.includes(cat)))
+          (item.categories && Array.isArray(item.categories) && item.categories.length > 0 && item.categories.some((cat: string) => selectedCategories.includes(cat)))
 
         return matchesSearch && matchesCategory
       })
     },
-    [searchQuery, selectedCategories],
+    [searchQuery, selectedCategories, activeTab],
   )
 
   // Sort data based on selected sort option
@@ -835,6 +961,7 @@ export default function ExplorePage() {
       if (sortOption === "recent") {
         // Sort by last updated (most recent first)
         return [...data].sort((a, b) => {
+          if (!a.lastUpdated || !b.lastUpdated) return 0
           if (a.lastUpdated.includes("day") && b.lastUpdated.includes("week")) return -1
           if (a.lastUpdated.includes("week") && b.lastUpdated.includes("day")) return 1
 
@@ -1094,96 +1221,158 @@ export default function ExplorePage() {
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredData.map((experiment: any) => {
-                        const isClosed = experiment.closed_status === "CLOSED";
-                        return (
-                          <Card key={experiment.id} className="overflow-hidden">
-                            <CardContent className="p-0">
-                              <Link href={isClosed ? `/experiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`} className="block p-4 hover:bg-secondary/50">
-                                <div className="flex justify-between items-center mb-2">
-                                  <div className="flex items-center gap-2">
-                                    {isClosed ? (
-                                      <><Circle className="h-3 w-3 text-red-500 fill-red-500" /><span className="text-xs text-red-500 font-bold">CONCLUDED</span></>
-                                    ) : (
-                                      <><div className="h-2 w-2 rounded-full bg-green-500 animate-[pulse_2s_ease-in-out_infinite]" /><span className="text-xs text-green-500 font-medium">LIVE</span></>
+                        const isExperimentEngine = experiment.is_experiment_engine || experiment.experiment_id?.startsWith('exp_');
+                        const isClosed = experiment.closed_status === "CLOSED" || (isExperimentEngine && experiment.experiment_status === 'concluded');
+                        const ExperimentCardContent = () => {
+                          const [thumbnail, setThumbnail] = useState<string | null>(null);
+                          const [isLoadingThumbnail, setIsLoadingThumbnail] = useState(false);
+                          
+                          useEffect(() => {
+                            if (!isExperimentEngine || !experiment.experiment_id) return;
+                            
+                            const loadThumbnail = async () => {
+                              const status = experiment.experiment_status || experiment.status;
+                              if (status === 'experiment_initiated' || status === 'config_complete') {
+                                setIsLoadingThumbnail(false);
+                                return; // No video content yet
+                              }
+                              
+                              setIsLoadingThumbnail(true);
+                              try {
+                                let videoUrl: string | null = null;
+                                if (status === 'concluded') {
+                                  videoUrl = await getConcludedVideoUrl(experiment.experiment_id);
+                                } else {
+                                  videoUrl = await getFirstVideoSegment(experiment.experiment_id);
+                                }
+                                
+                                if (videoUrl) {
+                                  const thumb = await generateVideoThumbnail(videoUrl);
+                                  if (thumb) {
+                                    setThumbnail(thumb);
+                                  }
+                                }
+                              } catch (error) {
+                                console.debug('[Thumbnail] Could not load thumbnail:', error);
+                              } finally {
+                                setIsLoadingThumbnail(false);
+                              }
+                            };
+                            
+                            loadThumbnail();
+                          }, [isExperimentEngine, experiment.experiment_id, experiment.experiment_status]);
+                          
+                          const handleClick = (e: React.MouseEvent) => {
+                            if (isExperimentEngine) {
+                              e.preventDefault();
+                              window.open(`https://www.experimentengine.ai/experiment-summary?experimentId=${experiment.experiment_id}`, '_blank');
+                            }
+                          };
+                          
+                          return (
+                            <Card key={experiment.id} className="overflow-hidden">
+                              <CardContent className="p-0">
+                                <div className="p-4">
+                                  <Link 
+                                    href={isExperimentEngine 
+                                      ? `https://www.experimentengine.ai/experiment-summary?experimentId=${experiment.experiment_id}`
+                                      : (isClosed ? `/experiments/${experiment.id}/conclude` : `/newexperiments/${experiment.id}`)
+                                    }
+                                    onClick={handleClick}
+                                    className="block hover:bg-secondary/50 -m-4 p-4"
+                                  >
+                                    {/* Thumbnail for Experiment Engine experiments */}
+                                    {isExperimentEngine && (
+                                      <div className="mb-3 flex items-center justify-center w-full h-32 bg-secondary/50 rounded overflow-hidden">
+                                        {isLoadingThumbnail ? (
+                                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                        ) : thumbnail ? (
+                                          <img src={thumbnail} alt={experiment.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <Video className="h-8 w-8 text-muted-foreground" />
+                                        )}
+                                      </div>
+                                    )}
+                                  <div className="flex justify-between items-center mb-2">
+                                    <div className="flex items-center gap-2">
+                                      {isClosed ? (
+                                        <><Circle className="h-3 w-3 text-red-500 fill-red-500" /><span className="text-xs text-red-500 font-bold">CONCLUDED</span></>
+                                      ) : (
+                                        <><div className="h-2 w-2 rounded-full bg-green-500 animate-[pulse_2s_ease-in-out_infinite]" /><span className="text-xs text-green-500 font-medium">LIVE</span></>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground text-right">
+                                      {isClosed ? (
+                                        <span>Concluded {experiment.end_date ? getElapsedString(experiment.end_date) : "-"}</span>
+                                      ) : (
+                                        <span>Ongoing</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="mb-1">
+                                    <h3 className="font-semibold text-accent text-lg font-fell italic normal-case">{experiment.name}</h3>
+                                    {isExperimentEngine && (
+                                      <Badge variant="secondary" className="text-xs normal-case mt-1">EXPERIMENT ENGINE</Badge>
                                     )}
                                   </div>
-                                  <div className="text-xs text-muted-foreground text-right">
-                                    {isClosed ? (
-                                      <span>Concluded {experiment.end_date ? getElapsedString(experiment.end_date) : "-"}</span>
-                                    ) : (
-                                      <span>Ongoing</span>
-                                    )}
-                                  </div>
-                                </div>
-                                <h3 className="font-semibold text-accent text-lg mb-1 font-fell italic normal-case">{experiment.name}</h3>
-                                <div className="flex flex-wrap gap-1 mb-2">
-                                  {(expandedExperimentIds.includes(experiment.id) ? experiment.categories : experiment.categories.slice(0, 3)).map((category: string) => {
-                                    const color = getCategoryBadgeColors(category);
-                                    return (
-                                      <Badge key={category} variant={category as any} className="mr-2 mb-2 text-xs normal-case">
-                                        {getCategoryLabel(category)}
-                                      </Badge>
-                                    );
-                                  })}
-                                  {experiment.categories.length > 3 && !expandedExperimentIds.includes(experiment.id) && (
-                                    <button
-                                      type="button"
-                                      className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
-                                      onClick={e => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setExpandedExperimentIds(ids => [...ids, experiment.id]);
-                                      }}
-                                      title="View all categories"
-                                    >
-                                      ...
-                                    </button>
-                                  )}
-                                </div>
-                                {experiment.objective && <p className="text-sm text-muted-foreground mb-2">{experiment.objective}</p>}
-                                {/* Contributors */}
-                                {Array.isArray(experiment.contributors) && experiment.contributors.length > 0 && (
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-xs text-muted-foreground">Contributors:</span>
-                                    {experiment.contributors.map((c: any) => (
-                                      <Link key={c.user_id} href={`/profile/${c.user_id}`} target="_blank" rel="noopener noreferrer">
-                                        <Avatar className="h-6 w-6 border">
-                                          <AvatarImage src={c.profile?.avatar_url || "/placeholder.svg"} alt={c.profile?.username || c.user_id} />
-                                          <AvatarFallback>{c.profile?.username?.[0] || "U"}</AvatarFallback>
-                                        </Avatar>
-                                      </Link>
-                                    ))}
-                                  </div>
-                                )}
-                                {/* Files */}
-                                {Array.isArray(experiment.files) && experiment.files.length > 0 && (
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <FileText className="h-4 w-4 text-muted-foreground" />
-                                    {experiment.files.map((file: any) => (
-                                      <a
-                                        key={file.id}
-                                        href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/experiment-files/${file.file_path}`}
-                                        download
-                                        className="text-xs underline text-accent"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                  <div className="flex flex-wrap gap-1 mb-2">
+                                    {(expandedExperimentIds.includes(experiment.id) ? experiment.categories : experiment.categories.slice(0, 3)).map((category: string) => {
+                                      const color = getCategoryBadgeColors(category);
+                                      return (
+                                        <Badge key={category} variant={category as any} className="mr-2 mb-2 text-xs normal-case">
+                                          {getCategoryLabel(category)}
+                                        </Badge>
+                                      );
+                                    })}
+                                    {experiment.categories.length > 3 && !expandedExperimentIds.includes(experiment.id) && (
+                                      <button
+                                        type="button"
+                                        className="text-xs text-muted-foreground font-bold ml-1 px-2 py-1 rounded hover:bg-accent cursor-pointer"
+                                        onClick={e => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setExpandedExperimentIds(ids => [...ids, experiment.id]);
+                                        }}
+                                        title="View all categories"
                                       >
-                                        {file.name}
-                                      </a>
-                                    ))}
+                                        ...
+                                      </button>
+                                    )}
                                   </div>
-                                )}
-                                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                                  <span className="flex items-center gap-2">
-                                    <img src={experiment.labProfilePic} alt={experiment.labName} className="h-5 w-5 rounded-full object-cover border" />
-                                    {experiment.labName}
-                                  </span>
-                                  <span>{experiment.lastUpdated}</span>
+                                  {experiment.objective && <p className="text-sm text-muted-foreground mb-2">{experiment.objective}</p>}
+                                  </Link>
+                                  {/* Files */}
+                                  {Array.isArray(experiment.files) && experiment.files.length > 0 && (
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <FileText className="h-4 w-4 text-muted-foreground" />
+                                      {experiment.files.map((file: any) => (
+                                        <a
+                                          key={file.id}
+                                          href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/experiment-files/${file.file_path}`}
+                                          download
+                                          className="text-xs underline text-accent"
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                        >
+                                          {file.name}
+                                        </a>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-2">
+                                      <img src={experiment.labProfilePic} alt={experiment.labName} className="h-5 w-5 rounded-full object-cover border" />
+                                      {experiment.labName}
+                                    </span>
+                                    <span>{experiment.lastUpdated}</span>
+                                  </div>
                                 </div>
-                              </Link>
-                            </CardContent>
-                          </Card>
-                        );
+                              </CardContent>
+                            </Card>
+                          );
+                        };
+                        
+                        return <ExperimentCardContent key={experiment.id} />;
                       })}
                     </div>
                   </>

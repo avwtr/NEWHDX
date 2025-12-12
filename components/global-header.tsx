@@ -79,18 +79,32 @@ export function GlobalHeader() {
     searchTimeout.current = setTimeout(async () => {
       // Query users, labs, grants, experiments, and organizations
       const [
-        { data: users },
+        { data: users, error: usersError },
         { data: publicLabs, error: labsError },
-        { data: grants },
-        { data: experiments },
-        { data: orgs }
+        { data: grants, error: grantsError },
+        { data: experiments, error: experimentsError },
+        { data: orgs, error: orgsError }
       ] = await Promise.all([
-        supabase.from("profiles").select("user_id, username, avatar_url, research_interests").ilike("username", `%${searchQuery}%`).limit(5),
+        supabase.from("profiles").select("user_id, username, profilePic, research_interests").ilike("username", `%${searchQuery}%`).limit(5),
         supabase.from("labs").select("labId, labName, description, public_private").ilike("labName", `%${searchQuery}%`).or("public_private.is.null,public_private.eq.public").limit(5),
-        supabase.from("grants").select("id, title, description").ilike("title", `%${searchQuery}%`).limit(5),
+        supabase.from("grants").select("grant_id, grant_name, grant_description").ilike("grant_name", `%${searchQuery}%`).limit(5),
         supabase.from("experiments").select("id, name, objective, lab_id").ilike("name", `%${searchQuery}%`).limit(5),
         supabase.from("organizations").select("org_id, org_name, description, profilePic, slug").ilike("org_name", `%${searchQuery}%`).limit(5),
       ])
+      
+      // Log errors for debugging
+      if (usersError) {
+        console.error("Users search error:", usersError);
+      }
+      if (grantsError) {
+        console.error("Grants search error:", grantsError);
+      }
+      if (experimentsError) {
+        console.error("Experiments search error:", experimentsError);
+      }
+      if (orgsError) {
+        console.error("Organizations search error:", orgsError);
+      }
       
       // If user is logged in, also fetch private labs where they are admin/founder
       let privateLabs: any[] = [];
@@ -340,7 +354,7 @@ export function GlobalHeader() {
                                 >
                                   <div className="flex items-center gap-3">
                                     <Avatar className="h-7 w-7">
-                                      <AvatarImage src={user.avatar_url || "/placeholder.svg"} alt={user.username} />
+                                      <AvatarImage src={user.profilePic || "/placeholder.svg"} alt={user.username} />
                                       <AvatarFallback>{(user.username || "U").charAt(0).toUpperCase()}</AvatarFallback>
                                     </Avatar>
                                     <span className="font-medium font-fell italic">{user.username}</span>
@@ -392,13 +406,13 @@ export function GlobalHeader() {
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.grants.map((grant: any) => (
                                 <Link 
-                                  key={grant.id} 
-                                  href={`/grants/${grant.id}`} 
+                                  key={grant.grant_id} 
+                                  href={`/grants/${grant.grant_id}`} 
                                   className="block px-4 py-2 hover:bg-secondary/50"
                                   onClick={() => setShowDropdown(false)}
                                 >
-                                  <span className="font-medium font-fell italic">{grant.title}</span>
-                                  <span className="block text-xs text-muted-foreground">{grant.description}</span>
+                                  <span className="font-medium font-fell italic">{grant.grant_name}</span>
+                                  <span className="block text-xs text-muted-foreground">{grant.grant_description}</span>
                                 </Link>
                               ))}
                             </div>
@@ -605,7 +619,7 @@ export function GlobalHeader() {
                               <Link key={user.user_id} href={`/profile/${user.username}`} className="flex flex-col gap-1 px-4 py-2 hover:bg-secondary/50">
                                 <div className="flex items-center gap-3">
                                   <Avatar className="h-7 w-7">
-                                    <AvatarImage src={user.avatar_url || "/placeholder.svg"} alt={user.username} />
+                                    <AvatarImage src={user.profilePic || "/placeholder.svg"} alt={user.username} />
                                     <AvatarFallback>{(user.username || "U").charAt(0).toUpperCase()}</AvatarFallback>
                                   </Avatar>
                                   <span className="font-medium font-fell italic">{user.username}</span>

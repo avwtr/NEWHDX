@@ -278,7 +278,7 @@ export default function ProfilePage() {
     research_interests: profile.research_interests || [],
   }
 
-  const isOwnProfile = loggedInUser && userData && loggedInUser.id === userData.id;
+  const isOwnProfile = !!(loggedInUser && userData && loggedInUser.id === userData.id);
 
   if (showSettings && isOwnProfile) {
     const handleSettingsClose = () => {
@@ -371,25 +371,29 @@ export default function ProfilePage() {
         {/* Main Content Area */}
         <div className="md:col-span-2">
           <Tabs defaultValue="labs" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className={`grid w-full ${isOwnProfile ? 'grid-cols-4' : 'grid-cols-3'}`}>
               <TabsTrigger value="labs">My Labs</TabsTrigger>
               <TabsTrigger value="experiments">My Experiments</TabsTrigger>
               <TabsTrigger value="activity">Activity</TabsTrigger>
-              <TabsTrigger value="collections">Saved Stuff</TabsTrigger>
+              {isOwnProfile && (
+                <TabsTrigger value="collections">Saved Stuff</TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="labs" className="mt-6">
-              {userData && <UserLabsSection userId={userData.id} onLabsCountChange={setLabsCount} />}
+              {userData && <UserLabsSection userId={userData.id} isOwnProfile={isOwnProfile} onLabsCountChange={setLabsCount} />}
             </TabsContent>
             <TabsContent value="experiments" className="mt-6">
-              {userData && <UserExperimentsSection userId={userData.id} />}
+              {userData && <UserExperimentsSection userId={userData.id} isOwnProfile={isOwnProfile} />}
             </TabsContent>
             <TabsContent value="activity" className="mt-6">
-              <UserActivityLogs userId={userData.id} userName={userData.username} userProfilePic={userData.avatar} />
+              <UserActivityLogs userId={userData.id} userName={userData.username} userProfilePic={userData.avatar} isOwnProfile={isOwnProfile} />
             </TabsContent>
-            <TabsContent value="collections" className="mt-6">
-              <UserCollections userId={userData.id} />
-            </TabsContent>
+            {isOwnProfile && (
+              <TabsContent value="collections" className="mt-6">
+                <UserCollections userId={userData.id} />
+              </TabsContent>
+            )}
           </Tabs>
         </div>
       </div>

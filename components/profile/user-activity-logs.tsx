@@ -12,9 +12,10 @@ interface UserActivityLogsProps {
   userId: string
   userName: string
   userProfilePic?: string | null
+  isOwnProfile?: boolean
 }
 
-export function UserActivityLogs({ userId, userName, userProfilePic }: UserActivityLogsProps) {
+export function UserActivityLogs({ userId, userName, userProfilePic, isOwnProfile = false }: UserActivityLogsProps) {
   const [activities, setActivities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -36,26 +37,58 @@ export function UserActivityLogs({ userId, userName, userProfilePic }: UserActiv
           setLoading(false)
           return
         }
-        setActivities(data || [])
-        // Batch fetch labs
-        const uniqueLabIds = Array.from(new Set((data || []).map((a: any) => a.lab_from).filter(Boolean)))
-        let labMap: Record<string, any> = {}
-        if (uniqueLabIds.length) {
-          const { data: labs } = await supabase
-            .from("labs")
-            .select("labId, labName, profilePic, description")
-            .in("labId", uniqueLabIds)
-          if (labs) {
-            labs.forEach((lab: any) => {
-              labMap[lab.labId] = {
-                name: lab.labName,
-                profilePic: lab.profilePic || "/science-lab-setup.png",
-                description: lab.description
-              }
-            })
+        let activitiesData = data || []
+        
+        // If viewing someone else's profile, filter activities to only show those from public labs
+        if (!isOwnProfile) {
+          // Batch fetch labs to check visibility
+          const uniqueLabIds = Array.from(new Set(activitiesData.map((a: any) => a.lab_from).filter(Boolean)))
+          let labMap: Record<string, any> = {}
+          if (uniqueLabIds.length) {
+            const { data: labs } = await supabase
+              .from("labs")
+              .select("labId, labName, profilePic, description, public_private")
+              .in("labId", uniqueLabIds)
+            if (labs) {
+              labs.forEach((lab: any) => {
+                labMap[lab.labId] = {
+                  name: lab.labName,
+                  profilePic: lab.profilePic || "/science-lab-setup.png",
+                  description: lab.description,
+                  public_private: lab.public_private
+                }
+              })
+            }
           }
+          // Filter activities to only show those from public labs
+          activitiesData = activitiesData.filter((activity: any) => {
+            const lab = labMap[activity.lab_from]
+            return lab && (lab.public_private === 'public' || lab.public_private === null)
+          })
+          setLabMap(labMap)
+        } else {
+          // For own profile, fetch all labs without filtering
+          const uniqueLabIds = Array.from(new Set(activitiesData.map((a: any) => a.lab_from).filter(Boolean)))
+          let labMap: Record<string, any> = {}
+          if (uniqueLabIds.length) {
+            const { data: labs } = await supabase
+              .from("labs")
+              .select("labId, labName, profilePic, description")
+              .in("labId", uniqueLabIds)
+            if (labs) {
+              labs.forEach((lab: any) => {
+                labMap[lab.labId] = {
+                  name: lab.labName,
+                  profilePic: lab.profilePic || "/science-lab-setup.png",
+                  description: lab.description
+                }
+              })
+            }
+          }
+          setLabMap(labMap)
         }
-        setLabMap(labMap)
+        
+        setActivities(activitiesData)
         setLoading(false)
       })
   }, [userId])
