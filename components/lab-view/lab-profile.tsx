@@ -4,10 +4,11 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
-import { Bell, Users, FileText, FlaskConical, DollarSign, Share2 } from "lucide-react"
+import { Bell, Users, FileText, FlaskConical, DollarSign, Share2, Lock, Globe } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
+import { supabase } from "@/lib/supabase"
 
 interface LabProfileProps {
   isAdmin: boolean
@@ -151,6 +152,13 @@ export default function LabProfile({
   user,
 }: LabProfileProps) {
   const [shareCopied, setShareCopied] = useState(false)
+  const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false)
+  const [labVisibility, setLabVisibility] = useState(lab.public_private || 'public')
+
+  // Sync visibility state when lab prop changes
+  useEffect(() => {
+    setLabVisibility(lab.public_private || 'public')
+  }, [lab.public_private])
 
   // Helper to get share URL
   const getShareUrl = () => {
@@ -158,6 +166,37 @@ export default function LabProfile({
       return window.location.href
     }
     return ''
+  }
+
+  // Toggle lab visibility (public/private)
+  const handleToggleVisibility = async () => {
+    if (!isAdmin || !lab?.labId) return
+    
+    setIsUpdatingVisibility(true)
+    const newVisibility = labVisibility === 'public' ? 'private' : 'public'
+    
+    try {
+      const { error } = await supabase
+        .from('labs')
+        .update({ public_private: newVisibility })
+        .eq('labId', lab.labId)
+      
+      if (error) throw error
+      
+      setLabVisibility(newVisibility)
+      toast({
+        title: "Visibility updated",
+        description: `Lab is now ${newVisibility}`,
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error updating visibility",
+        description: error.message || String(error),
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdatingVisibility(false)
+    }
   }
 
   const handleShare = async () => {
@@ -274,9 +313,9 @@ export default function LabProfile({
                 </Button>
               </div>
             )}
-            {/* Admin button group remains unchanged */}
+            {/* Admin button group */}
             {isAdmin && (
-              <div className="flex items-center gap-2 self-end md:self-auto">
+              <div className="flex flex-col items-end gap-2 self-end md:self-auto">
                 <Button
                   variant="outline"
                   size="sm"
@@ -285,6 +324,29 @@ export default function LabProfile({
                 >
                   EDIT LAB
                 </Button>
+                {/* Public/Private Toggle Badge */}
+                <button
+                  onClick={handleToggleVisibility}
+                  disabled={isUpdatingVisibility}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium font-fell italic transition-colors ${
+                    labVisibility === 'public'
+                      ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
+                      : 'bg-orange-500/20 text-orange-500 hover:bg-orange-500/30'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  title={`Click to make lab ${labVisibility === 'public' ? 'private' : 'public'}`}
+                >
+                  {labVisibility === 'public' ? (
+                    <>
+                      <Globe className="h-3.5 w-3.5" />
+                      <span>PUBLIC</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-3.5 w-3.5" />
+                      <span>PRIVATE</span>
+                    </>
+                  )}
+                </button>
               </div>
             )}
           </div>

@@ -80,17 +80,88 @@ export function GlobalHeader() {
       // Query users, labs, grants, experiments, and organizations
       const [
         { data: users },
-        { data: labs, error: labsError },
+        { data: publicLabs, error: labsError },
         { data: grants },
         { data: experiments },
         { data: orgs }
       ] = await Promise.all([
         supabase.from("profiles").select("user_id, username, avatar_url, research_interests").ilike("username", `%${searchQuery}%`).limit(5),
-        supabase.from("labs").select("labId, labName, description").ilike("labName", `%${searchQuery}%`).limit(5),
+        supabase.from("labs").select("labId, labName, description, public_private").ilike("labName", `%${searchQuery}%`).or("public_private.is.null,public_private.eq.public").limit(5),
         supabase.from("grants").select("id, title, description").ilike("title", `%${searchQuery}%`).limit(5),
-        supabase.from("experiments").select("id, name, objective").ilike("name", `%${searchQuery}%`).limit(5),
+        supabase.from("experiments").select("id, name, objective, lab_id").ilike("name", `%${searchQuery}%`).limit(5),
         supabase.from("organizations").select("org_id, org_name, description, profilePic, slug").ilike("org_name", `%${searchQuery}%`).limit(5),
       ])
+      
+      // If user is logged in, also fetch private labs where they are admin/founder
+      let privateLabs: any[] = [];
+      if (user?.id) {
+        const { data: privateLabMemberships } = await supabase
+          .from("labMembers")
+          .select("lab_id")
+          .eq("user", user.id)
+          .in("role", ["admin", "founder"]);
+        
+        if (privateLabMemberships && privateLabMemberships.length > 0) {
+          const privateLabIds = privateLabMemberships.map(m => m.lab_id);
+          const { data: privateLabsData } = await supabase
+            .from("labs")
+            .select("labId, labName, description, public_private")
+            .in("labId", privateLabIds)
+            .eq("public_private", "private")
+            .ilike("labName", `%${searchQuery}%`)
+            .limit(5);
+          
+          if (privateLabsData) {
+            privateLabs = privateLabsData;
+          }
+        }
+      }
+
+      // Merge public and private labs, deduplicate by labId
+      const allLabsMap = new Map();
+      (publicLabs || []).forEach((lab: any) => allLabsMap.set(lab.labId, lab));
+      privateLabs.forEach((lab: any) => allLabsMap.set(lab.labId, lab));
+      const labs = Array.from(allLabsMap.values());
+      
+      // Filter out experiments from private labs (unless user is admin/founder)
+      let filteredExperiments = experiments || []
+      if (experiments && experiments.length > 0) {
+        const experimentLabIds = [...new Set(experiments.map((e: any) => e.lab_id).filter(Boolean))]
+        if (experimentLabIds.length > 0) {
+          const { data: experimentLabs } = await supabase
+            .from("labs")
+            .select("labId, public_private")
+            .in("labId", experimentLabIds)
+          
+          const privateLabIds = new Set(
+            (experimentLabs || [])
+              .filter((lab: any) => lab.public_private === 'private')
+              .map((lab: any) => lab.labId)
+          )
+          
+          // If user is logged in, get labs where they are admin/founder
+          let accessiblePrivateLabIds = new Set<string>();
+          if (user?.id && privateLabIds.size > 0) {
+            const { data: accessibleMemberships } = await supabase
+              .from("labMembers")
+              .select("lab_id")
+              .eq("user", user.id)
+              .in("role", ["admin", "founder"])
+              .in("lab_id", Array.from(privateLabIds));
+            
+            if (accessibleMemberships) {
+              accessiblePrivateLabIds = new Set(accessibleMemberships.map(m => m.lab_id));
+            }
+          }
+          
+          // Filter experiments: show public labs and private labs where user has access
+          filteredExperiments = experiments.filter((exp: any) => {
+            if (!privateLabIds.has(exp.lab_id)) return true; // Public lab, show it
+            return accessiblePrivateLabIds.has(exp.lab_id); // Private lab, only show if user has access
+          })
+        }
+      }
+      
       let labsWithCategories = labs || []
       if (labs && labs.length > 0) {
         const labIds = labs.map((lab: any) => lab.labId)
@@ -112,14 +183,14 @@ export function GlobalHeader() {
         users: users || [],
         labs: labsWithCategories,
         grants: grants || [],
-        experiments: experiments || [],
+        experiments: filteredExperiments || [],
         orgs: orgs || [],
       })
       setSearchLoading(false)
       setShowDropdown(true)
     }, 350)
     return () => clearTimeout(searchTimeout.current)
-  }, [searchQuery])
+  }, [searchQuery, user?.id])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -129,9 +200,10 @@ export function GlobalHeader() {
       }
     }
     if (showDropdown) {
-      document.addEventListener("mousedown", handleClick)
+      // Use click instead of mousedown to allow link clicks to register first
+      document.addEventListener("click", handleClick, true)
+      return () => document.removeEventListener("click", handleClick, true)
     }
-    return () => document.removeEventListener("mousedown", handleClick)
   }, [showDropdown])
 
   // Handle issue submission
@@ -242,7 +314,10 @@ export function GlobalHeader() {
               />
               {/* Search Results Dropdown */}
               {showDropdown && (
-                <div className="absolute left-0 mt-2 w-full bg-background border border-secondary rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+                <div 
+                  className="absolute left-0 mt-2 w-full bg-background border border-secondary rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
+                  onClick={(e) => e.stopPropagation()} // Prevent click from bubbling up
+                >
                   {searchLoading ? (
                     <div className="p-4 text-center text-muted-foreground font-fell italic">Searching...</div>
                   ) : (
@@ -257,7 +332,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Users</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.users.map((user: any) => (
-                                <Link key={user.user_id} href={`/profile/${user.username}`} className="flex flex-col gap-1 px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={user.user_id} 
+                                  href={`/profile/${user.username}`} 
+                                  className="flex flex-col gap-1 px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <div className="flex items-center gap-3">
                                     <Avatar className="h-7 w-7">
                                       <AvatarImage src={user.avatar_url || "/placeholder.svg"} alt={user.username} />
@@ -284,7 +364,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Labs</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.labs.map((lab: any) => (
-                                <Link key={lab.labId} href={`/lab/${lab.labId}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={lab.labId} 
+                                  href={`/lab/${lab.labId}`} 
+                                  className="block px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <span className="font-medium font-fell italic">{lab.labName}</span>
                                   <span className="block text-xs text-muted-foreground">{lab.description}</span>
                                   {Array.isArray(lab.categories) && lab.categories.length > 0 && (
@@ -306,7 +391,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Grants</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.grants.map((grant: any) => (
-                                <Link key={grant.id} href={`/grants/${grant.id}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={grant.id} 
+                                  href={`/grants/${grant.id}`} 
+                                  className="block px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <span className="font-medium font-fell italic">{grant.title}</span>
                                   <span className="block text-xs text-muted-foreground">{grant.description}</span>
                                 </Link>
@@ -319,7 +409,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Organizations</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.orgs.map((org: any) => (
-                                <Link key={org.org_id} href={`/orgs/${org.slug || org.org_id}`} className="flex items-center gap-3 px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={org.org_id} 
+                                  href={`/orgs/${org.slug || org.org_id}`} 
+                                  className="flex items-center gap-3 px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <Avatar className="h-7 w-7">
                                     <AvatarImage src={org.profilePic || "/placeholder.svg"} alt={org.org_name} />
                                     <AvatarFallback>{(org.org_name || "O").charAt(0).toUpperCase()}</AvatarFallback>
@@ -338,7 +433,12 @@ export function GlobalHeader() {
                               <div className="px-4 pt-3 pb-1 text-xs font-semibold text-muted-foreground uppercase font-fell italic">Experiments</div>
                               <div className="border-t border-secondary/50 my-1" />
                               {searchResults.experiments.map((exp: any) => (
-                                <Link key={exp.id} href={`/newexperiments/${exp.id}`} className="block px-4 py-2 hover:bg-secondary/50">
+                                <Link 
+                                  key={exp.id} 
+                                  href={`/newexperiments/${exp.id}`} 
+                                  className="block px-4 py-2 hover:bg-secondary/50"
+                                  onClick={() => setShowDropdown(false)}
+                                >
                                   <span className="font-medium font-fell italic">{exp.name}</span>
                                   <span className="block text-xs text-muted-foreground">{exp.objective}</span>
                                 </Link>
@@ -485,7 +585,10 @@ export function GlobalHeader() {
             />
             {/* Show mobile dropdown if needed */}
             {showDropdown && searchQuery && (
-              <div className="absolute left-0 mt-2 w-full bg-background border border-secondary rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+              <div 
+                className="absolute left-0 mt-2 w-full bg-background border border-secondary rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
+                onClick={(e) => e.stopPropagation()} // Prevent click from bubbling up
+              >
                 {searchLoading ? (
                   <div className="p-4 text-center text-muted-foreground font-fell italic">Searching...</div>
                 ) : (

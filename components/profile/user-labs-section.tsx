@@ -112,6 +112,8 @@ export function UserLabsSection({ userId, onLabsCountChange }: UserLabsSectionPr
       })
       // Sort by role precedence, then name
       const roleOrder = { Founder: 0, Member: 1, Contributor: 2, Follower: 3 }
+      // Show all labs - if user is admin/founder/member of a private lab, they should see it
+      // The labs are already filtered by the user's memberships/contributions, so we don't need to filter by visibility
       let labsList = Object.values(all)
       // Fetch org info for all labs
       const orgIds = [...new Set(labsList.map(l => l.org_id).filter(Boolean))]

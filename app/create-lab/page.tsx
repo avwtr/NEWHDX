@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Beaker, Sparkles, ArrowRight, Search, Plus, Copy, Mail, MessageSquare, Share2, Users, Lightbulb, FileText, DollarSign } from "lucide-react"
+import { ArrowLeft, Beaker, Sparkles, ArrowRight, Search, Plus, Copy, Mail, MessageSquare, Share2, Users, Lightbulb, FileText, DollarSign, Lock, Globe } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -108,6 +108,7 @@ export default function CreateLabPage() {
     name: "",
     description: "",
   })
+  const [labVisibility, setLabVisibility] = useState<'public' | 'private'>('public')
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
@@ -360,7 +361,7 @@ export default function CreateLabPage() {
       }
 
       // 3. Insert lab with profilePic
-      const labData = { 
+      const labData: any = { 
         labId,
         labName: labDetails.name,
         description: labDetails.description,
@@ -371,26 +372,59 @@ export default function CreateLabPage() {
         created_at: new Date().toISOString(),
         profilePic: profilePicUrl,
         org_id: selectedOrg ? selectedOrg.org_id : null,
+        public_private: labVisibility || 'public', // Default to 'public' if not set
       }
       
       console.log('Attempting to create lab with data:', labData)
 
-      const { data, error: labError } = await supabase
+      let { data, error: labError } = await supabase
         .from('labs')
         .insert([labData])
         .select()
 
+      // If error and it might be due to public_private column, try without it
+      if (labError && (labError.code === '42703' || labError.message?.includes('column') || labError.message?.includes('public_private'))) {
+        console.warn('Retrying without public_private column:', labError)
+        const labDataWithoutVisibility = { ...labData }
+        delete labDataWithoutVisibility.public_private
+        
+        const retryResult = await supabase
+          .from('labs')
+          .insert([labDataWithoutVisibility])
+          .select()
+        
+        data = retryResult.data
+        labError = retryResult.error
+        
+        if (!labError && data) {
+          // Update with public_private if lab was created successfully
+          await supabase
+            .from('labs')
+            .update({ public_private: labVisibility })
+            .eq('labId', labId)
+        }
+      }
+
       console.log('Supabase response:', { data, error: labError })
 
       if (labError) {
+        const errorMessage = labError.message || (typeof labError === 'string' ? labError : JSON.stringify(labError)) || 'Unknown error occurred'
+        const errorCode = (labError as any)?.code || 'N/A'
+        const errorHint = (labError as any)?.hint || 'None'
+        const errorDetails = (labError as any)?.details || 'None'
+        
         console.error('Error creating lab:', {
           error: labError,
-          message: labError.message,
-          details: labError.details,
-          hint: labError.hint,
-          code: labError.code,
-          data: labData
+          message: (labError as any)?.message,
+          details: errorDetails,
+          hint: errorHint,
+          code: errorCode,
+          data: labData,
+          fullError: JSON.stringify(labError, Object.getOwnPropertyNames(labError), 2)
         })
+        setIsLabCreating(false)
+        clearInterval(typeInterval)
+        alert(`Error creating lab: ${errorMessage}\n\nCode: ${errorCode}\nDetails: ${errorDetails}\nHint: ${errorHint}\n\nPlease check the console for more details.`)
         return
       }
 
@@ -497,13 +531,16 @@ export default function CreateLabPage() {
       }
 
       // ADD THIS REDIRECT:
+      clearInterval(typeInterval)
       setTimeout(() => {
         router.push(`/lab/${labId}`)
       }, 1800)
 
-    } catch (error) {
+    } catch (error: any) {
       setIsLabCreating(false)
+      clearInterval(typeInterval)
       console.error('Error in lab creation process:', error)
+      alert(`Unexpected error: ${error?.message || String(error)}. Please try again.`)
     }
   }
 
@@ -852,6 +889,43 @@ export default function CreateLabPage() {
             )}
           </div>
 
+          <div className="space-y-2">
+            <UILable>Lab Visibility</UILable>
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={() => setLabVisibility('public')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md border-2 transition-all ${
+                  labVisibility === 'public'
+                    ? 'border-green-500 bg-green-500/20 text-green-500'
+                    : 'border-secondary bg-secondary/10 text-muted-foreground hover:border-green-500/50'
+                }`}
+              >
+                <Globe className="h-4 w-4" />
+                <span className="font-medium">Public</span>
+                <span className="text-xs">(Visible to everyone)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLabVisibility('private')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-md border-2 transition-all ${
+                  labVisibility === 'private'
+                    ? 'border-orange-500 bg-orange-500/20 text-orange-500'
+                    : 'border-secondary bg-secondary/10 text-muted-foreground hover:border-orange-500/50'
+                }`}
+              >
+                <Lock className="h-4 w-4" />
+                <span className="font-medium">Private</span>
+                <span className="text-xs">(Admins only)</span>
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {labVisibility === 'public' 
+                ? 'Your lab will be visible in search, explore, and user profiles.'
+                : 'Your lab will only be accessible to admins and founders. It will not appear in search or explore.'}
+            </p>
+          </div>
+
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <UILable>Additional Founders</UILable>
@@ -1100,6 +1174,31 @@ export default function CreateLabPage() {
                   </div>
                 </div>
               )}
+
+              {/* Visibility */}
+              <div className="mt-4">
+                <h4 className="text-sm font-medium mb-2">Visibility:</h4>
+                <Badge
+                  variant="secondary"
+                  className={`flex items-center gap-1.5 w-fit ${
+                    labVisibility === 'public'
+                      ? 'bg-green-500/20 text-green-500'
+                      : 'bg-orange-500/20 text-orange-500'
+                  }`}
+                >
+                  {labVisibility === 'public' ? (
+                    <>
+                      <Globe className="h-3.5 w-3.5" />
+                      <span>Public</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-3.5 w-3.5" />
+                      <span>Private</span>
+                    </>
+                  )}
+                </Badge>
+              </div>
             </CardContent>
           </Card>
         </div>
