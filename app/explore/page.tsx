@@ -21,6 +21,7 @@ import {
   Users,
   DollarSign,
   Circle,
+  Star,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -771,6 +772,7 @@ export default function ExplorePage() {
             closed_status: exp.closed_status || (exp.experiment_status === 'concluded' ? 'CLOSED' : null),
             end_date: exp.end_date,
             created_at: exp.created_at,
+            created_by: exp.created_by || exp.created_by_user_id,
             contributors: contributorsMap[exp.id] || [],
             files: experimentFilesMap[exp.id] || [],
             is_experiment_engine: exp.is_experiment_engine || false,
@@ -1407,9 +1409,17 @@ export default function ExplorePage() {
                             }
                           };
                           
+                          const isOwnExperiment = user?.id && experiment.created_by === user.id;
+                          
                           return (
-                            <Card key={experiment.id} className="overflow-hidden">
+                            <Card key={experiment.id} className="overflow-hidden relative">
                               <CardContent className="p-0">
+                                {/* Star icon for own experiments */}
+                                {isOwnExperiment && (
+                                  <div className="absolute top-3 right-3 z-10">
+                                    <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                                  </div>
+                                )}
                                 <div className="p-4">
                                   <Link 
                                     href={isExperimentEngine 
@@ -1527,12 +1537,20 @@ export default function ExplorePage() {
                       <div className="text-red-500 text-sm mb-4">Error fetching labs: {labsError.message || String(labsError)}</div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                      {filteredData.map((lab: any) => (
+                      {filteredData.map((lab: any) => {
+                        const isOwnLab = user?.id && lab.creatorId === user.id;
+                        return (
                         <Card key={lab.id} className="overflow-hidden relative min-h-[200px]">
                           <CardContent className="p-0">
+                            {/* Star icon for own labs */}
+                            {isOwnLab && (
+                              <div className="absolute top-3 right-3 z-20">
+                                <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                              </div>
+                            )}
                             {/* Org info in top-right corner, outside the Link to avoid nested <a> */}
                             {lab.institution && lab.org_slug && (
-                              <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
+                              <div className={`absolute ${isOwnLab ? 'top-10' : 'top-4'} right-4 flex items-center gap-1 z-10`}>
                                 {lab.orgProfilePic && (
                                   <img src={lab.orgProfilePic} alt={lab.institution} className="h-5 w-5 rounded-full object-cover border" />
                                 )}
@@ -1611,7 +1629,8 @@ export default function ExplorePage() {
                             </Link>
                           </CardContent>
                         </Card>
-                      ))}
+                        );
+                      })}
                     </div>
                   </>
                 )}
