@@ -1036,14 +1036,139 @@ export default function ExplorePage() {
   const filteredData = sortData(filterData(currentData))
   const uniqueCategories = getUniqueCategories()
 
-  // Get badge class for a category
+  // Get badge class for a category - maps to CSS classes in globals.css
   const getBadgeClass = (category: string) => {
-    const area = researchAreas.find(a => a.value === category)
-    if (!area) return "badge-default"
+    // Direct mapping for base categories
+    const directMap: Record<string, string> = {
+      neuroscience: "badge-neuroscience",
+      ai: "badge-ai",
+      biology: "badge-biology",
+      chemistry: "badge-chemistry",
+      physics: "badge-physics",
+      medicine: "badge-medicine",
+      psychology: "badge-psychology",
+      engineering: "badge-engineering",
+      mathematics: "badge-mathematics",
+      environmental: "badge-environmental",
+      astronomy: "badge-astronomy",
+      geology: "badge-geology",
+    }
     
-    // Map the category to a base category for consistent styling
-    const baseCategory = area.value.split('-')[0]
-    return `badge-${baseCategory}`
+    // If direct match, use it
+    if (directMap[category]) {
+      return directMap[category]
+    }
+    
+    // Map subcategories to their parent category
+    const categoryMap: Record<string, string> = {
+      "brain-mapping": "badge-neuroscience",
+      "cognitive-science": "badge-psychology",
+      "quantum-mechanics": "badge-physics",
+      "particle-physics": "badge-physics",
+      genomics: "badge-biology",
+      bioinformatics: "badge-biology",
+      ethics: "badge-psychology",
+      "computer-science": "badge-ai",
+      "climate-science": "badge-environmental",
+      "data-analysis": "badge-mathematics",
+      "molecular-biology": "badge-biology",
+      biochemistry: "badge-chemistry",
+      astrophysics: "badge-astronomy",
+      cosmology: "badge-astronomy",
+      "clinical-research": "badge-medicine",
+      biotechnology: "badge-biology",
+      "medical-imaging": "badge-medicine",
+      meteorology: "badge-environmental",
+      "machine-learning": "badge-ai",
+      optimization: "badge-mathematics",
+      "data-processing": "badge-mathematics",
+      "data-visualization": "badge-mathematics",
+      computing: "badge-ai",
+      mitigation: "badge-environmental",
+      "public-perception": "badge-psychology",
+      "bias-studies": "badge-ai",
+      "cell-biology": "badge-biology",
+      genetics: "badge-biology",
+      proteomics: "badge-biology",
+      microbiology: "badge-biology",
+      virology: "badge-biology",
+      immunology: "badge-biology",
+      "developmental-biology": "badge-biology",
+      "evolutionary-biology": "badge-biology",
+      ecology: "badge-environmental",
+      "marine-biology": "badge-environmental",
+      botany: "badge-environmental",
+      zoology: "badge-environmental",
+      "organic-chemistry": "badge-chemistry",
+      "inorganic-chemistry": "badge-chemistry",
+      "physical-chemistry": "badge-chemistry",
+      "analytical-chemistry": "badge-chemistry",
+      "medicinal-chemistry": "badge-chemistry",
+      "polymer-chemistry": "badge-chemistry",
+      "materials-chemistry": "badge-chemistry",
+      "computational-chemistry": "badge-ai",
+      "environmental-chemistry": "badge-environmental",
+      "quantum-physics": "badge-physics",
+      "nuclear-physics": "badge-physics",
+      "condensed-matter-physics": "badge-physics",
+      optics: "badge-physics",
+      thermodynamics: "badge-physics",
+      "fluid-dynamics": "badge-physics",
+      "plasma-physics": "badge-physics",
+      biophysics: "badge-biology",
+      geophysics: "badge-geology",
+      geochemistry: "badge-geology",
+      climatology: "badge-environmental",
+      oceanography: "badge-environmental",
+      hydrology: "badge-environmental",
+      seismology: "badge-geology",
+      volcanology: "badge-geology",
+      paleontology: "badge-geology",
+      anatomy: "badge-medicine",
+      physiology: "badge-medicine",
+      pathology: "badge-medicine",
+      pharmacology: "badge-medicine",
+      toxicology: "badge-medicine",
+      epidemiology: "badge-medicine",
+      "public-health": "badge-medicine",
+      cardiology: "badge-medicine",
+      neurology: "badge-neuroscience",
+      oncology: "badge-medicine",
+      pediatrics: "badge-medicine",
+      geriatrics: "badge-medicine",
+      psychiatry: "badge-psychology",
+      "biomedical-engineering": "badge-engineering",
+      "chemical-engineering": "badge-engineering",
+      "civil-engineering": "badge-engineering",
+      "electrical-engineering": "badge-engineering",
+      "mechanical-engineering": "badge-engineering",
+      "artificial-intelligence": "badge-ai",
+      robotics: "badge-ai",
+      nanotechnology: "badge-ai",
+      "materials-science": "badge-chemistry",
+      "systems-biology": "badge-biology",
+      "synthetic-biology": "badge-biology",
+      "computational-biology": "badge-biology",
+      "quantum-computing": "badge-physics",
+      "renewable-energy": "badge-environmental",
+      "sustainable-development": "badge-environmental",
+      "data-science": "badge-mathematics",
+      astrobiology: "badge-astronomy",
+    }
+    
+    // Check mapped categories
+    if (categoryMap[category]) {
+      return categoryMap[category]
+    }
+    
+    // Try to extract base category from hyphenated names
+    const baseCategory = category.split('-')[0]
+    if (directMap[baseCategory]) {
+      return directMap[baseCategory]
+    }
+    
+    // Default fallback
+    return "badge-default"
   }
 
   // Get label for a category
@@ -1070,6 +1195,19 @@ export default function ExplorePage() {
   // Helper to get badge color for a category (matches lab-profile.tsx)
   const getCategoryBadgeColors = (category: string) => {
     return scienceCategoryColors[category] || { bg: "bg-[#6C757D]", text: "text-white" }
+  }
+
+  // Get inline styles for badge colors
+  const getBadgeStyles = (category: string) => {
+    const colors = getCategoryBadgeColors(category);
+    // Extract hex color from bg class like "bg-[#9D4EDD]"
+    const bgMatch = colors.bg.match(/#[0-9A-Fa-f]{6}/);
+    const bgColor = bgMatch ? bgMatch[0] : "#6C757D";
+    const textColor = colors.text === "text-black" ? "#000000" : "#FFFFFF";
+    return {
+      backgroundColor: bgColor,
+      color: textColor,
+    };
   }
 
   return (
@@ -1155,7 +1293,7 @@ export default function ExplorePage() {
                     <ScrollArea className="h-[300px] pr-4">
                       <div className="space-y-2 pt-2">
                         {getUniqueCategories().map((category) => (
-                          <div key={category} className="flex items-center space--x-2">
+                          <div key={category} className="flex items-center gap-3">
                             <Checkbox
                               id={`category-${category}`}
                               checked={selectedCategories.includes(category)}
@@ -1164,7 +1302,7 @@ export default function ExplorePage() {
                             />
                             <label
                               htmlFor={`category-${category}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center cursor-pointer"
                             >
                               {getCategoryLabel(category)}
                             </label>
@@ -1317,9 +1455,10 @@ export default function ExplorePage() {
                                   </div>
                                   <div className="flex flex-wrap gap-1 mb-2">
                                     {(expandedExperimentIds.includes(experiment.id) ? experiment.categories : experiment.categories.slice(0, 3)).map((category: string) => {
-                                      const color = getCategoryBadgeColors(category);
+                                      const badgeClass = getBadgeClass(category);
+                                      const badgeStyles = getBadgeStyles(category);
                                       return (
-                                        <Badge key={category} variant={category as any} className="mr-2 mb-2 text-xs normal-case">
+                                        <Badge key={category} className={`${badgeClass} mr-2 mb-2 text-xs uppercase border-0 whitespace-nowrap`} style={badgeStyles}>
                                           {getCategoryLabel(category)}
                                         </Badge>
                                       );
@@ -1422,15 +1561,19 @@ export default function ExplorePage() {
                                   <h3 className="font-medium text-accent font-fell italic normal-case break-words">{lab.name}</h3>
                                   {/* Science categories as colored badges, up to 3, with ellipsis if more */}
                                   <div className="flex flex-wrap gap-1 mt-2">
-                                    {(expandedLabIds.includes(lab.id) ? lab.categories : lab.categories.slice(0, 3)).map((category: string) => (
-                                      <Badge
-                                        key={category}
-                                        variant={category as any}
-                                        className="mr-2 mb-2 text-xs normal-case"
-                                      >
-                                        {getCategoryLabel(category)}
-                                      </Badge>
-                                    ))}
+                                    {(expandedLabIds.includes(lab.id) ? lab.categories : lab.categories.slice(0, 3)).map((category: string) => {
+                                      const badgeClass = getBadgeClass(category);
+                                      const badgeStyles = getBadgeStyles(category);
+                                      return (
+                                        <Badge
+                                          key={category}
+                                          className={`${badgeClass} mr-2 mb-2 text-xs uppercase border-0 whitespace-nowrap`}
+                                          style={badgeStyles}
+                                        >
+                                          {getCategoryLabel(category)}
+                                        </Badge>
+                                      );
+                                    })}
                                     {lab.categories.length > 3 && !expandedLabIds.includes(lab.id) && (
                                       <button
                                         type="button"
