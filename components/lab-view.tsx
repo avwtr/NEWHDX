@@ -216,12 +216,30 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
     async function fetchExperimentsAndFunding() {
       if (!lab?.labId) return
 
-      // Fetch experiments count
-      const { count: experiments, error: expError } = await supabase
+      // Fetch regular experiments count
+      const { count: regularExperiments, error: expError } = await supabase
         .from("experiments")
         .select("*", { count: "exact", head: true })
         .eq("lab_id", lab.labId)
-      setExperimentsCount(expError ? 0 : experiments || 0)
+      
+      const regularCount = expError ? 0 : regularExperiments || 0
+      
+      // Fetch Experiment Engine experiments count
+      // If lab is public, only count public experiments. If lab is private, count all.
+      const labIsPublic = lab.public_private === 'public' || lab.public_private === null
+      let experimentEngineCount = 0
+      try {
+        const response = await fetch(`/api/experiment-engine/experiments-with-config?labId=${lab.labId}&labIsPublic=${labIsPublic}`)
+        if (response.ok) {
+          const { data: experiments } = await response.json()
+          experimentEngineCount = experiments?.length || 0
+        }
+      } catch (err) {
+        console.error("Error fetching Experiment Engine experiments count:", err)
+      }
+      
+      // Total count = regular experiments + Experiment Engine experiments
+      setExperimentsCount(regularCount + experimentEngineCount)
 
       // Fetch funding goals from funding_goals table
       const { data: fundingGoals, error: fundError } = await supabase
@@ -677,7 +695,6 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
               router={router}
               experimentsCount={experimentsCount}
               filesCount={filesCount}
-              fundingTotal={fundingTotals}
               membersCount={membersBreakdown.total}
               membersBreakdown={membersBreakdown}
               onOpenContributeDialog={() => setContributionDialogOpen(true)}
@@ -799,7 +816,7 @@ export default function LabView({ lab, categories, isGuest, notifications, notif
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <ExperimentsList labId={lab.labId} />
+                    <ExperimentsList labId={lab.labId} labIsPublic={lab.public_private === 'public' || lab.public_private === null} />
                   </CardContent>
                 </Card>
               )}

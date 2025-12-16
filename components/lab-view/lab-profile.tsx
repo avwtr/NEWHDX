@@ -4,7 +4,7 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
-import { Bell, Users, FileText, FlaskConical, DollarSign, Share2, Lock, Globe } from "lucide-react"
+import { Bell, Users, FileText, FlaskConical, Share2, Lock, Globe } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { useState, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
@@ -25,7 +25,6 @@ interface LabProfileProps {
   categories: { category: string }[]
   experimentsCount?: number
   filesCount?: number
-  fundingTotal?: { raised: number, goal: number } | undefined
   membersCount?: number
   membersBreakdown?: { total: number, founders: number, admins: number, donors: number, contributors: number }
   onOpenContributeDialog?: () => void
@@ -144,7 +143,6 @@ export default function LabProfile({
   categories,
   experimentsCount = 0,
   filesCount = 0,
-  fundingTotal,
   membersCount = 0,
   membersBreakdown,
   onOpenContributeDialog,
@@ -360,7 +358,7 @@ export default function LabProfile({
       </CardContent>
 
       <CardFooter className="flex justify-between pt-0">
-        <div className="grid grid-cols-4 gap-4 w-full">
+        <div className="grid grid-cols-3 gap-4 w-full">
           <div className="flex items-center gap-2 text-sm">
             <FileText className="h-4 w-4 text-muted-foreground" />
             <span className="font-medium font-fell text-base">{filesCount}</span>
@@ -411,34 +409,6 @@ export default function LabProfile({
               </div>
             )}
           </div>
-
-          {fundingTotal && fundingTotal.raised > 0 && fundingTotal.goal > 0 && (
-            <div className="flex flex-col gap-1 min-w-[180px]">
-              <div className="flex items-center gap-2 text-sm">
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">
-                  <span className="text-accent">${fundingTotal.raised.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground ml-1">funded</span>
-                  <span className="mx-1 text-muted-foreground">/</span>
-                  <span className="text-primary">${fundingTotal.goal.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground ml-1">goal</span>
-                </span>
-              </div>
-              <div className="flex items-center gap-2 mt-1">
-                <div className="flex-1 max-w-[120px]">
-                  <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-accent transition-all duration-500"
-                      style={{ width: `${Math.round((fundingTotal.raised / fundingTotal.goal) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <span className="ml-2 text-xs font-semibold text-accent whitespace-nowrap">
-                  {Math.round((fundingTotal.raised / fundingTotal.goal) * 100)}%
-                </span>
-              </div>
-            </div>
-          )}
         </div>
       </CardFooter>
     </Card>

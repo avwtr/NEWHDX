@@ -11,13 +11,15 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const labId = searchParams.get('labId')
+    const labIsPublic = searchParams.get('labIsPublic') === 'true'
 
     if (!labId) {
       return NextResponse.json({ error: 'labId is required' }, { status: 400 })
     }
 
     // Fetch experiment_details
-    const { data: expEngineData, error: expEngineError } = await supabaseAdmin
+    // If lab is public, only fetch public experiments. If lab is private, fetch all.
+    let query = supabaseAdmin
       .from('experiment_details')
       .select(`
         experiment_id,
@@ -26,12 +28,20 @@ export async function GET(request: NextRequest) {
         created_by_user_id,
         additional_contributors_user_ids,
         experiment_status,
+        public_private,
         video_progress_seconds,
         created_at,
         updated_at,
         last_saved
       `)
       .eq('lab_id', labId)
+    
+    // If lab is public, only get public experiments
+    if (labIsPublic) {
+      query = query.eq('public_private', 'public')
+    }
+    
+    const { data: expEngineData, error: expEngineError } = await query
       .order('created_at', { ascending: false })
 
     if (expEngineError) {

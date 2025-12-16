@@ -72,6 +72,7 @@ interface Experiment {
 interface ExperimentsListProps {
   labId: string
   experiments?: Experiment[]
+  labIsPublic?: boolean
 }
 
 // Add this CSS animation at the top of the file, after the imports
@@ -420,7 +421,7 @@ export const ExperimentCard: React.FC<{ experiment: any }> = ({ experiment }) =>
   );
 }
 
-export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experiments }) => {
+export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experiments, labIsPublic = true }) => {
   const [displayExperiments, setDisplayExperiments] = useState<any[]>(experiments || [])
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
@@ -450,15 +451,16 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
       }));
       
       // Fetch Experiment Engine experiments via API route (bypasses RLS)
+      // If lab is public, only fetch public experiments. If lab is private, fetch all.
       let experimentEngineExps: any[] = [];
       try {
-        const response = await fetch(`/api/experiment-engine/experiments-with-config?labId=${labId}`)
+        const response = await fetch(`/api/experiment-engine/experiments-with-config?labId=${labId}&labIsPublic=${labIsPublic}`)
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}))
           console.error("Error fetching Experiment Engine experiments:", errorData)
         } else {
           const { data: experiments } = await response.json()
-          console.log(`[ExperimentsList] Found ${experiments?.length || 0} Experiment Engine experiments for lab ${labId}`)
+          console.log(`[ExperimentsList] Found ${experiments?.length || 0} Experiment Engine experiments for lab ${labId} (lab is ${labIsPublic ? 'public' : 'private'})`)
           experimentEngineExps = experiments || []
         }
       } catch (err) {
