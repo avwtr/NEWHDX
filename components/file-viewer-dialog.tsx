@@ -590,20 +590,44 @@ export function FileViewerDialog({
 
           <DialogFooter className="mt-4">
             <div className="flex justify-between w-full">
-              <Button variant="outline" onClick={handleDownload} disabled={loading}>
-                <Download className="h-4 w-4 mr-2" />
-                Download
-              </Button>
-              {isAdmin && (
-                <Button
-                  variant="destructive"
-                  onClick={() => setIsDeleteDialogOpen(true)}
-                  disabled={loading}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleDownload} disabled={loading}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
                 </Button>
-              )}
+                {isAdmin && isEditing && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsEditing(false)}
+                    disabled={loading}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {isAdmin && isEditing && (
+                  <Button
+                    onClick={handleSave}
+                    disabled={loading || !onSave}
+                    className="bg-accent text-primary-foreground hover:bg-accent/90"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {loading ? "Saving..." : "Save Changes"}
+                  </Button>
+                )}
+                {isAdmin && !isEditing && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => setIsDeleteDialogOpen(true)}
+                    disabled={loading}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                )}
+              </div>
             </div>
           </DialogFooter>
         </DialogContent>

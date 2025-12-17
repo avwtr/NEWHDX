@@ -763,20 +763,26 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
   // Handle file save
   const handleFileSave = async (fileId: string, content: string) => {
     try {
-      // Save to database
+      // Update database metadata (content is already saved to storage by FileViewerDialog)
       const { error } = await supabase
         .from("files")
-        .update({ content })
+        .update({ 
+          content, // Keep content in DB for quick access
+          lastUpdatedBy: user?.id || null,
+          lastUpdated: new Date().toISOString()
+        })
         .eq("id", fileId);
 
       if (error) throw error;
 
-    toast({
+      toast({
         title: "File Saved",
         description: "Changes have been saved successfully.",
       });
+      
+      // Refresh to ensure UI is in sync
+      await fetchFilesAndFolders();
     } catch (err) {
-     
       toast({
         title: "Error",
         description: "Failed to save changes. Please try again.",
@@ -842,6 +848,7 @@ export function LabMaterialsExplorer({ labId, createNewFolder, isAdmin = false }
         onRename={handleRenameFile}
         onDelete={handleFileDelete}
         onDownload={handleFileDownload}
+        onSave={handleFileSave}
         userRole={isLoggedInAndAdmin ? "admin" : "user"}
         labId={labId}
         showSaveToProfile={Boolean(user)}

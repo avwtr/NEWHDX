@@ -64,6 +64,7 @@ interface FileItemProps {
   onDrop: (e: React.DragEvent, targetId?: string) => void
   onDelete?: (id: string) => void
   onDownload?: (file: { id: string; name: string; type: string; size: string; author: string; date: string; content?: string; url?: string; storageKey?: string; path?: string }) => void
+  onSave?: (fileId: string, content: any) => void
   isDragging?: boolean
   isDraggedOver?: boolean
   userRole?: string
@@ -128,6 +129,7 @@ export function DraggableFileItem({
   onDrop = () => {},
   onDelete = () => {},
   onDownload = () => {},
+  onSave,
   isDragging,
   isDraggedOver,
   userRole = "guest",
@@ -321,11 +323,16 @@ export function DraggableFileItem({
   }
 
   const handleSaveFile = (fileId: string, content: any) => {
-    // In a real app, this would call an API to save the file content
-    toast({
-      title: "File Saved",
-      description: `Changes to ${getFileDisplayName(file, name)} have been saved.`,
-    })
+    // Pass through to the onSave prop from lab-materials-explorer
+    if (onSave) {
+      onSave(fileId, content);
+    } else {
+      toast({
+        title: "Save Not Available",
+        description: "Save functionality is not available for this file.",
+        variant: "destructive",
+      });
+    }
   }
 
   const confirmDelete = () => {
