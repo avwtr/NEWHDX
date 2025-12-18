@@ -56,9 +56,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      await supabase.auth.signOut()
+      // Try to sign out - if it fails with 403, we'll still clear local state
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error("Error signing out:", error)
+        // If it's a 403, it might be a permissions issue, but we'll still clear local state
+      }
     } catch (error) {
       console.error("Error signing out:", error)
+    } finally {
+      // Always clear local state regardless of API call success/failure
+      setUser(null)
+      setSession(null)
+      // Redirect to home page after logout
+      if (typeof window !== 'undefined') {
+        window.location.href = '/'
+      }
     }
   }
 
