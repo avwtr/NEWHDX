@@ -175,8 +175,11 @@ export function ContributionDetailModal({
           if (!ext) return "other";
           if (["png", "jpg", "jpeg", "gif", "bmp", "svg", "webp"].includes(ext)) return "image";
           if (["pdf", "doc", "docx", "txt", "rtf", "odt"].includes(ext)) return "document";
-          if (["csv", "tsv", "xls", "xlsx", "json"].includes(ext)) return "data";
-          if (["py", "js", "ts", "java", "cpp", "c", "ipynb", "r"].includes(ext)) return "code";
+          if (["csv", "tsv", "xls", "xlsx", "json", "h5", "hdf5", "mat", "npy", "npz", "fits"].includes(ext)) return "data";
+          if (["py", "js", "ts", "java", "cpp", "c", "ipynb", "r", "m", "f90", "f", "sh"].includes(ext)) return "code";
+          if (["stl", "obj", "ply", "dae", "fbx", "3ds"].includes(ext)) return "model";
+          if (["dcm", "dicom", "nii"].includes(ext)) return "medical-imaging";
+          if (["zip", "tar", "gz", "bz2", "7z"].includes(ext)) return "archive";
           return "other";
         }
         // Insert into files table

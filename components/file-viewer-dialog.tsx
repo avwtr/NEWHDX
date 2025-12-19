@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { DocumentEditor } from "@/components/editors/document-editor"
 import { CodeEditor } from "@/components/editors/code-editor"
 import { TabularDataEditor } from "@/components/editors/tabular-data-editor"
-import { Download, Save, Trash2, Edit2, X, Maximize2, Minimize2 } from "lucide-react"
+import { Download, Save, Trash2, Edit2, X, Maximize2, Minimize2, File } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import {
   AlertDialog,
@@ -223,17 +223,48 @@ export function FileViewerDialog({
         setContent(content);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load file content');
+      // For binary files or files that can't be read as text, don't show error
+      // The renderContent function will handle showing download option
+      const fileType = (
+        file.type ||
+        (file as any).fileType ||
+        (file.file && file.file.split('.').pop()) ||
+        (file.name && file.name.split('.').pop()) ||
+        ((file as any).filename && (file as any).filename.split('.').pop()) ||
+        ""
+      ).toLowerCase();
+      const binaryTypes = ["stl", "obj", "ply", "dae", "fbx", "3ds", "h5", "hdf5", "mat", "npy", "npz", "fits", "dcm", "dicom", "nii", "vtk", "vtu", "xdmf", "h5m", "zip", "tar", "gz", "bz2", "7z", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp"];
+      if (!binaryTypes.includes(fileType) && !["jpg", "jpeg", "png", "gif", "svg", "pdf"].includes(fileType)) {
+        setError(err.message || 'Failed to load file content');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // On dialog open, fetch file content
+  // On dialog open, fetch file content (only for text-based files)
   useEffect(() => {
     if (isOpen) {
       setIsEditing(false);
-      fetchFileContent();
+      const fileType = (
+        file.type ||
+        (file as any).fileType ||
+        (file.file && file.file.split('.').pop()) ||
+        (file.name && file.name.split('.').pop()) ||
+        ((file as any).filename && (file as any).filename.split('.').pop()) ||
+        ""
+      ).toLowerCase();
+      
+      // Only fetch content for text-based files that can be edited or viewed
+      const binaryTypes = ["stl", "obj", "ply", "dae", "fbx", "3ds", "h5", "hdf5", "mat", "npy", "npz", "fits", "dcm", "dicom", "nii", "vtk", "vtu", "xdmf", "h5m", "zip", "tar", "gz", "bz2", "7z", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp"];
+      const isBinary = binaryTypes.includes(fileType);
+      
+      // Skip fetching for images and PDFs (handled by previewUrl) and binary files
+      if (!isBinary && !["jpg", "jpeg", "png", "gif", "svg", "pdf"].includes(fileType)) {
+        fetchFileContent();
+      } else {
+        setLoading(false);
+      }
     }
   }, [isOpen, file]);
 
@@ -500,7 +531,30 @@ export function FileViewerDialog({
       );
     }
 
-    // For all other files, show content in a pre tag
+    // Check if file type is binary/unsupported for viewing
+    const binaryTypes = ["stl", "obj", "ply", "dae", "fbx", "3ds", "h5", "hdf5", "mat", "npy", "npz", "fits", "dcm", "dicom", "nii", "vtk", "vtu", "xdmf", "h5m", "zip", "tar", "gz", "bz2", "7z", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp"];
+    const isBinary = binaryTypes.includes(fileType) || !content || content.length === 0;
+    
+    if (isBinary || !isEditableFileType(fileType)) {
+      // For binary/unsupported files, show download option
+      return (
+        <div className="flex flex-col items-center justify-center p-8 bg-secondary/30 rounded-md">
+          <File className="h-16 w-16 text-muted-foreground mb-4" />
+          <p className="text-lg font-medium mb-2">{file.file || file.name}</p>
+          <p className="text-sm text-muted-foreground mb-4 text-center">
+            This file type cannot be previewed in the browser.
+            <br />
+            Download the file to view it with an appropriate application.
+          </p>
+          <Button onClick={handleDownload} variant="default" className="gap-2">
+            <Download className="h-4 w-4" />
+            Download File
+          </Button>
+        </div>
+      );
+    }
+
+    // For text-based files, show content in a pre tag
     return (
       <pre className="p-4 bg-secondary/30 rounded-md overflow-auto max-h-[60vh] whitespace-pre-wrap">
         {content}

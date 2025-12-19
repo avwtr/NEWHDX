@@ -193,11 +193,20 @@ export function FileUploadDialog({
       // Get file type from extension
       let fileType = "unknown"
 
+      // Categorize file types
       if (["pdf"].includes(uploadedExtension)) fileType = "pdf"
-      else if (["jpg", "jpeg", "png", "gif"].includes(uploadedExtension)) fileType = "image"
-      else if (["csv", "xlsx", "xls"].includes(uploadedExtension)) fileType = "data"
-      else if (["txt", "md", "json"].includes(uploadedExtension)) fileType = "text"
-      else if (["py", "js", "ts", "r"].includes(uploadedExtension)) fileType = uploadedExtension
+      else if (["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(uploadedExtension)) fileType = "image"
+      else if (["csv", "xlsx", "xls", "ods"].includes(uploadedExtension)) fileType = "data"
+      else if (["txt", "md", "json", "xml", "yaml", "yml", "toml", "ini", "conf", "log"].includes(uploadedExtension)) fileType = "text"
+      else if (["py", "js", "ts", "r", "cpp", "c", "java", "m", "f90", "f", "sh", "ipynb"].includes(uploadedExtension)) fileType = uploadedExtension
+      else if (["stl", "obj", "ply", "dae", "fbx", "3ds"].includes(uploadedExtension)) fileType = "3d-model"
+      else if (["h5", "hdf5", "mat", "npy", "npz", "fits"].includes(uploadedExtension)) fileType = "scientific-data"
+      else if (["dcm", "dicom", "nii"].includes(uploadedExtension)) fileType = "medical-imaging"
+      else if (["vtk", "vtu", "xdmf", "h5m"].includes(uploadedExtension)) fileType = "scientific-visualization"
+      else if (["zip", "tar", "gz", "bz2", "7z"].includes(uploadedExtension)) fileType = "archive"
+      else if (["doc", "docx", "odt", "rtf"].includes(uploadedExtension)) fileType = "document"
+      else if (["ppt", "pptx", "odp"].includes(uploadedExtension)) fileType = "presentation"
+      else fileType = uploadedExtension || "unknown"
 
       // 1. Insert into files table to get the UUID
       const { data: inserted, error: dbError } = await supabase.from("files").insert([
@@ -347,7 +356,7 @@ export function FileUploadDialog({
                   Drag and drop a file here, or click to select a file
                 </p>
                 <p className="text-xs text-center text-muted-foreground">
-                  Supports PDF, images, CSV, Excel, and text files
+                  Supports documents, images, data files, code, 3D models, scientific data formats, and more
                 </p>
               </>
             )}
@@ -356,7 +365,7 @@ export function FileUploadDialog({
               type="file"
               className="hidden"
               onChange={handleFileChange}
-              accept=".pdf,.jpg,.jpeg,.png,.csv,.xlsx,.xls,.txt,.md,.json,.py,.js,.ts,.r"
+              accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.svg,.webp,.csv,.xlsx,.xls,.txt,.md,.json,.py,.js,.ts,.r,.stl,.obj,.ply,.dae,.fbx,.3ds,.h5,.hdf5,.mat,.npy,.npz,.fits,.dcm,.dicom,.nii,.vtk,.vtu,.zip,.tar,.gz,.bz2,.7z,.doc,.docx,.ppt,.pptx,.odt,.ods,.odp,.cpp,.c,.java,.m,.f90,.f,.sh,.ipynb,.xml,.yaml,.yml,.toml,.ini,.conf,.log,.rtf,.odt"
             />
           </div>
 
