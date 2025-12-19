@@ -1,15 +1,9 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { FlaskConical, FileText, Plus, Circle, Video, Loader2 } from "lucide-react"
+import { FlaskConical, FileText, Circle, Video, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
-import { useToast } from "@/hooks/use-toast"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { researchAreas } from "@/lib/research-areas"
 
@@ -23,15 +17,9 @@ export function UserExperimentsSection({ userId, isOwnProfile = false }: UserExp
   const [labs, setLabs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [createExperimentOpen, setCreateExperimentOpen] = useState(false)
-  const [selectedLabId, setSelectedLabId] = useState<string>("")
-  const [newExperimentName, setNewExperimentName] = useState("")
-  const [newExperimentObjective, setNewExperimentObjective] = useState("")
-  const [isCreatingExperiment, setIsCreatingExperiment] = useState(false)
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [sortBy, setSortBy] = useState<string>("recent")
   const [expandedExperimentIds, setExpandedExperimentIds] = useState<string[]>([])
-  const { toast } = useToast()
 
   // Helper functions for categories
   const getCategoryBadgeColors = (category: string) => {
@@ -138,13 +126,53 @@ export function UserExperimentsSection({ userId, isOwnProfile = false }: UserExp
       
       if (isOwnProfile) {
         // For own profile: get all labs the user is associated with
-        const { data, error: labsError } = await supabase
+        // First get labs created by user
+        const { data: createdLabs, error: createdError } = await supabase
           .from('labs')
           .select('labId, labName, profilePic, public_private')
-          .or(`createdBy.eq.${userId},labMembers.user.eq.${userId},labAdmins.user.eq.${userId}`)
-
-        if (labsError) throw labsError
-        userLabs = data || []
+          .eq('createdBy', userId)
+        
+        if (createdError) throw createdError
+        
+        // Get lab memberships
+        const { data: memberships, error: membershipsError } = await supabase
+          .from('labMembers')
+          .select('lab_id')
+          .eq('user', userId)
+        
+        if (membershipsError) throw membershipsError
+        
+        // Get lab admin memberships (if labAdmins table exists, otherwise use labMembers with role='admin')
+        const { data: adminMemberships, error: adminError } = await supabase
+          .from('labMembers')
+          .select('lab_id')
+          .eq('user', userId)
+          .eq('role', 'admin')
+        
+        if (adminError) throw adminError
+        
+        // Combine all lab IDs
+        const allLabIds = [
+          ...(createdLabs || []).map(l => l.labId),
+          ...(memberships || []).map(m => m.lab_id),
+          ...(adminMemberships || []).map(a => a.lab_id)
+        ].filter(Boolean)
+        
+        // Remove duplicates
+        const uniqueLabIds = [...new Set(allLabIds)]
+        
+        // Fetch all labs
+        if (uniqueLabIds.length > 0) {
+          const { data: allLabs, error: allLabsError } = await supabase
+            .from('labs')
+            .select('labId, labName, profilePic, public_private')
+            .in('labId', uniqueLabIds)
+          
+          if (allLabsError) throw allLabsError
+          userLabs = allLabs || []
+        } else {
+          userLabs = createdLabs || []
+        }
       } else {
         // For other users' profiles: only get public labs
         // First get lab memberships to find which labs the user is in
@@ -324,65 +352,6 @@ export function UserExperimentsSection({ userId, isOwnProfile = false }: UserExp
     }
   }
 
-  const handleCreateExperiment = async () => {
-    if (!selectedLabId || !newExperimentName || !newExperimentObjective) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsCreatingExperiment(true)
-    try {
-      const { data, error } = await supabase
-        .from("experiments")
-        .insert([
-          {
-            name: newExperimentName,
-            objective: newExperimentObjective,
-            lab_id: selectedLabId,
-            created_by: userId,
-            status: "DRAFT",
-            created_at: new Date().toISOString(),
-          }
-        ])
-        .select()
-        .single()
-
-      if (error) throw error
-
-      // Add lab info to the new experiment
-      const labInfo = labs.find(lab => lab.labId === selectedLabId)
-      const experimentWithLabInfo = {
-        ...data,
-        labInfo
-      }
-
-      setExperiments(prev => [experimentWithLabInfo, ...prev])
-
-      // Reset form
-      setNewExperimentName("")
-      setNewExperimentObjective("")
-      setSelectedLabId("")
-      setCreateExperimentOpen(false)
-
-      toast({
-        title: "Experiment Created",
-        description: "Your experiment has been created successfully.",
-      })
-    } catch (error) {
-      console.error("Error creating experiment:", error)
-      toast({
-        title: "Error",
-        description: "Failed to create experiment. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsCreatingExperiment(false)
-    }
-  }
 
   const getFilteredAndSortedExperiments = () => {
     let filtered = experiments
@@ -594,75 +563,6 @@ export function UserExperimentsSection({ userId, isOwnProfile = false }: UserExp
             </SelectContent>
           </Select>
         </div>
-
-        {isOwnProfile && (
-          <Dialog open={createExperimentOpen} onOpenChange={setCreateExperimentOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                New Experiment
-              </Button>
-            </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New Experiment</DialogTitle>
-              <DialogDescription>
-                Create a new experiment in one of your labs
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="lab-select">Lab</Label>
-                <Select value={selectedLabId} onValueChange={setSelectedLabId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a lab" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {labs.map((lab) => (
-                      <SelectItem key={lab.labId} value={lab.labId}>
-                        {lab.labName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="experiment-name">Experiment Name</Label>
-                <Input
-                  id="experiment-name"
-                  value={newExperimentName}
-                  onChange={(e) => setNewExperimentName(e.target.value)}
-                  placeholder="Enter experiment name"
-                />
-              </div>
-              <div>
-                <Label htmlFor="experiment-objective">Objective</Label>
-                <Textarea
-                  id="experiment-objective"
-                  value={newExperimentObjective}
-                  onChange={(e) => setNewExperimentObjective(e.target.value)}
-                  placeholder="Describe the experiment objective"
-                  rows={3}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setCreateExperimentOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateExperiment}
-                  disabled={isCreatingExperiment}
-                >
-                  {isCreatingExperiment ? "Creating..." : "Create Experiment"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-        )}
       </div>
 
       {filteredExperiments.length === 0 ? (
@@ -675,12 +575,6 @@ export function UserExperimentsSection({ userId, isOwnProfile = false }: UserExp
               : "No experiments match your current filters."
             }
           </p>
-          {experiments.length === 0 && (
-            <Button onClick={() => setCreateExperimentOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Your First Experiment
-            </Button>
-          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
