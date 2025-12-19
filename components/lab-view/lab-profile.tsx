@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress"
 import { useState, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
 import { supabase } from "@/lib/supabase"
+import { scienceCategoryColors } from "@/lib/research-areas"
 
 interface LabProfileProps {
   isAdmin: boolean
@@ -32,53 +33,6 @@ interface LabProfileProps {
   user?: any
 }
 
-const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
-  neuroscience: { bg: "bg-[#9D4EDD]", text: "text-white" },
-  ai: { bg: "bg-[#3A86FF]", text: "text-white" },
-  biology: { bg: "bg-[#38B000]", text: "text-white" },
-  chemistry: { bg: "bg-[#FF5400]", text: "text-white" },
-  physics: { bg: "bg-[#FFD60A]", text: "text-black" },
-  medicine: { bg: "bg-[#FF0054]", text: "text-white" },
-  psychology: { bg: "bg-[#FB5607]", text: "text-white" },
-  engineering: { bg: "bg-[#4361EE]", text: "text-white" },
-  mathematics: { bg: "bg-[#7209B7]", text: "text-white" },
-  environmental: { bg: "bg-[#2DC653]", text: "text-white" },
-  astronomy: { bg: "bg-[#3F37C9]", text: "text-white" },
-  geology: { bg: "bg-[#AA6C25]", text: "text-white" },
-  "brain-mapping": { bg: "bg-[#9D4EDD]", text: "text-white" },
-  "cognitive-science": { bg: "bg-[#FB5607]", text: "text-white" },
-  "quantum-mechanics": { bg: "bg-[#FFD60A]", text: "text-black" },
-  "particle-physics": { bg: "bg-[#FFD60A]", text: "text-black" },
-  genomics: { bg: "bg-[#38B000]", text: "text-white" },
-  bioinformatics: { bg: "bg-[#38B000]", text: "text-white" },
-  ethics: { bg: "bg-[#FB5607]", text: "text-white" },
-  "computer-science": { bg: "bg-[#3A86FF]", text: "text-white" },
-  "climate-science": { bg: "bg-[#2DC653]", text: "text-white" },
-  "data-analysis": { bg: "bg-[#7209B7]", text: "text-white" },
-  "molecular-biology": { bg: "bg-[#38B000]", text: "text-white" },
-  biochemistry: { bg: "bg-[#FF5400]", text: "text-white" },
-  astrophysics: { bg: "bg-[#3F37C9]", text: "text-white" },
-  cosmology: { bg: "bg-[#3F37C9]", text: "text-white" },
-  "clinical-research": { bg: "bg-[#FF0054]", text: "text-white" },
-  biotechnology: { bg: "bg-[#38B000]", text: "text-white" },
-  "medical-imaging": { bg: "bg-[#FF0054]", text: "text-white" },
-  meteorology: { bg: "bg-[#2DC653]", text: "text-white" },
-  "machine-learning": { bg: "bg-[#3A86FF]", text: "text-white" },
-  optimization: { bg: "bg-[#7209B7]", text: "text-white" },
-  "data-processing": { bg: "bg-[#7209B7]", text: "text-white" },
-  "data-visualization": { bg: "bg-[#7209B7]", text: "text-white" },
-  methodology: { bg: "bg-[#6C757D]", text: "text-white" },
-  computing: { bg: "bg-[#3A86FF]", text: "text-white" },
-  evaluation: { bg: "bg-[#6C757D]", text: "text-white" },
-  innovation: { bg: "bg-[#6C757D]", text: "text-white" },
-  "research-funding": { bg: "bg-[#6C757D]", text: "text-white" },
-  governance: { bg: "bg-[#6C757D]", text: "text-white" },
-  mitigation: { bg: "bg-[#2DC653]", text: "text-white" },
-  "diversity-studies": { bg: "bg-[#6C757D]", text: "text-white" },
-  "public-perception": { bg: "bg-[#FB5607]", text: "text-white" },
-  "citizen-science": { bg: "bg-[#6C757D]", text: "text-white" },
-  "bias-studies": { bg: "bg-[#3A86FF]", text: "text-white" },
-}
 
 const scienceCategoryVariant: Record<string, string> = {
   neuroscience: "neuroscience",

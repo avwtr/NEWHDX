@@ -5,7 +5,7 @@ import { FlaskConical, FileText, Circle, Video, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { researchAreas } from "@/lib/research-areas"
+import { researchAreas, scienceCategoryColors } from "@/lib/research-areas"
 
 interface UserExperimentsSectionProps {
   userId: string
@@ -23,18 +23,6 @@ export function UserExperimentsSection({ userId, isOwnProfile = false }: UserExp
 
   // Helper functions for categories
   const getCategoryBadgeColors = (category: string) => {
-    const scienceCategoryColors: Record<string, { bg: string; text: string }> = {
-      neuroscience: { bg: "bg-[#9D4EDD]", text: "text-white" },
-      ai: { bg: "bg-[#3A86FF]", text: "text-white" },
-      biology: { bg: "bg-[#38B000]", text: "text-white" },
-      chemistry: { bg: "bg-[#FF5400]", text: "text-white" },
-      physics: { bg: "bg-[#FFD60A]", text: "text-black" },
-      medicine: { bg: "bg-[#FF0054]", text: "text-white" },
-      psychology: { bg: "bg-[#FB5607]", text: "text-white" },
-      engineering: { bg: "bg-[#4361EE]", text: "text-white" },
-      mathematics: { bg: "bg-[#7209B7]", text: "text-white" },
-      environmental: { bg: "bg-[#2DC653]", text: "text-white" },
-    }
     return scienceCategoryColors[category] || { bg: "bg-[#6C757D]", text: "text-white" }
   }
 
