@@ -461,7 +461,7 @@ export default function ExplorePage() {
           });
         }
 
-        // Process experiments count
+        // Process experiments count (manual experiments)
         let experimentsMap: Record<string, number> = {};
         if (experimentsCountData.data) {
           experimentsCountData.data.forEach((e: any) => {
@@ -479,8 +479,8 @@ export default function ExplorePage() {
           });
         }
 
-        // Map labs data
-        const mappedLabs = labs.map(lab => ({
+        // Map labs data (before fetching experiments, so we can add Experiment Engine count later)
+        let mappedLabs = labs.map(lab => ({
           id: lab.labId,
           name: lab.labName,
           description: lab.description,
@@ -495,7 +495,7 @@ export default function ExplorePage() {
           files: labFilesMap[lab.labId] || 0,
           fundingGoal: fundingMap[lab.labId]?.goal || 0,
           fundingCurrent: fundingMap[lab.labId]?.raised || 0,
-          projects: experimentsMap[lab.labId] || 0,
+          projects: experimentsMap[lab.labId] || 0, // Will be updated with Experiment Engine count
           publications: 0,
           lastUpdated: lab.created_at ? `${Math.round((Date.now() - new Date(lab.created_at).getTime()) / (1000*60*60*24))} days ago` : '',
           image: lab.profilePic || '/placeholder.svg?height=80&width=80',
@@ -520,6 +520,13 @@ export default function ExplorePage() {
               ...exp,
               is_experiment_engine: true
             }));
+            
+            // Add Experiment Engine experiments to the count
+            experimentEngineExps.forEach((exp: any) => {
+              if (exp.lab_id) {
+                experimentsMap[exp.lab_id] = (experimentsMap[exp.lab_id] || 0) + 1;
+              }
+            });
           }
         } catch (err) {
           console.error('Error fetching Experiment Engine experiments:', err);
@@ -618,6 +625,12 @@ export default function ExplorePage() {
           }
         }
 
+        // Update mappedLabs with the combined experiment count (manual + Experiment Engine)
+        mappedLabs = mappedLabs.map(lab => ({
+          ...lab,
+          projects: experimentsMap[lab.id] || 0,
+        }));
+
         // After mapping mappedLabs:
         const labInfoMap: Record<string, any> = {};
         mappedLabs.forEach(lab => {
@@ -630,41 +643,75 @@ export default function ExplorePage() {
         // Merge regular experiments with Experiment Engine experiments
         const allExperiments = [...(experiments || []), ...experimentEngineExps];
 
+        // Get labs where user is admin/founder (for filtering experiments)
+        let adminLabIds = new Set<string>();
+        if (user?.id && allExperiments.length > 0) {
+          const allLabIds = [...new Set(allExperiments.map((e: any) => e.lab_id).filter(Boolean))];
+          if (allLabIds.length > 0) {
+            const { data: adminMemberships } = await supabase
+              .from("labMembers")
+              .select("lab_id")
+              .eq("user", user.id)
+              .in("role", ["admin", "founder"])
+              .in("lab_id", allLabIds);
+            
+            if (adminMemberships) {
+              adminLabIds = new Set(adminMemberships.map(m => m.lab_id));
+            }
+          }
+        }
+
         // Map experiments data - handle both regular and Experiment Engine experiments
-        const mappedExperiments = allExperiments.map((exp: any) => {
-          // For Experiment Engine experiments, use the lab info from the API response
-          const labInfo = exp.is_experiment_engine 
-            ? { name: exp.labName || "", image: exp.labProfilePic || "/placeholder.svg" }
-            : (labInfoMap[exp.lab_id] || {});
-          
-          return {
-            id: exp.id || exp.experiment_id,
-            experiment_id: exp.experiment_id,
-            name: exp.name || exp.experiment_name,
-            description: exp.description || "",
-            objective: exp.objective || exp.experiment_objective || "",
-            categories: Array.isArray(exp.categories) ? exp.categories : [],
-            lab: exp.lab_id,
-            labId: exp.lab_id,
-            labName: labInfo.name || exp.labName || "",
-            labProfilePic: labInfo.image || exp.labProfilePic || "/placeholder.svg",
-            participantsNeeded: exp.participants_needed || 0,
-            participantsCurrent: exp.participants_current || 0,
-            deadline: exp.deadline,
-            compensation: exp.compensation || "No compensation",
-            timeCommitment: exp.time_commitment || "Not specified",
-            lastUpdated: exp.created_at ? `${Math.round((Date.now() - new Date(exp.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
-            status: exp.status || exp.experiment_status || "DRAFT",
-            closed_status: exp.closed_status || (exp.experiment_status === 'concluded' ? 'CLOSED' : null),
-            end_date: exp.end_date,
-            created_at: exp.created_at,
-            created_by: exp.created_by || exp.created_by_user_id,
-            contributors: contributorsMap[exp.id] || [],
-            files: experimentFilesMap[exp.id] || [],
-            is_experiment_engine: exp.is_experiment_engine || false,
-            experiment_status: exp.experiment_status,
-          };
-        });
+        const mappedExperiments = allExperiments
+          .map((exp: any) => {
+            // For Experiment Engine experiments, use the lab info from the API response
+            const labInfo = exp.is_experiment_engine 
+              ? { name: exp.labName || "", image: exp.labProfilePic || "/placeholder.svg" }
+              : (labInfoMap[exp.lab_id] || {});
+            
+            return {
+              id: exp.id || exp.experiment_id,
+              experiment_id: exp.experiment_id,
+              name: exp.name || exp.experiment_name,
+              description: exp.description || "",
+              objective: exp.objective || exp.experiment_objective || "",
+              categories: Array.isArray(exp.categories) ? exp.categories : [],
+              lab: exp.lab_id,
+              labId: exp.lab_id,
+              labName: labInfo.name || exp.labName || "",
+              labProfilePic: labInfo.image || exp.labProfilePic || "/placeholder.svg",
+              participantsNeeded: exp.participants_needed || 0,
+              participantsCurrent: exp.participants_current || 0,
+              deadline: exp.deadline,
+              compensation: exp.compensation || "No compensation",
+              timeCommitment: exp.time_commitment || "Not specified",
+              lastUpdated: exp.created_at ? `${Math.round((Date.now() - new Date(exp.created_at).getTime()) / (1000*60*60*24))} days ago` : "",
+              status: exp.status || exp.experiment_status || "DRAFT",
+              closed_status: exp.closed_status || (exp.experiment_status === 'concluded' ? 'CLOSED' : null),
+              end_date: exp.end_date,
+              created_at: exp.created_at,
+              created_by: exp.created_by || exp.created_by_user_id,
+              contributors: contributorsMap[exp.id] || [],
+              files: experimentFilesMap[exp.id] || [],
+              is_experiment_engine: exp.is_experiment_engine || false,
+              experiment_status: exp.experiment_status,
+            };
+          })
+          .filter((exp: any) => {
+            // Manual experiments (non-Experiment Engine) are always shown
+            if (!exp.is_experiment_engine) {
+              return true;
+            }
+            
+            // For Experiment Engine experiments:
+            // If user is admin/founder of the lab, show all experiments
+            if (user?.id && exp.labId && adminLabIds.has(exp.labId)) {
+              return true;
+            }
+            
+            // For outside users, only show concluded Experiment Engine experiments
+            return exp.experiment_status === 'concluded';
+          });
 
         // After fetching all data, collect unique categories
         const uniqueCategories = new Set<string>();

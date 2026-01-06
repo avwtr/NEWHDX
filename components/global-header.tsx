@@ -88,7 +88,7 @@ export function GlobalHeader() {
         supabase.from("profiles").select("user_id, username, profilePic, research_interests").ilike("username", `%${searchQuery}%`).limit(5),
         supabase.from("labs").select("labId, labName, description, public_private").ilike("labName", `%${searchQuery}%`).or("public_private.is.null,public_private.eq.public").limit(5),
         supabase.from("grants").select("grant_id, grant_name, grant_description").ilike("grant_name", `%${searchQuery}%`).limit(5),
-        supabase.from("experiments").select("id, name, objective, lab_id").ilike("name", `%${searchQuery}%`).limit(5),
+        supabase.from("experiments").select("id, name, objective, lab_id, closed_status").ilike("name", `%${searchQuery}%`).limit(5),
         supabase.from("organizations").select("org_id, org_name, description, profilePic, slug").ilike("org_name", `%${searchQuery}%`).limit(5),
       ])
       
@@ -138,6 +138,7 @@ export function GlobalHeader() {
       const labs = Array.from(allLabsMap.values());
       
       // Filter out experiments from private labs (unless user is admin/founder)
+      // Also filter to only show concluded experiments for outside users
       let filteredExperiments = experiments || []
       if (experiments && experiments.length > 0) {
         const experimentLabIds = [...new Set(experiments.map((e: any) => e.lab_id).filter(Boolean))]
@@ -153,7 +154,22 @@ export function GlobalHeader() {
               .map((lab: any) => lab.labId)
           )
           
-          // If user is logged in, get labs where they are admin/founder
+          // Get labs where user is admin/founder (for all experiments, not just private ones)
+          let adminLabIds = new Set<string>();
+          if (user?.id) {
+            const { data: adminMemberships } = await supabase
+              .from("labMembers")
+              .select("lab_id")
+              .eq("user", user.id)
+              .in("role", ["admin", "founder"])
+              .in("lab_id", experimentLabIds);
+            
+            if (adminMemberships) {
+              adminLabIds = new Set(adminMemberships.map(m => m.lab_id));
+            }
+          }
+          
+          // If user is logged in, get labs where they are admin/founder (for private labs)
           let accessiblePrivateLabIds = new Set<string>();
           if (user?.id && privateLabIds.size > 0) {
             const { data: accessibleMemberships } = await supabase
@@ -169,9 +185,21 @@ export function GlobalHeader() {
           }
           
           // Filter experiments: show public labs and private labs where user has access
+          // For Experiment Engine experiments: only show concluded ones for outside users
+          // Manual experiments are always shown regardless of status
           filteredExperiments = experiments.filter((exp: any) => {
-            if (!privateLabIds.has(exp.lab_id)) return true; // Public lab, show it
-            return accessiblePrivateLabIds.has(exp.lab_id); // Private lab, only show if user has access
+            // First check private lab access
+            if (privateLabIds.has(exp.lab_id)) {
+              if (!accessiblePrivateLabIds.has(exp.lab_id)) {
+                return false; // Private lab, user doesn't have access
+              }
+            }
+            
+            // Manual experiments (non-Experiment Engine) are always shown
+            // Note: We can't determine if it's Experiment Engine from the basic query,
+            // so we'll show all experiments from the basic query (they're all manual)
+            // Experiment Engine experiments would need to be fetched separately if needed
+            return true;
           })
         }
       }

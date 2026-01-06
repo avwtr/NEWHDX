@@ -16,7 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/use-toast"
-import { useRoleContext } from "@/contexts/role-context"
+import { useAuth } from "@/components/auth-provider"
 import Link from "next/link"
 import {
   AlertDialog,
@@ -427,8 +427,33 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [experimentToDelete, setExperimentToDelete] = useState<Experiment | null>(null)
-  const { currentRole } = useRoleContext()
-  const isAdmin = currentRole === "admin"
+  const { user } = useAuth()
+  const [isLabAdmin, setIsLabAdmin] = useState(false)
+
+  // Check if user is admin/founder of this lab
+  useEffect(() => {
+    async function checkLabAdmin() {
+      if (!user?.id || !labId) {
+        setIsLabAdmin(false)
+        return
+      }
+      
+      const { data, error } = await supabase
+        .from("labMembers")
+        .select("user, role")
+        .eq("lab_id", labId)
+        .eq("user", user.id)
+        .in("role", ["admin", "founder"])
+        .limit(1)
+      
+      if (error || !data) {
+        setIsLabAdmin(false)
+        return
+      }
+      setIsLabAdmin(data.length > 0)
+    }
+    checkLabAdmin()
+  }, [user?.id, labId])
 
   useEffect(() => {
     async function fetchAllExperiments() {
@@ -467,8 +492,29 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
         console.error("Error fetching Experiment Engine experiments:", err);
       }
       
-      // Merge and sort: live first, then by creation date
-      const allExperiments = [...regularExperiments, ...experimentEngineExps].sort((a, b) => {
+      // Filter experiments: only filter Experiment Engine experiments for outside users
+      // Manual experiments are always shown regardless of status
+      const allExperiments = [...regularExperiments, ...experimentEngineExps];
+      
+      // Filter based on user role
+      const filteredExperiments = allExperiments.filter((exp: any) => {
+        // Manual experiments (non-Experiment Engine) are always shown
+        if (!exp.is_experiment_engine) {
+          return true;
+        }
+        
+        // For Experiment Engine experiments:
+        // If user is admin/founder of this lab, show all experiments
+        if (isLabAdmin) {
+          return true;
+        }
+        
+        // For outside users, only show concluded Experiment Engine experiments
+        return exp.experiment_status === 'concluded';
+      });
+      
+      // Sort: live first, then by creation date
+      const sortedExperiments = filteredExperiments.sort((a, b) => {
         const aClosed = a.closed_status === "CLOSED" || (a.is_experiment_engine && a.experiment_status === 'concluded');
         const bClosed = b.closed_status === "CLOSED" || (b.is_experiment_engine && b.experiment_status === 'concluded');
         
@@ -480,15 +526,36 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
       
-      setDisplayExperiments(allExperiments);
+      setDisplayExperiments(sortedExperiments);
     }
     
     if (experiments) {
       // If experiments prop is provided, use it but mark Experiment Engine ones
-      const sortedExperiments = [...experiments].map(exp => ({
+      const mappedExperiments = [...experiments].map(exp => ({
         ...exp,
         is_experiment_engine: exp.experiment_id?.startsWith('exp_') || false
-      })).sort((a, b) => {
+      }));
+      
+      // Filter experiments: only filter Experiment Engine experiments for outside users
+      // Manual experiments are always shown regardless of status
+      const filteredExperiments = mappedExperiments.filter((exp: any) => {
+        // Manual experiments (non-Experiment Engine) are always shown
+        if (!exp.is_experiment_engine) {
+          return true;
+        }
+        
+        // For Experiment Engine experiments:
+        // If user is admin/founder of this lab, show all experiments
+        if (isLabAdmin) {
+          return true;
+        }
+        
+        // For outside users, only show concluded Experiment Engine experiments
+        return exp.experiment_status === 'concluded';
+      });
+      
+      // Sort: live first, then by creation date
+      const sortedExperiments = filteredExperiments.sort((a, b) => {
         const aClosed = a.closed_status === "CLOSED" || (a.is_experiment_engine && a.experiment_status === 'concluded');
         const bClosed = b.closed_status === "CLOSED" || (b.is_experiment_engine && b.experiment_status === 'concluded');
         
@@ -502,7 +569,7 @@ export const ExperimentsList: React.FC<ExperimentsListProps> = ({ labId, experim
     
     // Only fetch if experiments prop is not provided
     fetchAllExperiments();
-  }, [labId, experiments]);
+  }, [labId, experiments, isLabAdmin]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
